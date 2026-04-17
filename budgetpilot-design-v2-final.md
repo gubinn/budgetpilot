@@ -139,17 +139,24 @@ budgetpilot/
 │   ├── dto/                # 请求参数
 │   │   ├── AccountCreateDTO.java
 │   │   ├── AccountUpdateDTO.java
+│   │   ├── BalanceAdjustDTO.java
 │   │   ├── TransactionCreateDTO.java
 │   │   ├── TransactionUpdateDTO.java
 │   │   ├── TransactionQueryDTO.java
 │   │   ├── CategoryCreateDTO.java
 │   │   ├── BudgetCreateDTO.java
-│   │   └── BudgetItemDTO.java
+│   │   ├── BudgetUpdateDTO.java
+│   │   ├── RecurringRuleCreateDTO.java
+│   │   ├── RecurringRuleUpdateDTO.java
+│   │   ├── AlertRuleCreateDTO.java
+│   │   └── AlertRuleUpdateDTO.java
 │   ├── vo/                 # 响应视图
 │   │   ├── AccountVO.java
 │   │   ├── TransactionVO.java
 │   │   ├── CategoryVO.java
 │   │   ├── BudgetProgressVO.java
+│   │   ├── RecurringRuleVO.java
+│   │   ├── AlertRuleVO.java
 │   │   └── ReportVO.java
 │   ├── mapper/             # 持久层
 │   ├── service/            # 业务层
@@ -1250,7 +1257,30 @@ public class TelegramNotifyService {
 | GET | `/api/v1/reports/budget-review` | 预算执行报告 |
 | GET | `/api/v1/reports/currency-distribution` | 币种分布 |
 
-### 6.6 系统 `/api/v1/system`
+### 6.6 周期规则 `/api/v1/recurring-rules`
+
+| 方法 | 路径 | 说明 | 状态码 |
+|------|------|------|--------|
+| GET | `/api/v1/recurring-rules` | 规则列表 | 200 |
+| GET | `/api/v1/recurring-rules/{id}` | 查询规则 | 200 |
+| POST | `/api/v1/recurring-rules` | 创建规则 | 200 |
+| PUT | `/api/v1/recurring-rules/{id}` | 更新规则 | 200 |
+| DELETE | `/api/v1/recurring-rules/{id}` | 删除规则 | 200 |
+| POST | `/api/v1/recurring-rules/{id}/toggle` | 启用/停用 | 200 |
+| POST | `/api/v1/recurring-rules/{id}/execute` | 立即执行 | 200 |
+
+### 6.7 预警规则 `/api/v1/alert-rules`
+
+| 方法 | 路径 | 说明 | 状态码 |
+|------|------|------|--------|
+| GET | `/api/v1/alert-rules` | 规则列表 | 200 |
+| GET | `/api/v1/alert-rules/{id}` | 查询规则 | 200 |
+| POST | `/api/v1/alert-rules` | 创建规则 | 200 |
+| PUT | `/api/v1/alert-rules/{id}` | 更新规则 | 200 |
+| DELETE | `/api/v1/alert-rules/{id}` | 删除规则 | 200 |
+| POST | `/api/v1/alert-rules/{id}/toggle` | 启用/停用 | 200 |
+
+### 6.8 系统 `/api/v1/system`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1263,7 +1293,7 @@ public class TelegramNotifyService {
 | PUT | `/api/v1/system/alerts/{id}/read` | 标记已读 |
 | POST | `/api/v1/system/telegram/test` | Telegram 推送测试 |
 
-### 6.7 统一响应结构
+### 6.9 统一响应结构
 
 ```json
 // 成功
