@@ -10,6 +10,9 @@
       <n-form-item label="分类">
         <n-select v-model:value="filters.categoryId" :options="categoryOptions" clearable style="width: 120px" />
       </n-form-item>
+      <n-form-item label="状态">
+        <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable style="width: 100px" />
+      </n-form-item>
       <n-form-item label="日期">
         <n-date-picker v-model:value="filters.dateRange" type="daterange" clearable style="width: 240px" />
       </n-form-item>
@@ -55,6 +58,7 @@ const filters = ref({
   type: null,
   accountId: null,
   categoryId: null,
+  isConfirmed: null,
   dateRange: null
 })
 
@@ -62,6 +66,10 @@ const typeOptions = [
   { label: '支出', value: 1 },
   { label: '收入', value: 2 },
   { label: '转账', value: 3 }
+]
+const confirmOptions = [
+  { label: '已确认', value: true },
+  { label: '待确认', value: false }
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
@@ -101,17 +109,26 @@ const columns = [
   },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
   {
+    title: '状态', key: 'isConfirmed', width: 80,
+    render: (row) => h('n-tag', {
+      size: 'small',
+      type: row.isConfirmed ? 'success' : 'warning',
+      bordered: false
+    }, { default: () => row.isConfirmed ? '已确认' : '待确认' })
+  },
+  {
     title: '标签', key: 'tags', width: 100,
     render: (row) => row.tags?.length ? h('n-space', { size: 4 }, row.tags.map(t =>
       h('n-tag', { size: 'tiny', type: 'info', bordered: false }, { default: () => t })
     )) : '-'
   },
   {
-    title: '操作', key: 'actions', width: 100, fixed: 'right',
+    title: '操作', key: 'actions', width: 140, fixed: 'right',
     render: (row) => h('n-space', { size: 4 }, [
+      row.isConfirmed ? null : h('n-button', { size: 'tiny', text: true, type: 'success', onClick: () => handleConfirm(row.id) }, { default: () => '确认' }),
       h('n-button', { size: 'tiny', text: true, type: 'primary', onClick: () => router.push(`/transactions/edit/${row.id}`) }, { default: () => '编辑' }),
       h('n-button', { size: 'tiny', text: true, type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
-    ])
+    ].filter(Boolean))
   }
 ]
 
@@ -123,7 +140,8 @@ async function loadData() {
       size: pagination.value.pageSize,
       type: filters.value.type,
       accountId: filters.value.accountId,
-      categoryId: filters.value.categoryId
+      categoryId: filters.value.categoryId,
+      isConfirmed: filters.value.isConfirmed
     }
     if (filters.value.dateRange?.length === 2) {
       params.startDate = filters.value.dateRange[0].split('T')[0]
@@ -151,8 +169,18 @@ function onSizeChange(size) {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, isConfirmed: null, dateRange: null }
   loadData()
+}
+
+async function handleConfirm(id) {
+  try {
+    await transactionApi.confirm(id)
+    message.success('已确认')
+    loadData()
+  } catch (e) {
+    message.error('确认失败: ' + e.message)
+  }
 }
 
 function handleDelete(id) {
