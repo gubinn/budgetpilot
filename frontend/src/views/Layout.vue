@@ -56,7 +56,7 @@ import { ref, computed, h, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
-  BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline
+  BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline
 } from '@vicons/ionicons5'
 import { NIcon } from 'naive-ui'
 
@@ -80,6 +80,7 @@ const menuOptions = [
   { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
   { label: '预算', key: 'Budget', icon: renderIcon(BarChartOutline) },
   { label: '周期', key: 'Recurring', icon: renderIcon(RepeatOutline) },
+  { label: '预警', key: 'AlertRules', icon: renderIcon(AlertOutline) },
   { label: '报表', key: 'Reports', icon: renderIcon(BarChartOutline) },
   { label: '设置', key: 'Settings', icon: renderIcon(SettingsOutline) }
 ]
@@ -97,6 +98,7 @@ const pageTitle = computed(() => {
     Categories: '分类管理',
     Budget: '预算管理',
     Recurring: '周期交易',
+    AlertRules: '预警规则',
     Reports: '统计报表',
     Settings: '系统设置'
   }

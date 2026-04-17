@@ -14,6 +14,7 @@ const routes = [
       { path: 'categories', name: 'Categories', component: () => import('@/views/CategoryList.vue') },
       { path: 'budget', name: 'Budget', component: () => import('@/views/BudgetPage.vue') },
       { path: 'recurring', name: 'Recurring', component: () => import('@/views/RecurringPage.vue') },
+      { path: 'alert-rules', name: 'AlertRules', component: () => import('@/views/AlertRulePage.vue') },
       { path: 'reports', name: 'Reports', component: () => import('@/views/ReportPage.vue') },
       { path: 'settings', name: 'Settings', component: () => import('@/views/SettingsPage.vue') }
     ]
