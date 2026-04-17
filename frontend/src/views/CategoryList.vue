@@ -48,7 +48,7 @@
 
 <script setup>
 import { ref, h, computed, onMounted } from 'vue'
-import { useDialog, useMessage } from 'naive-ui'
+import { useDialog, useMessage, NButton, NTag } from 'naive-ui'
 import { categoryApi } from '@/api'
 
 const dialog = useDialog()
@@ -112,10 +112,10 @@ function renderLabel({ option }) {
       }
     }),
     h('span', {}, option.name),
-    option.isSystem ? h('n-tag', { size: 'tiny', type: 'info', bordered: false, style: { marginLeft: '4px' } }, { default: () => '系统' }) : null,
-    h('div', { style: { marginLeft: 'auto', display: 'flex', gap: '4px' } }, [
-      h('n-button', { size: 'tiny', text: true, type: 'primary', onClick: (e) => { e.stopPropagation(); handleEdit(option) } }, { default: () => '编辑' }),
-      !option.isSystem ? h('n-button', { size: 'tiny', text: true, type: 'error', onClick: (e) => { e.stopPropagation(); handleDelete(option.id) } }, { default: () => '删除' }) : null
+    option.isSystem ? h(NTag, { size: 'tiny', type: 'info', bordered: false, style: { marginLeft: '4px' } }, { default: () => '系统' }) : null,
+    h('div', { style: { marginLeft: 'auto', display: 'flex', gap: '8px' } }, [
+      h(NButton, { size: 'small', type: 'primary', onClick: (e) => { e.stopPropagation(); handleEdit(option) } }, { default: () => '编辑' }),
+      !option.isSystem ? h(NButton, { size: 'small', type: 'error', onClick: (e) => { e.stopPropagation(); handleDelete(option.id) } }, { default: () => '删除' }) : null
     ].filter(Boolean))
   ])
 }

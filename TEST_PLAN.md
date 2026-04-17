@@ -217,6 +217,45 @@ curl -s "$API_BASE/accounts" | jq '.data | length'
 - 账户余额回滚
 - 报表数据更新
 
+#### 测试用例 TX-06：待确认交易创建
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | 新增交易，isConfirmed=false | 提交成功 |
+| 2 | 查看交易列表（状态筛选"待确认"） | 显示该交易，状态为"待确认" |
+| 3 | 查看账户余额 | 余额不变（待确认交易不影响余额） |
+
+**验证点**：
+- 数据库 `is_confirmed=0`
+- 账户 `current_balance` 未变化
+- 列表显示"待确认"标签和"确认"按钮
+
+#### 测试用例 TX-07：确认待确认交易
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | 在交易列表点击"确认"按钮 | 提示"已确认" |
+| 2 | 查看账户余额 | 余额变化（支出减少，收入增加） |
+| 3 | 刷新首页 | 报表数据更新 |
+
+**验证点**：
+- 数据库 `is_confirmed=1`
+- 账户余额正确更新
+- 报表缓存自动清除
+- 预算进度自动更新
+
+#### 测试用例 TX-08：状态筛选功能
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | 状态筛选选择"已确认" | 只显示已确认交易 |
+| 2 | 状态筛选选择"待确认" | 只显示待确认交易 |
+| 3 | 状态筛选清空 | 显示全部交易 |
+
+**验证点**：
+- API 参数 `confirmed=true/false/null` 正确传递
+- 后端返回数据符合筛选条件
+
 ---
 
 ### 4.3 分类管理模块
@@ -419,6 +458,10 @@ VALUES ('大额支出提醒', 2, '{"max_amount": "500"}', 'TELEGRAM', 1);
 | BUG-006 | 余额调整分类乱码 | 查看分类列表，检查"余额调整"中文显示 |
 | BUG-007 | 预算 API 返回系统异常 | 查询预算进度，检查返回 code=0 |
 | BUG-008 | 预警日志插入失败 | 创建大额支出，检查 t_alert_log 表有记录 |
+| BUG-009 | 确认交易后首页数据未更新 | 确认待确认交易，刷新首页检查数据变化 |
+| BUG-010 | 账户/分类更新后报表缓存未清除 | 更新账户名称或分类颜色，刷新首页检查数据变化 |
+| BUG-011 | 前端表格操作按钮样式异常 | 查看交易列表、账户列表，检查操作按钮是否显示为按钮样式 |
+| BUG-012 | Redis keys 命令性能风险 | 检查代码中使用 keys 命令的位置是否改为 SCAN |
 
 ### BUG-007 修复方案
 
@@ -446,6 +489,118 @@ public class AlertLog {
 }
 ```
 
+### BUG-009 修复方案
+
+**问题原因**: `TransactionServiceImpl.confirm()` 方法确认交易后，未发布 `TransactionEvent`，导致报表缓存未清除、预算进度未更新。
+
+**修复代码** (`src/main/java/uk/gubin/budgetpilot/service/impl/TransactionServiceImpl.java`):
+```java
+public TransactionVO confirm(Long id) {
+    // ... 确认逻辑 ...
+    
+    // 应用余额
+    applyBalance(entity);
+
+    // 发布事件以清除缓存和更新预算（关键修复）
+    eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
+
+    return toVO(entity, account, category);
+}
+```
+
+### BUG-010 修复方案
+
+**问题原因**: `AccountServiceImpl.update()/delete()` 和 `CategoryServiceImpl.update()/delete()` 方法未清除报表缓存，导致账户名称或分类颜色变更后首页报表数据不一致。
+
+**修复代码** (`src/main/java/uk/gubin/budgetpilot/service/impl/AccountServiceImpl.java`):
+```java
+public AccountVO update(Long id, AccountUpdateDTO dto) {
+    // ... 更新逻辑 ...
+    baseMapper.updateById(entity);
+    
+    // 清除所有报表缓存（账户名称影响报表显示）
+    clearAllReportCache();
+    
+    return toVO(entity);
+}
+
+private void clearAllReportCache() {
+    scanAndDelete("report:monthly-summary:*");
+    scanAndDelete("report:category-detail:*");
+    redisTemplate.delete("report:account-summary");
+}
+
+private void scanAndDelete(String pattern) {
+    // 使用 SCAN 替代 keys，避免性能问题
+    var cursor = redisTemplate.scan(ScanOptions.scanOptions()
+            .match(pattern).count(100).build());
+    while (cursor.hasNext()) {
+        redisTemplate.delete(cursor.next());
+    }
+    cursor.close();
+}
+```
+
+**修复代码** (`src/main/java/uk/gubin/budgetpilot/service/impl/CategoryServiceImpl.java`):
+```java
+public CategoryVO update(Long id, CategoryCreateDTO dto) {
+    // ... 更新逻辑 ...
+    baseMapper.updateById(entity);
+    
+    // 清除所有报表缓存（分类名称、颜色影响报表显示）
+    clearAllReportCache();
+    
+    return toVO(entity);
+}
+```
+
+### BUG-011 修复方案
+
+**问题原因**: Vue 渲染函数中使用字符串 `'n-button'` 代替 Naive UI 组件引用，且添加了 `text: true` 属性导致按钮显示为文本链接样式。
+
+**修复代码** (`frontend/src/views/TransactionList.vue`):
+```javascript
+// 错误写法
+import { useMessage } from 'naive-ui'
+render: (row) => h('n-button', { size: 'tiny', text: true, type: 'primary' }, { default: () => '编辑' })
+
+// 正确写法
+import { useMessage, NButton, NSpace, NTag } from 'naive-ui'
+render: (row) => h(NSpace, { size: 8 }, [
+  h(NButton, { size: 'small', type: 'primary', onClick: () => handleEdit(row) }, { default: () => '编辑' }),
+  h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
+])
+```
+
+**影响的文件**:
+- `frontend/src/views/TransactionList.vue` - 交易列表操作按钮
+- `frontend/src/views/AccountList.vue` - 账户列表操作按钮
+- `frontend/src/views/CategoryList.vue` - 分类列表操作按钮
+- `frontend/src/views/BudgetPage.vue` - 预算表格输入框
+
+### BUG-012 修复方案
+
+**问题原因**: `TransactionEventListener` 中使用 `redisTemplate.keys()` 命令批量删除缓存，在 Redis 数据量大时会阻塞主线程影响性能。
+
+**修复代码** (`src/main/java/uk/gubin/budgetpilot/service/TransactionEventListener.java`):
+```java
+// 错误写法（使用 keys）
+var keys = redisTemplate.keys("report:category-detail:" + month + ":*");
+if (keys != null && !keys.isEmpty()) {
+    redisTemplate.delete(keys);
+}
+
+// 正确写法（使用 SCAN）
+private void scanAndDelete(String pattern) {
+    var cursor = redisTemplate.scan(ScanOptions.scanOptions()
+            .match(pattern).count(100).build());
+    while (cursor.hasNext()) {
+        redisTemplate.delete(cursor.next());
+    }
+    cursor.close();
+}
+```
+
 ---
 
 ## 6. 测试执行流程
@@ -459,7 +614,10 @@ mvn test
 # 2. 运行集成测试脚本
 ./scripts/integration-test.sh
 
-# 3. 检查测试覆盖率
+# 3. 运行缓存功能测试
+./scripts/test-cache-clear.sh
+
+# 4. 检查测试覆盖率
 mvn jacoco:report
 ```
 
@@ -468,14 +626,56 @@ mvn jacoco:report
 按顺序执行：
 1. 清空测试数据
 2. 账户管理测试（AC-01 ~ AC-06）
-3. 交易管理测试（TX-01 ~ TX-05）
+3. 交易管理测试（TX-01 ~ TX-08）
 4. 分类管理测试（CT-01 ~ CT-02）
 5. 报表测试（RP-01 ~ RP-02）
-6. 回归测试清单验证
+6. 预算管理测试（BD-01 ~ BD-02）
+7. 前端按钮样式验证（UI-01）
+8. 回归测试清单验证
 
 ---
 
-## 7. 测试数据准备
+## 7. 前端界面测试用例
+
+### 7.1 UI-01：表格操作按钮样式验证
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | 进入交易列表页面 | 操作列按钮显示为标准按钮样式（有边框、有背景色） |
+| 2 | 查看按钮间距 | 各按钮之间有适当间距（8px），不挤在一起 |
+| 3 | 点击"编辑"按钮 | 按钮响应点击，跳转到编辑页面 |
+| 4 | 进入账户列表页面 | 操作按钮同样显示为按钮样式 |
+| 5 | 进入分类管理页面 | 分类树中操作按钮显示正常 |
+
+**验证点**：
+- 按钮不是纯文本链接样式
+- 按钮之间有明显的间距
+- 按钮有 primary/success/error 等类型颜色
+
+---
+
+## 8. 缓存功能测试脚本
+
+缓存清除功能自动化测试脚本位于 `scripts/test-cache-clear.sh`。
+
+**测试覆盖场景**：
+1. 交易创建 → 报表缓存清除
+2. 账户更新 → 所有报表缓存清除
+3. 分类更新 → 所有报表缓存清除
+4. 交易删除 → 报表缓存清除
+
+**运行方式**：
+```bash
+# 确保 Docker 服务运行
+docker compose up -d
+
+# 运行缓存测试
+./scripts/test-cache-clear.sh
+```
+
+---
+
+## 9. 测试数据准备
 
 ```sql
 -- 初始化测试数据脚本

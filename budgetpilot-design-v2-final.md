@@ -654,6 +654,122 @@ API: `POST /api/v1/recurring-rules/{id}/execute`
 - 测试规则是否正常工作
 - 补录遗漏的周期交易
 
+#### 待确认交易功能详解
+
+**业务规则**：
+
+| 状态 | is_confirmed | 对余额影响 | 对预算影响 | 对报表影响 |
+|------|-------------|-----------|-----------|-----------|
+| 待确认 | 0 | 不影响 | 不计入 | 不显示 |
+| 已确认 | 1 | 正常更新 | 正常计入 | 正常显示 |
+
+**典型应用场景**：
+
+1. **周期交易手动确认**：工资周期规则设置 `autoConfirm=false`，每月自动生成待确认收入，用户核实后确认
+2. **批量导入预审核**：导入历史账单时先创建待确认状态，逐笔审核
+3. **预估消费记录**：提前记录预计支出，实际发生后确认
+
+**前端实现**：
+
+```vue
+<!-- TransactionList.vue 状态筛选 -->
+<n-form-item label="状态">
+  <n-select 
+    v-model:value="filters.isConfirmed" 
+    :options="confirmOptions" 
+    clearable 
+  />
+</n-form-item>
+
+<!-- confirmOptions 定义 -->
+const confirmOptions = [
+  { label: '已确认', value: true },
+  { label: '待确认', value: false }
+]
+
+<!-- loadData 参数传递 -->
+const params = {
+  page: pagination.value.page,
+  size: pagination.value.pageSize,
+  confirmed: filters.value.isConfirmed  // 前端用 isConfirmed，传给后端用 confirmed
+}
+```
+
+**后端实现**：
+
+```java
+// TransactionServiceImpl.java - 创建交易
+public TransactionVO create(TransactionCreateDTO dto) {
+    // ... 构建 entity ...
+    
+    // 只有已确认交易才更新余额和发布事件
+    if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
+        applyBalance(entity);
+        eventPublisher.publishEvent(new TransactionEvent(this, entity, Action.CREATE));
+    }
+    return toVO(entity, account, category);
+}
+
+// TransactionServiceImpl.java - 确认交易
+public TransactionVO confirm(Long id) {
+    Transaction entity = baseMapper.selectById(id);
+    // ... 校验 ...
+    
+    entity.setIsConfirmed(true);
+    baseMapper.updateById(entity);
+    
+    applyBalance(entity);
+    // 关键：发布事件清除缓存和更新预算
+    eventPublisher.publishEvent(new TransactionEvent(this, entity, Action.CREATE));
+    
+    return toVO(entity, account, category);
+}
+
+// TransactionServiceImpl.java - 查询交易
+public PageResult<TransactionVO> query(TransactionQueryDTO dto) {
+    LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+    // 只有明确指定 confirmed 参数时才过滤，否则查询全部
+    if (dto.getConfirmed() != null) {
+        query.eq(Transaction::getIsConfirmed, dto.getConfirmed());
+    }
+    // ... 其他查询条件 ...
+}
+```
+
+**API 参数说明**：
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `confirmed=true` | 只返回已确认交易 | 已计入余额的交易 |
+| `confirmed=false` | 只返回待确认交易 | 未计入余额的交易 |
+| 不传 `confirmed` | 返回全部交易 | 默认行为 |
+
+**确认交易 API**：
+
+```
+POST /api/v1/transactions/{id}/confirm
+```
+
+响应示例：
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "id": 14,
+    "isConfirmed": true,
+    "amount": 200.00,
+    ...
+  }
+}
+```
+
+确认后自动触发：
+1. 账户余额更新
+2. 报表缓存清除（首页数据实时更新）
+3. 预算进度更新
+4. 预警规则检查
+
 #### 3.3.6 预算表 `t_budget`
 
 月度预算，统一以本位币 CNY 计价。月度起始日=每月1日。
@@ -1169,17 +1285,19 @@ Redis 缓存方案：
 
 **缓存失效机制**（关键设计）：
 
-交易变更时主动清除相关报表缓存，确保数据实时性：
+数据变更时主动清除相关报表缓存，确保数据实时性：
 
 | 触发场景 | 清除的缓存 Key | 实现位置 |
 |----------|---------------|----------|
-| 创建/更新/删除交易 | `report:monthly-summary:{交易月份}` | TransactionEventListener（@EventListener） |
+| 创建/更新/删除交易 | `report:monthly-summary:{交易月份}`<br>`report:category-detail:{月份}:*`<br>`report:account-summary` | TransactionEventListener（@EventListener） |
 | 余额调整（调增/调减） | `report:monthly-summary:{交易月份}`<br>`report:account-summary` | AccountServiceImpl.adjustBalanceWithRecord() |
+| 账户信息更新/删除 | `report:monthly-summary:*`<br>`report:category-detail:*`<br>`report:account-summary` | AccountServiceImpl.update()/delete() |
+| 分类信息更新/删除 | `report:monthly-summary:*`<br>`report:category-detail:*` | CategoryServiceImpl.update()/delete() |
 
 **代码实现要点**：
 
 ```java
-// TransactionEventListener.java
+// TransactionEventListener.java - 使用 SCAN 替代 keys（性能优化）
 @Async("asyncExecutor")
 @EventListener
 public void onTransactionEvent(TransactionEvent event) {
@@ -1192,18 +1310,24 @@ public void onTransactionEvent(TransactionEvent event) {
 private void clearReportCache(LocalDate date) {
     String month = date.format(DateTimeFormatter.ofPattern("yyyy-MM"));
     redisTemplate.delete("report:monthly-summary:" + month);
+    scanAndDelete("report:category-detail:" + month + ":*");
     redisTemplate.delete("report:account-summary");
 }
 
-// AccountServiceImpl.java - 余额调整
-public void adjustBalanceWithRecord(Long accountId, BigDecimal newBalance, String reason) {
-    // 创建交易记录
-    transactionMapper.insert(transaction);
-    // 更新账户余额
-    account.setCurrentBalance(newBalance);
-    baseMapper.updateById(account);
-    // 清除报表缓存（确保首页数据实时更新）
-    clearReportCache(transaction.getTransactionDate());
+// AccountServiceImpl.java - 账户变更清除所有报表缓存
+public AccountVO update(Long id, AccountUpdateDTO dto) {
+    // ... 更新逻辑 ...
+    baseMapper.updateById(entity);
+    clearAllReportCache(); // 新增：清除所有报表缓存
+    return toVO(entity);
+}
+
+// CategoryServiceImpl.java - 分类变更清除所有报表缓存
+public CategoryVO update(Long id, CategoryCreateDTO dto) {
+    // ... 更新逻辑 ...
+    baseMapper.updateById(entity);
+    clearAllReportCache(); // 新增：清除所有报表缓存
+    return toVO(entity);
 }
 ```
 

@@ -78,16 +78,31 @@ public class TransactionEventListener {
         try {
             // 清除月度汇总缓存
             redisTemplate.delete("report:monthly-summary:" + month);
-            // 清除分类详情缓存（可能影响多个分类）
-            var keys = redisTemplate.keys("report:category-detail:" + month + ":*");
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
+            // 清除分类详情缓存（使用 SCAN 替代 keys，避免性能问题）
+            scanAndDelete("report:category-detail:" + month + ":*");
             // 清除账户汇总缓存
             redisTemplate.delete("report:account-summary");
             log.info("Cleared report cache for month {}", month);
         } catch (Exception e) {
             log.warn("Failed to clear report cache for month {}", month, e);
+        }
+    }
+
+    /**
+     * 使用 SCAN 命令安全删除匹配的 keys
+     */
+    private void scanAndDelete(String pattern) {
+        try {
+            var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(100)
+                    .build());
+            while (cursor.hasNext()) {
+                redisTemplate.delete(cursor.next());
+            }
+            cursor.close();
+        } catch (Exception e) {
+            log.warn("Failed to scan and delete keys with pattern {}", pattern, e);
         }
     }
 

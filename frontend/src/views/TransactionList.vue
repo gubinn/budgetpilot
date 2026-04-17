@@ -42,7 +42,7 @@
 <script setup>
 import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { useDialog, useMessage } from 'naive-ui'
+import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
 
 const router = useRouter()
@@ -110,7 +110,7 @@ const columns = [
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
   {
     title: '状态', key: 'isConfirmed', width: 80,
-    render: (row) => h('n-tag', {
+    render: (row) => h(NTag, {
       size: 'small',
       type: row.isConfirmed ? 'success' : 'warning',
       bordered: false
@@ -118,16 +118,16 @@ const columns = [
   },
   {
     title: '标签', key: 'tags', width: 100,
-    render: (row) => row.tags?.length ? h('n-space', { size: 4 }, row.tags.map(t =>
-      h('n-tag', { size: 'tiny', type: 'info', bordered: false }, { default: () => t })
+    render: (row) => row.tags?.length ? h(NSpace, { size: 4 }, row.tags.map(t =>
+      h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => t })
     )) : '-'
   },
   {
-    title: '操作', key: 'actions', width: 140, fixed: 'right',
-    render: (row) => h('n-space', { size: 4 }, [
-      row.isConfirmed ? null : h('n-button', { size: 'tiny', text: true, type: 'success', onClick: () => handleConfirm(row.id) }, { default: () => '确认' }),
-      h('n-button', { size: 'tiny', text: true, type: 'primary', onClick: () => router.push(`/transactions/edit/${row.id}`) }, { default: () => '编辑' }),
-      h('n-button', { size: 'tiny', text: true, type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
+    title: '操作', key: 'actions', width: 160, fixed: 'right',
+    render: (row) => h(NSpace, { size: 8 }, [
+      row.isConfirmed ? null : h(NButton, { size: 'small', type: 'success', onClick: () => handleConfirm(row.id) }, { default: () => '确认' }),
+      h(NButton, { size: 'small', type: 'primary', onClick: () => router.push(`/transactions/edit/${row.id}`) }, { default: () => '编辑' }),
+      h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
     ].filter(Boolean))
   }
 ]
@@ -141,7 +141,7 @@ async function loadData() {
       type: filters.value.type,
       accountId: filters.value.accountId,
       categoryId: filters.value.categoryId,
-      isConfirmed: filters.value.isConfirmed
+      confirmed: filters.value.isConfirmed
     }
     if (filters.value.dateRange?.length === 2) {
       params.startDate = filters.value.dateRange[0].split('T')[0]

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.gubin.budgetpilot.common.BizException;
@@ -26,6 +27,40 @@ import java.util.stream.Collectors;
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
 
     private final TransactionMapper transactionMapper;
+    private final StringRedisTemplate redisTemplate;
+
+    /**
+     * 清除所有报表缓存（分类变更可能影响所有月份）
+     */
+    private void clearAllReportCache() {
+        try {
+            // 清除所有月度汇总缓存（包含分类名称、颜色）
+            scanAndDelete("report:monthly-summary:*");
+            // 清除所有分类详情缓存
+            scanAndDelete("report:category-detail:*");
+            log.info("Cleared all report cache due to category change");
+        } catch (Exception e) {
+            log.warn("Failed to clear all report cache", e);
+        }
+    }
+
+    /**
+     * 使用 SCAN 命令安全删除匹配的 keys
+     */
+    private void scanAndDelete(String pattern) {
+        try {
+            var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(100)
+                    .build());
+            while (cursor.hasNext()) {
+                redisTemplate.delete(cursor.next());
+            }
+            cursor.close();
+        } catch (Exception e) {
+            log.warn("Failed to scan and delete keys with pattern {}", pattern, e);
+        }
+    }
 
     @Override
     @Transactional
@@ -124,6 +159,10 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         if (dto.getSortOrder() != null) entity.setSortOrder(dto.getSortOrder());
         // 不允许修改 type
         baseMapper.updateById(entity);
+
+        // 清除报表缓存（分类名称、颜色变更会影响报表显示）
+        clearAllReportCache();
+
         return toVO(entity);
     }
 
@@ -145,6 +184,10 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         }
         entity.setIsActive(false);
         baseMapper.updateById(entity);
+
+        // 清除报表缓存
+        clearAllReportCache();
+
         log.info("Deactivated category: {}", entity.getName());
     }
 

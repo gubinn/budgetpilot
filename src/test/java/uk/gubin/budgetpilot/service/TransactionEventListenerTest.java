@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import uk.gubin.budgetpilot.entity.AlertRule;
 import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.Transaction;
@@ -34,8 +35,62 @@ class TransactionEventListenerTest {
     @Mock private AlertLogService alertLogService;
     @Mock private TransactionService transactionService;
     @Mock private CategoryMapper categoryMapper;
+    @Mock private StringRedisTemplate redisTemplate;
     @Spy private ObjectMapper objectMapper = new ObjectMapper();
     @InjectMocks private TransactionEventListener eventListener;
+
+    // ============ CACHE CLEAR TESTS ============
+
+    @Nested
+    @DisplayName("缓存清除测试")
+    class CacheClearTests {
+
+        @Test
+        @DisplayName("交易事件 → 清除相关月份报表缓存")
+        void onTransactionEvent_ClearsReportCache() {
+            Transaction tx = new Transaction();
+            tx.setId(1L);
+            tx.setType(1);
+            tx.setCategoryId(10L);
+            tx.setAmountBase(new BigDecimal("100"));
+            tx.setIsConfirmed(false); // 未确认也清除缓存
+            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
+
+            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
+
+            eventListener.onTransactionEvent(event);
+
+            // 验证缓存清除
+            verify(redisTemplate).delete("report:monthly-summary:2026-04");
+            verify(redisTemplate).delete("report:account-summary");
+        }
+
+        @Test
+        @DisplayName("缓存清除失败不影响主流程")
+        void onTransactionEvent_CacheError_DoesNotAffectMainFlow() {
+            Transaction tx = new Transaction();
+            tx.setId(1L);
+            tx.setType(1);
+            tx.setCategoryId(10L);
+            tx.setAmountBase(new BigDecimal("100"));
+            tx.setIsConfirmed(true);
+            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
+
+            Category cat = new Category();
+            cat.setId(10L);
+            cat.setParentId(0L);
+            when(categoryMapper.selectById(10L)).thenReturn(cat);
+            when(redisTemplate.delete(anyString())).thenThrow(new RuntimeException("Redis error"));
+
+            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
+
+            // 不抛异常
+            assertThatNoException().isThrownBy(() -> eventListener.onTransactionEvent(event));
+
+            // 预算更新不受影响
+            verify(budgetService).updateItemSpent(anyLong(), anyString(), any());
+        }
+    }
 
     // ============ CREATE EVENT ============
 

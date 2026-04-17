@@ -79,7 +79,7 @@
 
 <script setup>
 import { ref, h, onMounted, computed } from 'vue'
-import { useDialog, useMessage } from 'naive-ui'
+import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { accountApi } from '@/api'
 
 const dialog = useDialog()
@@ -146,16 +146,16 @@ const columns = [
   {
     title: '状态', key: 'isActive', width: 70,
     render: (row) => row.isActive
-      ? h('n-tag', { type: 'success', size: 'small', bordered: false }, { default: () => '正常' })
-      : h('n-tag', { type: 'default', size: 'small', bordered: false }, { default: () => '停用' })
+      ? h(NTag, { type: 'success', size: 'small', bordered: false }, { default: () => '正常' })
+      : h(NTag, { type: 'default', size: 'small', bordered: false }, { default: () => '停用' })
   },
   {
-    title: '操作', key: 'actions', width: 140,
-    render: (row) => h('n-space', { size: 4 }, [
-      h('n-button', { size: 'tiny', text: true, type: 'primary', onClick: () => handleEdit(row) }, { default: () => '编辑' }),
+    title: '操作', key: 'actions', width: 160,
+    render: (row) => h(NSpace, { size: 8 }, [
+      h(NButton, { size: 'small', type: 'primary', onClick: () => handleEdit(row) }, { default: () => '编辑' }),
       row.isActive
-        ? h('n-button', { size: 'tiny', text: true, type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '停用' })
-        : h('n-button', { size: 'tiny', text: true, type: 'success', onClick: () => handleActivate(row.id) }, { default: () => '启用' })
+        ? h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '停用' })
+        : h(NButton, { size: 'small', type: 'success', onClick: () => handleActivate(row.id) }, { default: () => '启用' })
     ])
   }
 ]

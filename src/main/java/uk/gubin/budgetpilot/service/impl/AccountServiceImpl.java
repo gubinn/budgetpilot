@@ -22,6 +22,7 @@ import uk.gubin.budgetpilot.vo.AccountVO;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,41 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
     private final StringRedisTemplate redisTemplate;
 
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+
+    /**
+     * 清除所有报表缓存（账户变更可能影响所有月份）
+     */
+    private void clearAllReportCache() {
+        try {
+            // 清除所有月度汇总缓存
+            scanAndDelete("report:monthly-summary:*");
+            // 清除所有分类详情缓存
+            scanAndDelete("report:category-detail:*");
+            // 清除账户汇总缓存
+            redisTemplate.delete("report:account-summary");
+            log.info("Cleared all report cache due to account change");
+        } catch (Exception e) {
+            log.warn("Failed to clear all report cache", e);
+        }
+    }
+
+    /**
+     * 使用 SCAN 命令安全删除匹配的 keys
+     */
+    private void scanAndDelete(String pattern) {
+        try {
+            var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(100)
+                    .build());
+            while (cursor.hasNext()) {
+                redisTemplate.delete(cursor.next());
+            }
+            cursor.close();
+        } catch (Exception e) {
+            log.warn("Failed to scan and delete keys with pattern {}", pattern, e);
+        }
+    }
 
     @Override
     @Transactional
@@ -136,6 +172,10 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         }
 
         baseMapper.updateById(entity);
+
+        // 清除报表缓存（账户名称变更会影响报表显示）
+        clearAllReportCache();
+
         return toVO(entity);
     }
 
@@ -153,6 +193,10 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         // 逻辑删除：停用
         entity.setIsActive(false);
         baseMapper.updateById(entity);
+
+        // 清除报表缓存
+        clearAllReportCache();
+
         log.info("Deactivated account: {}", entity.getName());
     }
 

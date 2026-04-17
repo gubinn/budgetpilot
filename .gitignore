@@ -12,12 +12,19 @@ target/
 frontend/node_modules/
 frontend/dist/
 
+# Frontend test scripts
+frontend/test-*.mjs
+
+# Spring Boot static (built from frontend)
+src/main/resources/static/
+
 # Logs
 logs/
 *.log
 
 # Backup files
-backup/*.tar.gz
+backup/
+*.tar.gz
 
 # Environment files
 .env
@@ -25,3 +32,6 @@ backup/*.tar.gz
 
 # Claude memory
 .claude/
+
+# macOS
+.DS_Store

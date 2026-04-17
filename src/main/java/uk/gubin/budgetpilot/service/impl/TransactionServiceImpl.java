@@ -80,28 +80,33 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         Transaction entity = buildEntity(dto, account, category);
         baseMapper.insert(entity);
 
-        // 更新账户余额（使用原始币种金额）
-        BigDecimal adjustAmount = entity.getAmount();
-        switch (entity.getType()) {
-            case 1 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate()); // 支出
-            case 2 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount);           // 收入
-            case 3 -> {                                                                            // 转账
-                accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate());
-                accountMapper.adjustBalance(entity.getTargetAccountId(), adjustAmount);
+        // 只有确认的交易才更新账户余额
+        if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
+            BigDecimal adjustAmount = entity.getAmount();
+            switch (entity.getType()) {
+                case 1 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate()); // 支出
+                case 2 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount);           // 收入
+                case 3 -> {                                                                            // 转账
+                    accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate());
+                    accountMapper.adjustBalance(entity.getTargetAccountId(), adjustAmount);
+                }
             }
+
+            // 异步事件：预算更新 + 预警检查
+            eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
         }
 
-        // 异步事件：预算更新 + 预警检查
-        eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
-
-        log.info("Created transaction: {} {} {}", entity.getType(), entity.getAmount(), entity.getCurrency());
+        log.info("Created transaction: {} {} {} (confirmed={})", entity.getType(), entity.getAmount(), entity.getCurrency(), entity.getIsConfirmed());
         return toVO(entity, account, category);
     }
 
     @Override
     public PageResult<TransactionVO> query(TransactionQueryDTO dto) {
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getIsConfirmed, dto.getConfirmed() != null ? dto.getConfirmed() : true);
+        // 只有明确指定 confirmed 参数时才过滤，否则查询全部
+        if (dto.getConfirmed() != null) {
+            query.eq(Transaction::getIsConfirmed, dto.getConfirmed());
+        }
 
         if (dto.getType() != null) query.eq(Transaction::getType, dto.getType());
         if (dto.getAccountId() != null) query.eq(Transaction::getAccountId, dto.getAccountId());
@@ -259,6 +264,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 应用余额
         applyBalance(entity);
+
+        // 发布事件以清除缓存和更新预算
+        eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
 
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());

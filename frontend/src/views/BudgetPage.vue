@@ -93,7 +93,7 @@
 
 <script setup>
 import { ref, h, onMounted, watch } from 'vue'
-import { useMessage } from 'naive-ui'
+import { useMessage, NInputNumber } from 'naive-ui'
 import { budgetApi, categoryApi } from '@/api'
 import dayjs from 'dayjs'
 
@@ -120,9 +120,11 @@ const itemColumns = [
   { title: '分类', key: 'categoryName' },
   {
     title: '预算金额', key: 'amount', width: 150,
-    render: (row) => h('n-input-number', {
+    render: (row) => h(NInputNumber, {
       value: row.amount,
-      onUpdateValue: (v) => { row.amount = v }
+      onUpdateValue: (v) => { row.amount = v },
+      min: 0,
+      precision: 2
     })
   }
 ]

@@ -562,11 +562,16 @@ cd /opt/budgetpilot/frontend
 
 npm install
 npm run build
-cp -r dist/* /opt/budgetpilot/web/
 
-# 刷新 Nginx 缓存（如果有）
+# 同时更新两个目录（nginx web 目录和 Spring Boot static 目录）
+cp -r dist/* /opt/budgetpilot/web/
+cp -r dist/* /opt/budgetpilot/src/main/resources/static/
+
+# 刷新 Nginx 缓存
 sudo nginx -s reload
 ```
+
+> **注意**：如果使用 nginx 代理前端，需要更新 `/opt/budgetpilot/web/` 目录；如果直接访问 Spring Boot 端口，需要更新 `src/main/resources/static/` 目录。两个目录都更新可以确保两种访问方式都生效。
 
 ### 6.6 数据库备份
 
@@ -677,12 +682,28 @@ curl -X POST http://127.0.0.1:6060/api/v1/transactions \
   -H "Content-Type: application/json" \
   -d '{"type":1,"amount":50,"currency":"CNY","accountId":1,"categoryId":1,"transactionDate":"2026-04-15","note":"午餐"}'
 
+# 创建待确认交易（isConfirmed=false）
+curl -X POST http://127.0.0.1:6060/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"type":1,"amount":5000,"accountId":1,"categoryId":1,"transactionDate":"2026-04-15","note":"待确认支出","isConfirmed":false}'
+
 # 分页查询交易
 curl "http://127.0.0.1:6060/api/v1/transactions?page=1&size=20"
 
 # 按日期范围查询
 curl "http://127.0.0.1:6060/api/v1/transactions?startDate=2026-04-01&endDate=2026-04-30"
+
+# 按状态筛选（confirmed=true 已确认，confirmed=false 待确认）
+curl "http://127.0.0.1:6060/api/v1/transactions?confirmed=false"
+
+# 确认待确认交易
+curl -X POST http://127.0.0.1:6060/api/v1/transactions/{id}/confirm
 ```
+
+> **状态筛选说明**：
+> - `confirmed=true` - 只返回已确认交易（影响余额）
+> - `confirmed=false` - 只返回待确认交易（不影响余额）
+> - 不传 `confirmed` 参数 - 返回全部交易
 
 ### 分类管理
 
