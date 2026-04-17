@@ -40,7 +40,6 @@ public class CategoryController {
     }
 
     @DeleteMapping("/{id}")
-    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public Result<Void> delete(@PathVariable Long id) {
         categoryService.delete(id);
         return Result.ok();

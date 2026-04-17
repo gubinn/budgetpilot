@@ -40,7 +40,6 @@ public class TransactionController {
     }
 
     @DeleteMapping("/{id}")
-    @ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT)
     public Result<Void> delete(@PathVariable Long id) {
         transactionService.delete(id);
         return Result.ok();
