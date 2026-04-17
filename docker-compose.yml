@@ -1,0 +1,56 @@
+version: '3.8'
+services:
+  budgetpilot-api:
+    image: budgetpilot:latest
+    build: .
+    ports:
+      - "127.0.0.1:6060:6060"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=budgetpilot
+      - DB_PASS=${DB_PASS:-budgetpilot}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASS=
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - uploads_data:/opt/budget-management/uploads
+    restart: unless-stopped
+    mem_limit: 512m
+
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "127.0.0.1:3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASS:-rootpass}
+      - MYSQL_DATABASE=budgetpilot
+      - MYSQL_USER=budgetpilot
+      - MYSQL_PASSWORD=${DB_PASS:-budgetpilot}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      retries: 5
+    restart: unless-stopped
+    mem_limit: 512m
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6380:6379"
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    mem_limit: 128m
+
+volumes:
+  mysql_data:
+  uploads_data:

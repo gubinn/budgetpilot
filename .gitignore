@@ -1,0 +1,27 @@
+# Build output
+target/
+*.jar
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Node modules
+frontend/node_modules/
+frontend/dist/
+
+# Logs
+logs/
+*.log
+
+# Backup files
+backup/*.tar.gz
+
+# Environment files
+.env
+.env.local
+
+# Claude memory
+.claude/
