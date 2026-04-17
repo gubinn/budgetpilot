@@ -549,6 +549,111 @@ CREATE TABLE t_recurring_rule (
 - `auto_confirm=0` 时生成「待确认」交易（`is_confirmed=0`），打开 App 时提示确认。
 - `ext_fields` 会被复制到自动生成的交易记录中，如房贷交易自动带上 `{"project":"房贷"}`。
 
+**周期记账详细说明**：
+
+#### 执行频率详解
+
+| frequency | 说明 | executeDay含义 | nextExecute计算 |
+|-----------|------|----------------|-----------------|
+| DAILY | 每天 | 无效(不需要) | nextExecute + 1天 |
+| WEEKLY | 每周 | 1-7表示周一到周日 | nextExecute + 7天 |
+| MONTHLY | 每月 | 1-28表示几号 | nextExecute + 1月 |
+| YEARLY | 每年 | 无效(按startDate日期) | nextExecute + 1年 |
+
+#### 自动执行流程
+
+每天 08:00 定时任务自动执行：
+
+```
+1. 查询满足条件的规则:
+   - is_active = true
+   - next_execute <= 今天
+   - end_date 为空 或 >= 今天
+
+2. 对每个规则执行:
+   a. 创建交易记录
+      - type/amount/accountId/categoryId 从规则复制
+      - is_confirmed = autoConfirm
+      - is_recurring = true
+      - recurring_id = rule.id
+      - metadata = {"source":"recurring", "rule_id": xxx}
+
+   b. 更新账户余额（如果autoConfirm=true）
+
+   c. 计算下次执行日期
+      - last_executed = 今天
+      - next_execute = 根据frequency计算
+
+3. 触发预算更新 + 预警检查
+```
+
+#### autoConfirm 设置说明
+
+| autoConfirm | 说明 | 影响 |
+|-------------|------|------|
+| true | 自动确认 | 交易直接计入预算和报表，账户余额立即更新 |
+| false | 待确认 | 交易创建但未确认，需手动确认后才生效 |
+
+**推荐设置**：
+- 固定支出（房租、订阅）→ `autoConfirm=true`
+- 变动收入（工资）→ `autoConfirm=false`
+
+#### 典型使用场景
+
+**场景1: 每月房租**
+```json
+{
+  "name": "每月房租",
+  "type": 1,
+  "amount": 2000,
+  "accountId": 2,
+  "categoryId": 19,
+  "frequency": "MONTHLY",
+  "executeDay": 1,
+  "startDate": "2026-04-01",
+  "autoConfirm": true
+}
+```
+效果：每月1号自动创建-2000支出
+
+**场景2: 每月工资**
+```json
+{
+  "name": "每月工资",
+  "type": 2,
+  "amount": 15000,
+  "accountId": 2,
+  "categoryId": 48,
+  "frequency": "MONTHLY",
+  "executeDay": 10,
+  "startDate": "2026-04-10",
+  "autoConfirm": false
+}
+```
+效果：每月10号创建待确认收入交易
+
+**场景3: 每周订阅**
+```json
+{
+  "name": "每周视频会员",
+  "type": 1,
+  "amount": 15,
+  "frequency": "WEEKLY",
+  "executeDay": 7,
+  "autoConfirm": true
+}
+```
+效果：每周日自动扣费15元
+
+#### 手动执行功能
+
+API: `POST /api/v1/recurring-rules/{id}/execute`
+
+用途：
+- 立即生成一笔周期交易（提前记录）
+- 测试规则是否正常工作
+- 补录遗漏的周期交易
+
 #### 3.3.6 预算表 `t_budget`
 
 月度预算，统一以本位币 CNY 计价。月度起始日=每月1日。
