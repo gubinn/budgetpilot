@@ -156,7 +156,7 @@ const columns = [
 const loadRules = async () => {
   loading.value = true
   try {
-    const res = await request.get('/api/v1/alert-rules')
+    const res = await request.get('/alert-rules')
     rules.value = res.data || []
   } catch (e) {
     message.error('加载失败: ' + e.message)
@@ -197,7 +197,7 @@ const handleCreate = async () => {
       isActive: true
     }
 
-    await request.post('/api/v1/alert-rules', payload)
+    await request.post('/alert-rules', payload)
     message.success('创建成功')
     showCreateModal.value = false
     loadRules()
@@ -221,7 +221,7 @@ const handleCreate = async () => {
 
 const handleToggle = async (row) => {
   try {
-    await request.post(`/api/v1/alert-rules/${row.id}/toggle`)
+    await request.post(`/alert-rules/${row.id}/toggle`)
     message.success(row.isActive ? '已停用' : '已启用')
     loadRules()
   } catch (e) {
@@ -231,7 +231,7 @@ const handleToggle = async (row) => {
 
 const handleDelete = async (row) => {
   try {
-    await request.delete(`/api/v1/alert-rules/${row.id}`)
+    await request.delete(`/alert-rules/${row.id}`)
     message.success('已删除')
     loadRules()
   } catch (e) {
