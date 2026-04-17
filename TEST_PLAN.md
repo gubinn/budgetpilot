@@ -272,13 +272,36 @@ curl -s "$API_BASE/accounts" | jq '.data | length'
 
 ### 4.5 预算管理模块
 
-#### 测试用例 BD-01：设置预算
+#### 测试用例 BD-01：创建预算
 
 | 步骤 | 操作 | 预期结果 |
 |------|------|----------|
-| 1 | 进入预算页面，选择本月 | 显示预算表单 |
-| 2 | 设置餐饮预算 500 | 保存成功 |
-| 3 | 创建餐饮支出 100 | 首页预算进度显示 20% |
+| 1 | POST /api/v1/budgets 创建本月预算 | 返回 code=0，预算 ID |
+| 2 | 设置总预算 5000，分类明细 | 数据库记录创建 |
+
+**请求示例**:
+```json
+{
+  "yearMonth": "2026-04",
+  "totalAmount": 5000,
+  "items": [
+    {"categoryId": 1, "amount": 1500},
+    {"categoryId": 2, "amount": 500}
+  ]
+}
+```
+
+#### 测试用例 BD-02：查询预算进度
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | GET /api/v1/budgets/2026-04/progress | 返回预算进度数据 |
+| 2 | 检查 totalSpent、progressPct | 与交易记录汇总一致 |
+
+**验证点**:
+- API 返回 code=0
+- totalSpent = 本月已确认支出交易 amountBase 汇总
+- items[].spent = 各分类支出汇总
 
 ---
 
@@ -288,8 +311,63 @@ curl -s "$API_BASE/accounts" | jq '.data | length'
 
 | 步骤 | 操作 | 预期结果 |
 |------|------|----------|
-| 1 | 新增周期规则：每月房租 2000 | 创建成功 |
-| 2 | 设置执行日为每月 1 日 | 规则列表显示 |
+| 1 | POST /api/v1/recurring-rules 创建规则 | 返回 code=0，规则 ID |
+| 2 | 设置每月房租 2000，自动确认 | 规则保存成功 |
+
+**请求示例**:
+```json
+{
+  "name": "每月房租",
+  "type": 1,
+  "amount": 2000,
+  "accountId": 2,
+  "categoryId": 19,
+  "frequency": "MONTHLY",
+  "executeDay": 1,
+  "startDate": "2026-04-01",
+  "autoConfirm": true
+}
+```
+
+#### 测试用例 RC-02：执行周期规则
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | POST /api/v1/recurring-rules/{id}/execute | 返回 code=0 |
+| 2 | 查询交易列表 | 新交易创建，isRecurring=true |
+| 3 | 查询账户余额 | 余额减少对应金额 |
+
+**验证点**:
+- 交易记录 metadata 包含 `source: "recurring"`
+- 账户余额正确更新
+
+---
+
+### 4.7 预警提醒模块
+
+#### 测试用例 AL-01：创建预警规则
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | INSERT INTO t_alert_rule | 规则创建成功 |
+| 2 | 设置大额支出阈值 500 | is_active=1 |
+
+**SQL示例**:
+```sql
+INSERT INTO t_alert_rule (name, type, config, notify_channel, is_active)
+VALUES ('大额支出提醒', 2, '{"max_amount": "500"}', 'TELEGRAM', 1);
+```
+
+#### 测试用例 AL-02：触发预警
+
+| 步骤 | 操作 | 预期结果 |
+|------|------|----------|
+| 1 | 创建支出交易金额 > 预警阈值 | 交易创建成功 |
+| 2 | 检查 t_alert_log 表 | 预警日志记录插入 |
+
+**验证点**:
+- alert_log.is_sent = 1 (Telegram 发送成功)
+- 预警标题和内容正确
 
 ---
 
@@ -305,6 +383,34 @@ curl -s "$API_BASE/accounts" | jq '.data | length'
 | BUG-004 | 交易列表字段不显示 | 查看交易列表，检查日期/账户/分类列 |
 | BUG-005 | 首页报表数据为 0（缓存问题） | 创建交易后刷新首页，检查数据更新 |
 | BUG-006 | 余额调整分类乱码 | 查看分类列表，检查"余额调整"中文显示 |
+| BUG-007 | 预算 API 返回系统异常 | 查询预算进度，检查返回 code=0 |
+| BUG-008 | 预警日志插入失败 | 创建大额支出，检查 t_alert_log 表有记录 |
+
+### BUG-007 修复方案
+
+**问题原因**: Budget.java 实体的 `yearMonth` 字段对应数据库 `year_month` 列，MySQL 中下划线是关键字，需要用反引号包围。
+
+**修复代码** (`src/main/java/uk/gubin/budgetpilot/entity/Budget.java`):
+```java
+@TableField("`year_month`")
+private String yearMonth;
+```
+
+### BUG-008 修复方案
+
+**问题原因**: AlertLog.java 继承 BaseEntity，BaseEntity 包含 `createdAt` 和 `updatedAt` 字段，但 `t_alert_log` 表中没有这两个字段。
+
+**修复代码** (`src/main/java/uk/gubin/budgetpilot/entity/AlertLog.java`):
+```java
+// 移除 extends BaseEntity，直接定义 id 字段
+@Data
+@TableName("t_alert_log")
+public class AlertLog {
+    @TableId(type = IdType.AUTO)
+    private Long id;
+    // 其他字段...
+}
+```
 
 ---
 

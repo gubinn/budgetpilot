@@ -131,11 +131,11 @@ budgetpilot/
 │   │   ├── Transaction.java
 │   │   ├── Category.java
 │   │   ├── CurrencyRate.java
-│   │   ├── Budget.java
+│   │   ├── Budget.java         # 注意：yearMonth字段需用@TableField("`year_month`")
 │   │   ├── BudgetItem.java
 │   │   ├── RecurringRule.java
 │   │   ├── AlertRule.java
-│   │   └── AlertLog.java
+│   │   └── AlertLog.java       # 注意：不继承BaseEntity，表中无created_at/updated_at
 │   ├── dto/                # 请求参数
 │   │   ├── AccountCreateDTO.java
 │   │   ├── AccountUpdateDTO.java
