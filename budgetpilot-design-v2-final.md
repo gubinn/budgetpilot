@@ -1,7 +1,7 @@
 # BudgetPilot —— 个人预算管理系统设计文档
 
-> **版本**: v2.0（定稿）  
-> **日期**: 2026-04-15  
+> **版本**: v2.1（含用户体系 + 数据隔离 + API Key）  
+> **日期**: 2026-04-18  
 > **定位**: 替代 Actual Budget，部署于家庭 Linux 服务器  
 > **关键决策**: 月度起始日=每月1日 | 通知渠道=Telegram Bot | v1.0 即支持多币种
 
@@ -30,7 +30,7 @@
     "language": "Java 21",
     "orm": "MyBatis-Plus 3.5.x",
     "api_style": "RESTful（/api/v1/ 前缀）",
-    "auth": "Sa-Token 1.39.x"
+    "auth": "Sa-Token 1.39.x（用户登录 + API Key 双鉴权）"
   },
   "database": {
     "primary": "MySQL 8.0（JSON 字段 + 虚拟列索引）",
@@ -125,8 +125,14 @@ budgetpilot/
 │   │   ├── BaseEntity.java      # 基础实体（id, createdAt, updatedAt）
 │   │   └── GlobalExceptionHandler.java
 │   ├── config/             # 配置类
-│   │   └── AppConfig.java       # MP分页 + 自动填充 + 异步线程池
+│   │   ├── AppConfig.java       # MP分页 + 自动填充 + 异步线程池 + 多租户拦截器
+│   │   ├── SaTokenConfig.java   # Sa-Token拦截器 + SPA fallback + API Key Filter
+│   │   └── SaTokenPermissionImpl.java  # 角色解析（StpInterface）
+│   ├── filter/             # 过滤器
+│   │   └── ApiKeyFilter.java    # API Key 自动登录过滤器
 │   ├── entity/             # 数据实体
+│   │   ├── User.java            # 用户实体（username, password, role, apiKey）
+│   │   ├── UserConfig.java      # 用户级配置（telegram_bot_token 等）
 │   │   ├── Account.java
 │   │   ├── Transaction.java
 │   │   ├── Category.java
@@ -138,6 +144,10 @@ budgetpilot/
 │   │   ├── AlertRule.java
 │   │   └── AlertLog.java       # 注意：不继承BaseEntity，表中无created_at/updated_at
 │   ├── dto/                # 请求参数
+│   │   ├── LoginDTO.java          # 登录请求
+│   │   ├── ChangePasswordDTO.java # 修改密码
+│   │   ├── UserCreateDTO.java     # 创建用户
+│   │   ├── UserUpdateDTO.java     # 更新用户
 │   │   ├── AccountCreateDTO.java
 │   │   ├── AccountUpdateDTO.java
 │   │   ├── BalanceAdjustDTO.java
@@ -155,6 +165,8 @@ budgetpilot/
 │   │   ├── AlertRuleCreateDTO.java
 │   │   └── AlertRuleUpdateDTO.java
 │   ├── vo/                 # 响应视图
+│   │   ├── LoginVO.java         # 登录响应（token + 用户信息）
+│   │   ├── UserVO.java          # 用户信息视图
 │   │   ├── AccountVO.java
 │   │   ├── TransactionVO.java
 │   │   ├── CategoryVO.java
@@ -164,9 +176,13 @@ budgetpilot/
 │   │   ├── AlertRuleVO.java
 │   │   └── ReportVO.java
 │   ├── mapper/             # 持久层
+│   │   └── UserMapper.java      # 用户 Mapper
 │   ├── service/            # 业务层
+│   │   ├── UserService.java     # 用户服务（登录/改密/CRUD）
 │   │   └── impl/
 │   ├── controller/         # RESTful 接口层
+│   │   ├── AuthController.java  # 认证接口（/api/v1/auth/*）
+│   │   └── UserController.java  # 用户管理（/api/v1/users/*）
 │   └── event/              # 事件驱动（异步预算更新 + 预警检查）
 ├── src/main/resources/
 │   ├── application.yml
@@ -188,21 +204,17 @@ budgetpilot/
 ```
                     currency_rate
                          │
-account ──1:N── transaction ──N:1── category
-   │                 │                 │
-   │                 │                 │
-   └── currency      │                 │
-                     │                 │
-budget ──1:N── budget_item ──1:1── category
+user ──1:N── account ──1:N── transaction ──N:1── category
+ │             │                 │                 │
+ │             │                 │                 │
+ ├──1:N── category                │                 │
+ ├──1:N── merchant ───────────────┘                 │
+ ├──1:N── budget ──1:N── budget_item               │
+ ├──1:N── recurring_rule ──1:N── transaction       │
+ ├──1:N── alert_rule ──1:N── alert_log ──→ Telegram Bot
+ └──1:N── user_config
 
-transaction ──N:1── merchant
-
-alert_rule ──1:N── alert_log ──→ Telegram Bot
-
-recurring_rule ──1:N── transaction (auto-generated)
-recurring_rule ──N:1── merchant
-
-config (系统配置键值对)
+config (系统配置键值对，全局共享)
 ```
 
 ### 3.2 核心设计原则：扩展字段体系
@@ -333,6 +345,7 @@ ADD INDEX idx_ext_merchant (ext_merchant);
 ```sql
 CREATE TABLE t_account (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '账户名称（唯一）',
     type            TINYINT         NOT NULL COMMENT '1-现金 2-储蓄卡 3-信用卡 4-电子钱包 5-投资账户',
     icon            VARCHAR(50)     DEFAULT 'wallet' COMMENT '图标标识',
@@ -348,6 +361,8 @@ CREATE TABLE t_account (
     metadata        JSON            DEFAULT NULL COMMENT '系统元数据',
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user (user_id),
+    INDEX idx_name (name),
     INDEX idx_type (type),
     INDEX idx_active_sort (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账户表';
@@ -383,6 +398,7 @@ API：`POST /api/v1/accounts/{id}/adjust-balance`，参数 `{newBalance, reason}
 ```sql
 CREATE TABLE t_category (
     id          BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id     BIGINT          NOT NULL COMMENT '所属用户ID',
     parent_id   BIGINT          DEFAULT 0 COMMENT '父分类ID，0=顶级',
     name        VARCHAR(30)     NOT NULL COMMENT '分类名称',
     type        TINYINT         NOT NULL COMMENT '1-支出 2-收入',
@@ -393,6 +409,7 @@ CREATE TABLE t_category (
     is_active   TINYINT(1)      DEFAULT 1,
     created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user (user_id),
     INDEX idx_parent (parent_id),
     INDEX idx_type_active (type, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收支分类表';
@@ -435,6 +452,7 @@ CREATE TABLE t_category (
 ```sql
 CREATE TABLE t_transaction (
     id                  BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id             BIGINT          NOT NULL COMMENT '所属用户ID',
     type                TINYINT         NOT NULL COMMENT '1-支出 2-收入 3-转账',
     amount              DECIMAL(14,2)   NOT NULL COMMENT '原始金额（原始币种，正数）',
     currency            CHAR(3)         DEFAULT 'CNY' COMMENT '原始币种 ISO 4217',
@@ -496,6 +514,7 @@ CREATE TABLE t_transaction (
 ```sql
 CREATE TABLE t_merchant (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(100)    NOT NULL COMMENT '商户名称',
     alias           VARCHAR(200)    DEFAULT NULL COMMENT '别名（用于模糊匹配）',
     category_id     BIGINT          DEFAULT NULL COMMENT '关联分类ID',
@@ -603,6 +622,7 @@ CREATE TABLE t_currency_rate (
 ```sql
 CREATE TABLE t_recurring_rule (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
     type            TINYINT         NOT NULL COMMENT '1-支出 2-收入',
     amount          DECIMAL(14,2)   NOT NULL,
@@ -864,6 +884,7 @@ POST /api/v1/transactions/{id}/confirm
 ```sql
 CREATE TABLE t_budget (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     year_month      CHAR(7)         NOT NULL COMMENT 'YYYY-MM',
     total_amount    DECIMAL(14,2)   NOT NULL COMMENT '月度总预算（CNY）',
     note            VARCHAR(200)    DEFAULT NULL,
@@ -881,6 +902,7 @@ CREATE TABLE t_budget (
 ```sql
 CREATE TABLE t_budget_item (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     budget_id       BIGINT          NOT NULL,
     category_id     BIGINT          NOT NULL COMMENT '一级分类',
     amount          DECIMAL(14,2)   NOT NULL COMMENT '该分类预算额度（CNY）',
@@ -903,8 +925,9 @@ CREATE TABLE t_budget_item (
 ```sql
 CREATE TABLE t_alert_rule (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
-    type            TINYINT         NOT NULL COMMENT '类型：见枚举',
+    type            TINYINT         NOT NULL COMMENT '类型：1-预算阈值 2-单笔大额 3-日消费上限 4-周异常 5-信用卡还款 6-周期账单 7-预算未设定 8-待确认交易',
     config          JSON            NOT NULL COMMENT '规则配置',
     notify_channel  VARCHAR(50)     DEFAULT 'TELEGRAM' COMMENT 'TELEGRAM/APP',
     is_active       TINYINT(1)      DEFAULT 1,
@@ -1111,6 +1134,7 @@ _2026-04-18_
 ```sql
 CREATE TABLE t_alert_log (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     rule_id         BIGINT          NOT NULL,
     alert_type      TINYINT         NOT NULL,
     title           VARCHAR(100)    NOT NULL,
@@ -1132,6 +1156,7 @@ CREATE TABLE t_config (
     config_key      VARCHAR(50)     NOT NULL,
     config_value    TEXT            NOT NULL,
     description     VARCHAR(100)    DEFAULT NULL,
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE INDEX uk_key (config_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统配置表';
@@ -1149,6 +1174,135 @@ CREATE TABLE t_config (
 | `exchange_rate_api_key` | *(待配置)* | ExchangeRate-API Key |
 | `backup_cron` | `0 3 * * *` | 自动备份 cron |
 | `data_retention_months` | `0` | 数据保留月数，0=永久 |
+
+#### 3.3.13 用户表 `t_user`
+
+用户体系核心表，支持登录、角色控制、API Key 认证。
+
+```sql
+CREATE TABLE t_user (
+    id          BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    username    VARCHAR(50)     NOT NULL UNIQUE COMMENT '登录名',
+    password    VARCHAR(255)    NOT NULL COMMENT 'BCrypt加密',
+    nickname    VARCHAR(50)     DEFAULT '' COMMENT '显示名',
+    role        VARCHAR(20)     DEFAULT 'USER' COMMENT 'ADMIN / USER',
+    is_active   TINYINT(1)      DEFAULT 1,
+    api_key     VARCHAR(100)    DEFAULT NULL COMMENT 'API Key',
+    last_login  DATETIME        DEFAULT NULL COMMENT '最后登录时间',
+    created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_username (username),
+    INDEX idx_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+```
+
+**设计要点**：
+- `password` 使用 BCrypt 加密（spring-security-crypto），不可逆。
+- `role` 控制权限：`ADMIN` 可管理用户，`USER` 仅使用自身功能。
+- `api_key` 用于程序化调用（如自动化记账），无需走登录流程。
+- 默认管理员用户（初始化时创建）：`admin` / `admin123`。
+
+#### 3.3.14 用户配置表 `t_user_config`
+
+用户级别的配置项，与全局 `t_config` 分离。
+
+```sql
+CREATE TABLE t_user_config (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL,
+    config_key      VARCHAR(50)     NOT NULL,
+    config_value    TEXT            NOT NULL,
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_user_key (user_id, config_key),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户配置表';
+```
+
+**存储内容**：
+- `telegram_bot_token` — 用户个人 Telegram Bot Token
+- `telegram_chat_id` — 用户个人 Telegram Chat ID
+
+**回退策略**：如果用户未配置个人 Telegram 信息，则回退到全局 `t_config` 中的配置。
+
+#### 3.3.15 业务表 user_id 字段
+
+所有业务表均增加 `user_id BIGINT NOT NULL` 字段，实现用户级数据隔离：
+
+| 表名 | user_id 含义 |
+|------|-------------|
+| t_account | 所属用户 |
+| t_category | 所属用户（系统预置分类 user_id=0） |
+| t_transaction | 所属用户 |
+| t_recurring_rule | 所属用户 |
+| t_budget | 所属用户 |
+| t_budget_item | 所属用户 |
+| t_alert_rule | 所属用户 |
+| t_alert_log | 所属用户 |
+| t_merchant | 所属用户 |
+
+**不需要 user_id 的表**：
+| 表名 | 原因 |
+|------|------|
+| t_user | 用户表自身 |
+| t_user_config | 已有 user_id |
+| t_currency_rate | 全局共享汇率 |
+| t_config | 全局系统配置 |
+
+### 3.4 数据隔离设计
+
+系统采用 **MyBatis-Plus TenantLineInnerInterceptor** 实现 SQL 级别的自动数据隔离，无需在每个查询中手动添加 `WHERE user_id = ?`。
+
+```java
+// AppConfig.java — 多租户拦截器配置
+private static final Set<String> IGNORE_TENANT_TABLES = Set.of(
+    "t_user", "t_user_config", "t_currency_rate", "t_config"
+);
+
+TenantLineInnerInterceptor tenantInterceptor = new TenantLineInnerInterceptor(
+    new TenantLineHandler() {
+        @Override
+        public Expression getTenantId() {
+            try {
+                long userId = StpUtil.getLoginIdAsLong();
+                return new LongValue(userId);
+            } catch (Exception e) {
+                return null;  // 未登录时不添加租户条件
+            }
+        }
+        @Override
+        public String getTenantIdColumn() { return "user_id"; }
+        @Override
+        public boolean ignoreTable(String tableName) {
+            return IGNORE_TENANT_TABLES.contains(tableName);
+        }
+    });
+```
+
+**工作原理**：
+```
+用户发起请求
+  → SaToken / API Key 鉴权，确定 userId
+  → MyBatis-Plus 拦截器自动在所有 SQL 中添加 WHERE user_id = ?
+  → 用户 A 只能看到自己的数据
+```
+
+**自动填充 userId**：
+```java
+// AppConfig.java — MetaObjectHandler
+@Override
+public void insertFill(MetaObject metaObject) {
+    this.strictInsertFill(metaObject, "createdAt", LocalDateTime.class, LocalDateTime.now());
+    this.strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
+    if (metaObject.hasSetter("userId")) {
+        try {
+            this.strictInsertFill(metaObject, "userId", Long.class, StpUtil.getLoginIdAsLong());
+        } catch (Exception e) {}
+    }
+}
+```
+
+新增数据时自动填充 `user_id`，无需业务代码手动设置。
 
 ---
 
@@ -1802,7 +1956,36 @@ public class TelegramNotifyService {
 | PUT | `/api/v1/system/alerts/{id}/read` | 标记已读 |
 | POST | `/api/v1/system/telegram/test` | Telegram 推送测试 |
 
-### 6.10 统一响应结构
+### 6.10 认证与用户 `/api/v1/auth` + `/api/v1/users`
+
+| 方法 | 路径 | 说明 | 权限 |
+|------|------|------|------|
+| POST | `/api/v1/auth/login` | 用户登录 | 公开 |
+| POST | `/api/v1/auth/logout` | 退出登录 | 登录 |
+| GET | `/api/v1/auth/info` | 当前用户信息 | 登录 |
+| POST | `/api/v1/auth/change-password` | 修改密码 | 登录 |
+| POST | `/api/v1/auth/api-key/generate` | 生成 API Key | 登录 |
+| GET | `/api/v1/auth/api-key` | 查询 API Key | 登录 |
+| GET | `/api/v1/users` | 用户列表 | ADMIN |
+| POST | `/api/v1/users` | 创建用户 | ADMIN |
+| PATCH | `/api/v1/users/{id}` | 更新用户 | ADMIN |
+| DELETE | `/api/v1/users/{id}` | 删除用户 | ADMIN |
+| PUT | `/api/v1/users/{id}/password` | 重置密码 | ADMIN |
+| GET | `/api/v1/users/config` | 获取个人配置 | 登录 |
+| PUT | `/api/v1/users/config/{key}` | 设置个人配置 | 登录 |
+
+### 6.10.1 鉴权方式
+
+所有 `/api/v1/` 接口（除 `/api/v1/auth/login` 外）需要鉴权，支持两种方式：
+
+| 方式 | 请求头 | 适用场景 |
+|------|--------|----------|
+| Token | `Authorization: <token>` | 前端/浏览器，登录后使用 |
+| API Key | `X-Api-Key: <key>` | 程序/脚本，无需登录流程 |
+
+两种方式互斥：同时存在时优先校验 Token。
+
+### 6.11 统一响应结构
 
 ```json
 // 成功
@@ -1840,12 +2023,14 @@ public class TelegramNotifyService {
 | 范围 | 模块 | 示例 |
 |------|------|------|
 | 10001-10099 | 通用 | 参数校验失败、资源不存在、系统异常 |
+| 10005-10007 | 认证 | 用户名或密码错误、用户已停用、旧密码不正确 |
 | 20001-20099 | 账户 | 不存在、已停用、余额不足、名称重复 |
 | 30001-30099 | 交易 | 不存在、金额无效、转账同账户、分类不匹配 |
 | 40001-40099 | 分类 | 不存在、系统分类不可改、有子分类、有交易引用 |
 | 50001-50099 | 预算 | 不存在、已锁定、月份重复 |
 | 60001-60099 | 汇率 | 币种不支持、汇率获取失败、API 限流 |
 | 70001-70099 | 商户 | 不存在、名称已存在、有交易引用、系统商户不可改 |
+| 80001-80099 | 鉴权 | 未登录或登录过期、无 ADMIN 权限、用户名已存在 |
 
 ---
 
@@ -1856,9 +2041,15 @@ public class TelegramNotifyService {
 ```json
 {
   "auth": {
-    "mode": "PIN / 密码登录（Sa-Token）",
-    "session": "JWT Token，7 天有效，Redis 存储",
-    "rate_limit": "Redis 令牌桶，60 次/分钟"
+    "mode": "用户名/密码登录（Sa-Token）+ API Key 双鉴权",
+    "session": "Sa-Token，Redis 存储",
+    "password": "BCrypt 加密（spring-security-crypto）",
+    "api_key": "32 字节随机 base64url，存 t_user.api_key",
+    "data_isolation": "MyBatis-Plus TenantLineInnerInterceptor（SQL 级 WHERE user_id）",
+    "role": {
+      "ADMIN": "可管理用户、查看所有数据",
+      "USER": "仅可管理自己的数据"
+    }
   },
   "network": {
     "access": "仅 Tailscale 内网 + Nginx 反向代理",
@@ -1866,6 +2057,22 @@ public class TelegramNotifyService {
     "exposed": "不暴露到公网"
   }
 }
+```
+
+**数据隔离架构**：
+
+```
+请求进入
+  │
+  ├─ 鉴权层: SaTokenInterceptor（检查登录）
+  │     或
+  │   ApiKeyFilter（X-Api-Key → StpUtil.login）
+  │
+  ├─ 权限层: @SaCheckRole("ADMIN") → StpInterface.getRoleList()
+  │
+  └─ 数据层: TenantLineInnerInterceptor
+              自动在所有 SQL 中添加 WHERE user_id = ?
+              忽略表: t_user, t_user_config, t_currency_rate, t_config
 ```
 
 ### 7.2 数据流量分析
@@ -2053,8 +2260,18 @@ Phase 1（2 周）—— 骨架 + 核心记账
 ├── 数据库建表 + 初始化数据
 ├── 账户 CRUD + 分类 CRUD（含扩展字段）
 ├── 交易 CRUD（含扩展字段 + 多币种）
-└── 汇率服务（API 对接 + Redis 缓存）
-                                          ← ✅ 已完成大部分代码
+├── 汇率服务（API 对接 + Redis 缓存）
+└── 商户管理                                        ← ✅ 已完成
+
+Phase 1.5（1 周）—— 用户体系 + 鉴权
+├── 用户表 + 用户配置表
+├── Sa-Token 登录/登出/改密
+├── BCrypt 密码加密
+├── API Key 鉴权（程序调用无需登录）
+├── MyBatis-Plus 多租户拦截器（SQL 级数据隔离）
+├── 前端登录页 + 用户管理页 + 路由守卫
+└── 默认 admin 用户初始化                            ← ✅ 已完成
+
 Phase 2（2 周）—— 预算 + 报表
 ├── 预算管理（创建/复制/进度追踪）
 ├── 月度总览报表
@@ -2064,13 +2281,13 @@ Phase 2（2 周）—— 预算 + 报表
 
 Phase 3（1 周）—— 预警 + Telegram
 ├── 预警引擎（责任链模式）
-├── 7 种预警规则实现
+├── 8 种预警规则实现
 ├── Telegram Bot 推送服务
 ├── App 内通知中心
 └── 通知去重
 
-Phase 4（1 周）—— 前端 + 部署
-├── Vue 3 前端开发
+Phase 4（1 周）—— 前端完善 + 部署
+├── Vue 3 前端开发（剩余页面）
 ├── 移动端 PWA 适配
 ├── Docker Compose 部署
 ├── Nginx 反向代理配置
@@ -2090,9 +2307,11 @@ Phase 5（持续）—— 打磨
 
 ```
 sql/
-├── schema.sql        # 10 张表建表语句
-├── init_data.sql     # 预设分类 + 默认预警规则 + 系统配置
-└── upgrade/          # 版本升级脚本（预留）
+├── schema.sql              # 12 张表建表语句（含用户表 + user_id）
+├── init_data.sql           # 预设分类 + 默认预警规则 + 系统配置
+├── user_migration.sql      # 旧版本升级：创建用户体系 + 为业务表添加 user_id
+├── merchant_migration.sql  # 商户表迁移脚本
+└── upgrade/                # 版本升级脚本（预留）
 ```
 
 ## 附录 B：技术依赖版本
