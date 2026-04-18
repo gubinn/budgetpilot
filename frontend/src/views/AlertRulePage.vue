@@ -50,6 +50,9 @@
         <n-form-item v-if="formData.type === 7" label="检查日" path="checkDay">
           <n-input-number v-model:value="formData.checkDay" :min="1" :max="28" placeholder="每月几号检查" />
         </n-form-item>
+        <n-form-item v-if="formData.type === 8" label="数量阈值" path="minCount">
+          <n-input-number v-model:value="formData.minCount" :min="1" placeholder="超过多少条待确认交易提醒" />
+        </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
@@ -82,7 +85,8 @@ const formData = ref({
   maxAmount: 1000,
   dailyLimit: 500,
   advanceDays: 3,
-  checkDay: 25
+  checkDay: 25,
+  minCount: 1
 })
 
 const typeOptions = [
@@ -92,7 +96,8 @@ const typeOptions = [
   { label: '周消费异常', value: 4 },
   { label: '信用卡还款提醒', value: 5 },
   { label: '周期账单提醒', value: 6 },
-  { label: '预算未设定提醒', value: 7 }
+  { label: '预算未设定提醒', value: 7 },
+  { label: '待确认交易提醒', value: 8 }
 ]
 
 const channelOptions = [
@@ -117,6 +122,7 @@ const columns = [
         if (row.type === 5) return `提前 ${config.advance_days} 天`
         if (row.type === 6) return `提前 ${config.advance_days} 天`
         if (row.type === 7) return `${config.check_day} 号检查`
+        if (row.type === 8) return `超过 ${config.min_count || 1} 条提醒`
         return row.config
       } catch {
         return row.config
@@ -187,6 +193,8 @@ const handleCreate = async () => {
       config = { advance_days: formData.value.advanceDays }
     } else if (formData.value.type === 7) {
       config = { check_day: formData.value.checkDay }
+    } else if (formData.value.type === 8) {
+      config = { min_count: formData.value.minCount }
     }
 
     const payload = {
@@ -211,7 +219,8 @@ const handleCreate = async () => {
       maxAmount: 1000,
       dailyLimit: 500,
       advanceDays: 3,
-      checkDay: 25
+      checkDay: 25,
+      minCount: 1
     }
   } catch (e) {
     message.error('创建失败: ' + e.message)

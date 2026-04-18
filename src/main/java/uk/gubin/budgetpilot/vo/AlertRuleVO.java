@@ -40,6 +40,7 @@ public class AlertRuleVO {
             case 5 -> "信用卡还款提醒";
             case 6 -> "周期账单提醒";
             case 7 -> "预算未设定提醒";
+            case 8 -> "待确认交易提醒";
             default -> "未知类型";
         };
     }

@@ -12,6 +12,7 @@ import uk.gubin.budgetpilot.service.ConfigService;
 import uk.gubin.budgetpilot.service.CurrencyRateService;
 import uk.gubin.budgetpilot.service.AlertLogService;
 import uk.gubin.budgetpilot.service.TelegramNotifyService;
+import uk.gubin.budgetpilot.service.ScheduledTasks;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -37,6 +38,7 @@ public class SystemController {
     private final BudgetMapper budgetMapper;
     private final BudgetItemMapper budgetItemMapper;
     private final StringRedisTemplate redisTemplate;
+    private final ScheduledTasks scheduledTasks;
 
     @GetMapping("/config")
     public Result<Map<String, String>> getAllConfig() {
@@ -111,5 +113,11 @@ public class SystemController {
             "budgets", budgets,
             "budgetItems", budgetItems
         ));
+    }
+
+    @PostMapping("/check-unconfirmed")
+    public Result<String> checkUnconfirmedTransactions() {
+        scheduledTasks.checkUnconfirmedTransactions();
+        return Result.ok("待确认交易检查已执行");
     }
 }

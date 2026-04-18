@@ -1,6 +1,7 @@
 package uk.gubin.budgetpilot.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -28,11 +29,13 @@ public class ScheduledTasks {
     private final CurrencyRateService currencyRateService;
     private final BudgetService budgetService;
     private final RecurringRuleService recurringRuleService;
+    private final AlertRuleService alertRuleService;
     private final AccountMapper accountMapper;
     private final TransactionMapper transactionMapper;
     private final CategoryMapper categoryMapper;
     private final AlertLogService alertLogService;
     private final ApplicationEventPublisher eventPublisher;
+    private final ObjectMapper objectMapper;
 
     /**
      * 每日 08:00 - 汇率更新
@@ -334,6 +337,79 @@ public class ScheduledTasks {
                     nextMonth,
                     LocalDate.now());
             alertLogService.logAndNotify(7L, 7, title, content, "TELEGRAM");
+        }
+    }
+
+    /**
+     * 每日 10:00 - 待确认交易提醒（规则 8）
+     */
+    @Scheduled(cron = "0 0 10 * * ?")
+    public void checkUnconfirmedTransactions() {
+        log.info("Scheduled: checking unconfirmed transactions");
+
+        // 查询启用的待确认交易预警规则
+        List<AlertRule> rules = alertRuleService.list(
+                new LambdaQueryWrapper<AlertRule>()
+                        .eq(AlertRule::getIsActive, true)
+                        .eq(AlertRule::getType, 8));
+
+        if (rules.isEmpty()) return;
+
+        // 查询未确认的交易
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.eq(Transaction::getIsConfirmed, false)
+                .orderByDesc(Transaction::getCreatedAt);
+        List<Transaction> unconfirmed = transactionMapper.selectList(query);
+
+        if (unconfirmed.isEmpty()) return;
+
+        // 检查每个规则
+        for (AlertRule rule : rules) {
+            try {
+                var config = objectMapper.readTree(rule.getConfig());
+                int minCount = config.path("min_count").asInt(1);
+
+                if (unconfirmed.size() >= minCount) {
+                    // 汇总未确认交易信息
+                    BigDecimal totalAmount = unconfirmed.stream()
+                            .map(Transaction::getAmountBase)
+                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                    StringBuilder details = new StringBuilder();
+                    for (int i = 0; i < Math.min(5, unconfirmed.size()); i++) {
+                        Transaction t = unconfirmed.get(i);
+                        details.append("• ").append(t.getNote() != null ? t.getNote() : "无备注")
+                                .append(" - ¥").append(t.getAmountBase().toPlainString())
+                                .append("\n");
+                    }
+                    if (unconfirmed.size() > 5) {
+                        details.append("• 还有 ").append(unconfirmed.size() - 5).append(" 条...\n");
+                    }
+
+                    String title = "📝 待确认交易提醒";
+                    String content = String.format("""
+                            📝 待确认交易提醒
+
+                            • 待确认数量: %d 条
+                            • 涉及金额: ¥%s
+
+                            %s
+                            请及时确认这些交易！
+
+                            ━━━━━━━━━━━━━━
+                            _%s_
+                            """,
+                            unconfirmed.size(),
+                            totalAmount.toPlainString(),
+                            details.toString(),
+                            LocalDate.now());
+
+                    alertLogService.logAndNotify(rule.getId(), 8, title, content, rule.getNotifyChannel());
+                    log.info("Unconfirmed transaction alert sent: {} transactions", unconfirmed.size());
+                }
+            } catch (Exception e) {
+                log.error("Failed to check unconfirmed transactions for rule {}", rule.getId(), e);
+            }
         }
     }
 
