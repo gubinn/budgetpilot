@@ -1,7 +1,7 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
 
-const BASE_URL = 'http://localhost:6060';
+const BASE_URL = 'https://localhost:6061';
 const TEST_USER = 'isotest_user';
 const TEST_PASS = 'Test@2026';
 const ADMIN_USER = 'admin';

@@ -8,7 +8,8 @@ module.exports = defineConfig({
   workers: 1,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:6060',
+    baseURL: 'https://localhost:6061',
+    ignoreHTTPSErrors: true,
     trace: 'on-first-retry',
     headless: true,
   },
