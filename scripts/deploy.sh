@@ -18,17 +18,20 @@ cd "$PROJECT_DIR"
 echo ">>> 步骤 1: 构建前端"
 "$SCRIPT_DIR/update-frontend.sh"
 
+cd "$PROJECT_DIR"
+
 # 2. 构建后端 JAR
 echo ""
 echo ">>> 步骤 2: 构建后端 JAR"
+echo "当前目录: $(pwd)"
 mvn clean package -DskipTests -q
 
-if [ ! -f "target/budgetpilot-*.jar" ]; then
-    echo "错误: JAR 文件不存在"
+JAR_FILE=$(ls target/budgetpilot-*.jar 2>/dev/null | head -1)
+if [ -z "$JAR_FILE" ]; then
+    echo "错误: JAR 文件不存在 (target/budgetpilot-*.jar)"
+    ls -la target/ 2>/dev/null || echo "target 目录不存在"
     exit 1
 fi
-
-JAR_FILE=$(ls target/budgetpilot-*.jar | head -1)
 echo "JAR 文件: $JAR_FILE ($(du -h "$JAR_FILE" | cut -f1))"
 
 # 3. 重新构建 Docker 镜像
