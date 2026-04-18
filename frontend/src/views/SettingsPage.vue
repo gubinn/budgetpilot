@@ -56,6 +56,23 @@
       </n-card>
     </n-gi>
 
+    <!-- API Key -->
+    <n-gi>
+      <n-card title="API Key" hoverable>
+        <n-alert type="info" v-if="!apiKey" style="margin-bottom: 12px">
+          API Key 用于程序调用接口，无需登录即可使用
+        </n-alert>
+        <n-input-group>
+          <n-input :value="apiKeyMasked" readonly />
+          <n-button @click="toggleApiKeyVisibility">{{ apiKeyVisible ? '隐藏' : '显示' }}</n-button>
+        </n-input-group>
+        <n-space style="margin-top: 12px">
+          <n-button @click="copyApiKey" :disabled="!apiKey">复制 Key</n-button>
+          <n-button type="warning" @click="regenerateApiKey">重新生成</n-button>
+        </n-space>
+      </n-card>
+    </n-gi>
+
     <!-- 预警日志 -->
     <n-gi>
       <n-card title="预警日志" hoverable>
@@ -80,12 +97,15 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { systemApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 import dayjs from 'dayjs'
+import axios from 'axios'
 
 const message = useMessage()
+const auth = useAuthStore()
 const config = ref({
   telegram_bot_token: '',
   telegram_chat_id: '',
@@ -95,6 +115,8 @@ const supportedCurrencies = ref([])
 const rates = ref([])
 const alerts = ref([])
 const refreshing = ref(false)
+const apiKey = ref('')
+const apiKeyVisible = ref(false)
 
 async function loadConfig() {
   try {
@@ -151,9 +173,49 @@ async function markRead(id) {
   } catch (e) {}
 }
 
+const apiKeyMasked = computed(() => {
+  if (!apiKey.value) return '尚未生成'
+  if (apiKeyVisible.value) return apiKey.value
+  return apiKey.value.slice(0, 6) + '•'.repeat(20) + apiKey.value.slice(-4)
+})
+
+async function loadApiKey() {
+  try {
+    const res = await axios.get('/api/v1/auth/api-key', {
+      headers: { Authorization: auth.token }
+    })
+    if (res.data.code === 0) {
+      apiKey.value = res.data.data
+    }
+  } catch (e) {}
+}
+
+async function regenerateApiKey() {
+  try {
+    const res = await axios.post('/api/v1/auth/api-key/generate', null, {
+      headers: { Authorization: auth.token }
+    })
+    if (res.data.code === 0) {
+      apiKey.value = res.data.data
+      message.success('API Key 已重新生成')
+    }
+  } catch (e) { message.error('生成失败') }
+}
+
+function copyApiKey() {
+  if (!apiKey.value) return
+  navigator.clipboard.writeText(apiKey.value)
+  message.success('已复制到剪贴板')
+}
+
+function toggleApiKeyVisibility() {
+  apiKeyVisible.value = !apiKeyVisible.value
+}
+
 onMounted(() => {
   loadConfig()
   loadRates()
   loadAlerts()
+  loadApiKey()
 })
 </script>
