@@ -268,6 +268,29 @@
 | GET | `/api/v1/system/alerts` | 获取未读告警 | - |
 | PUT | `/api/v1/system/alerts/{id}/read` | 标记告警已读 | - |
 | POST | `/api/v1/system/telegram/test` | 测试 Telegram 推送 | - |
+| DELETE | `/api/v1/system/test-data` | 清空测试数据 | - |
+| POST | `/api/v1/system/check-unconfirmed` | 手动触发待确认交易检查 | - |
+
+#### 清空测试数据响应
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "transactions": 4,
+    "accounts": 1,
+    "recurringRules": 0,
+    "alertRules": 3,
+    "alertLogs": 4,
+    "budgets": 1,
+    "budgetItems": 1
+  },
+  "timestamp": 1234567890
+}
+```
+
+**说明**: 清空所有业务数据（交易、账户、周期规则、预警规则、预警日志、预算），保留系统预置分类，同时清除 Redis 缓存。
 
 ---
 
@@ -439,12 +462,16 @@
 
 ### 告警类型 (AlertType)
 
-| 值 | 说明 |
-|----|------|
-| BUDGET_THRESHOLD | 预算阈值告警 |
-| ACCOUNT_BALANCE_LOW | 账户余额低告警 |
-| LARGE_TRANSACTION | 大额交易告警 |
-| RECURRING_DUE | 周期交易到期提醒 |
+| 值 | 说明 | 配置字段 |
+|----|------|----------|
+| 1 | 预算阈值预警 | `{ "threshold_pct": 80 }` |
+| 2 | 单笔大额预警 | `{ "max_amount": "1000" }` |
+| 3 | 日消费上限 | `{ "daily_limit": "500" }` |
+| 4 | 周消费异常 | 自动检测（阈值50%） |
+| 5 | 信用卡还款提醒 | `{ "advance_days": 3 }` |
+| 6 | 周期账单提醒 | `{ "advance_days": 1 }` |
+| 7 | 预算未设定提醒 | `{ "check_day": 25 }` |
+| 8 | 待确认交易提醒 | `{ "min_count": 1 }` |
 
 ### 通知渠道 (NotifyChannel)
 
