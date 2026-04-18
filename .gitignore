@@ -22,6 +22,9 @@ frontend/playwright-report/
 # Spring Boot static (built from frontend)
 src/main/resources/static/
 
+# nginx web root (built from frontend)
+web/
+
 # Logs
 logs/
 *.log
