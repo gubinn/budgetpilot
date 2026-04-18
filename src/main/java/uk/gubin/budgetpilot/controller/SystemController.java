@@ -7,11 +7,17 @@ import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.entity.AlertLog;
 import uk.gubin.budgetpilot.entity.CurrencyRate;
-import uk.gubin.budgetpilot.service.*;
+import uk.gubin.budgetpilot.mapper.*;
+import uk.gubin.budgetpilot.service.ConfigService;
+import uk.gubin.budgetpilot.service.CurrencyRateService;
+import uk.gubin.budgetpilot.service.AlertLogService;
+import uk.gubin.budgetpilot.service.TelegramNotifyService;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 @RestController
 @RequestMapping("/api/v1/system")
@@ -22,7 +28,15 @@ public class SystemController {
     private final CurrencyRateService currencyRateService;
     private final AlertLogService alertLogService;
     private final TelegramNotifyService telegramNotifyService;
-    private final uk.gubin.budgetpilot.mapper.CurrencyRateMapper currencyRateMapper;
+    private final CurrencyRateMapper currencyRateMapper;
+    private final TransactionMapper transactionMapper;
+    private final AccountMapper accountMapper;
+    private final RecurringRuleMapper recurringRuleMapper;
+    private final AlertRuleMapper alertRuleMapper;
+    private final AlertLogMapper alertLogMapper;
+    private final BudgetMapper budgetMapper;
+    private final BudgetItemMapper budgetItemMapper;
+    private final StringRedisTemplate redisTemplate;
 
     @GetMapping("/config")
     public Result<Map<String, String>> getAllConfig() {
@@ -72,5 +86,30 @@ public class SystemController {
     public Result<String> testTelegram() {
         boolean success = telegramNotifyService.testSend();
         return success ? Result.ok("Telegram 推送成功") : Result.fail(10003, "Telegram 推送失败");
+    }
+
+    @DeleteMapping("/test-data")
+    public Result<Map<String, Integer>> clearTestData() {
+        // 清空所有测试数据（保留系统分类）
+        int transactions = transactionMapper.delete(new LambdaQueryWrapper<>());
+        int accounts = accountMapper.delete(new LambdaQueryWrapper<>());
+        int recurringRules = recurringRuleMapper.delete(new LambdaQueryWrapper<>());
+        int alertRules = alertRuleMapper.delete(new LambdaQueryWrapper<>());
+        int alertLogs = alertLogMapper.delete(new LambdaQueryWrapper<>());
+        int budgets = budgetMapper.delete(new LambdaQueryWrapper<>());
+        int budgetItems = budgetItemMapper.delete(new LambdaQueryWrapper<>());
+
+        // 清除Redis缓存
+        redisTemplate.getConnectionFactory().getConnection().flushDb();
+
+        return Result.ok(Map.of(
+            "transactions", transactions,
+            "accounts", accounts,
+            "recurringRules", recurringRules,
+            "alertRules", alertRules,
+            "alertLogs", alertLogs,
+            "budgets", budgets,
+            "budgetItems", budgetItems
+        ));
     }
 }
