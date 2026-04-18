@@ -264,6 +264,80 @@ docker compose ps mysql
 
 ---
 
+## 二点五、首次登录设置
+
+### 2.8 默认管理员账户
+
+系统初始化时会自动创建默认管理员账户：
+
+| 字段 | 值 |
+|------|-----|
+| 用户名 | `admin` |
+| 密码 | `admin123` |
+| 角色 | `ADMIN` |
+
+**首次登录后请立即修改密码！**
+
+### 2.9 通过前端登录
+
+1. 浏览器打开 `http://<server-ip>` 或 `http://<server-ip>:6060`
+2. 自动跳转到登录页
+3. 使用默认管理员账户登录
+4. 在「系统设置」页面修改密码
+
+### 2.10 通过 API 登录
+
+```bash
+# 登录获取 token
+curl -X POST http://127.0.0.1:6060/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 响应示例:
+# {"code":0,"message":"ok","data":{"token":"xxx","id":1,"username":"admin","nickname":"管理员","role":"ADMIN"}}
+
+# 使用 token 调用 API
+TOKEN="复制上面的token值"
+curl http://127.0.0.1:6060/api/v1/accounts \
+  -H "Authorization: $TOKEN"
+
+# 修改密码
+curl -X POST http://127.0.0.1:6060/api/v1/auth/change-password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: $TOKEN" \
+  -d '{"oldPassword":"admin123","newPassword":"your_new_password"}'
+```
+
+### 2.11 程序化调用（API Key 方式）
+
+对于需要程序自动记账的场景，可以使用 API Key 鉴权，无需走登录流程：
+
+```bash
+# 1. 先登录获取 token（仅首次设置时需要）
+curl -X POST http://127.0.0.1:6060/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 2. 生成 API Key
+curl -X POST http://127.0.0.1:6060/api/v1/auth/api-key/generate \
+  -H "Authorization: <token>"
+
+# 响应: {"code":0,"data":"<生成的api-key>"}
+
+# 3. 后续所有 API 调用直接使用 API Key，无需登录
+curl -X POST http://127.0.0.1:6060/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: <api-key>" \
+  -d '{"type":1,"amount":30,"accountId":1,"categoryId":1,"transactionDate":"2026-04-18","note":"午餐"}'
+
+curl http://127.0.0.1:6060/api/v1/accounts \
+  -H "X-Api-Key: <api-key>"
+```
+
+> **安全提示**：API Key 具有与对应用户相同的权限，请妥善保管，不要泄露。
+
+---
+
 ## 三、Nginx 配置
 
 Nginx 用于代理前端静态文件和 API 请求，同时提供 HTTPS 支持。
@@ -657,20 +731,40 @@ du -sh /opt/budgetpilot/*
 
 所有 API 基础路径为 `http://127.0.0.1:6060/api/v1`
 
+> **鉴权说明**：除 `/api/v1/auth/login` 外，所有接口需要鉴权。支持两种方式：
+> - **Token 方式**：`Authorization: <token>`（前端/浏览器使用）
+> - **API Key 方式**：`X-Api-Key: <key>`（程序/脚本使用，无需登录）
+
+### 认证登录
+
+```bash
+# 登录获取 token
+curl -X POST http://127.0.0.1:6060/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}'
+
+# 生成 API Key（登录后调用）
+curl -X POST http://127.0.0.1:6060/api/v1/auth/api-key/generate \
+  -H "Authorization: <token>"
+```
+
 ### 账户管理
 
 ```bash
-# 获取账户列表
-curl http://127.0.0.1:6060/api/v1/accounts
+# 获取账户列表（API Key 方式）
+curl http://127.0.0.1:6060/api/v1/accounts \
+  -H "X-Api-Key: your-api-key"
 
 # 创建账户
 curl -X POST http://127.0.0.1:6060/api/v1/accounts \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
   -d '{"name":"招商储蓄卡","type":2,"currency":"CNY","initialBalance":10000}'
 
 # 更新账户
 curl -X PUT http://127.0.0.1:6060/api/v1/accounts/1 \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
   -d '{"name":"工商银行"}'
 ```
 
@@ -680,24 +774,30 @@ curl -X PUT http://127.0.0.1:6060/api/v1/accounts/1 \
 # 创建交易（支出）
 curl -X POST http://127.0.0.1:6060/api/v1/transactions \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
   -d '{"type":1,"amount":50,"currency":"CNY","accountId":1,"categoryId":1,"transactionDate":"2026-04-15","note":"午餐"}'
 
 # 创建待确认交易（isConfirmed=false）
 curl -X POST http://127.0.0.1:6060/api/v1/transactions \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
   -d '{"type":1,"amount":5000,"accountId":1,"categoryId":1,"transactionDate":"2026-04-15","note":"待确认支出","isConfirmed":false}'
 
 # 分页查询交易
-curl "http://127.0.0.1:6060/api/v1/transactions?page=1&size=20"
+curl "http://127.0.0.1:6060/api/v1/transactions?page=1&size=20" \
+  -H "X-Api-Key: your-api-key"
 
 # 按日期范围查询
-curl "http://127.0.0.1:6060/api/v1/transactions?startDate=2026-04-01&endDate=2026-04-30"
+curl "http://127.0.0.1:6060/api/v1/transactions?startDate=2026-04-01&endDate=2026-04-30" \
+  -H "X-Api-Key: your-api-key"
 
 # 按状态筛选（confirmed=true 已确认，confirmed=false 待确认）
-curl "http://127.0.0.1:6060/api/v1/transactions?confirmed=false"
+curl "http://127.0.0.1:6060/api/v1/transactions?confirmed=false" \
+  -H "X-Api-Key: your-api-key"
 
 # 确认待确认交易
-curl -X POST http://127.0.0.1:6060/api/v1/transactions/{id}/confirm
+curl -X POST http://127.0.0.1:6060/api/v1/transactions/{id}/confirm \
+  -H "X-Api-Key: your-api-key"
 ```
 
 > **状态筛选说明**：
@@ -709,11 +809,13 @@ curl -X POST http://127.0.0.1:6060/api/v1/transactions/{id}/confirm
 
 ```bash
 # 获取分类列表
-curl http://127.0.0.1:6060/api/v1/categories
+curl http://127.0.0.1:6060/api/v1/categories \
+  -H "X-Api-Key: your-api-key"
 
 # 创建分类
 curl -X POST http://127.0.0.1:6060/api/v1/categories \
   -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key" \
   -d '{"name":"餐饮","type":1,"parentId":0}'
 ```
 
@@ -721,17 +823,20 @@ curl -X POST http://127.0.0.1:6060/api/v1/categories \
 
 ```bash
 # 月度总览
-curl "http://127.0.0.1:6060/api/v1/reports/monthly-summary?month=2026-04"
+curl "http://127.0.0.1:6060/api/v1/reports/monthly-summary?month=2026-04" \
+  -H "X-Api-Key: your-api-key"
 
 # 趋势分析（最近 12 个月）
-curl "http://127.0.0.1:6060/api/v1/reports/trend?months=12"
+curl "http://127.0.0.1:6060/api/v1/reports/trend?months=12" \
+  -H "X-Api-Key: your-api-key"
 ```
 
 ### 系统
 
 ```bash
 # 查看配置
-curl http://127.0.0.1:6060/api/v1/system/config
+curl http://127.0.0.1:6060/api/v1/system/config \
+  -H "X-Api-Key: your-api-key"
 
 # 测试 Telegram 推送
 curl -X POST http://127.0.0.1:6060/api/v1/system/telegram/test
@@ -783,6 +888,31 @@ source .env
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < sql/schema.sql
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < sql/init_data.sql
 ```
+
+### 用户体系迁移（旧版本升级）
+
+如果从没有用户体系的旧版本升级，需要执行迁移脚本：
+
+```bash
+cd /opt/budgetpilot
+source .env
+
+# 1. 先备份数据库
+DATE=$(date +%Y%m%d_%H%M%S)
+docker compose exec mysql mysqldump -ubudgetpilot -p${DB_PASS} budgetpilot \
+  --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
+
+# 2. 执行迁移脚本
+cat sql/user_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+
+# 3. 验证
+docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SELECT id, username, role FROM t_user;"
+
+# 4. 重启 API
+docker compose restart budgetpilot-api
+```
+
+> 迁移后所有现有数据归属于默认 admin 用户（user_id = 1），数据隔离机制自动生效。
 
 ### MySQL 健康检查一直失败
 

@@ -359,10 +359,10 @@
 ### 13.4 认证与用户API
 | ID | 测试场景 | API | 预期结果 |
 |----|----------|-----|----------|
-| API16 | 用户登录 | POST /api/auth/login | 返回token和用户信息 |
-| API17 | 退出登录 | POST /api/auth/logout | 返回成功，token失效 |
-| API18 | 获取当前用户 | GET /api/auth/info | 返回当前用户信息 |
-| API19 | 修改密码 | POST /api/auth/change-password | 密码修改成功 |
+| API16 | 用户登录 | POST /api/v1/auth/login | 返回token和用户信息 |
+| API17 | 退出登录 | POST /api/v1/auth/logout | 返回成功，token失效 |
+| API18 | 获取当前用户 | GET /api/v1/auth/info | 返回当前用户信息 |
+| API19 | 修改密码 | POST /api/v1/auth/change-password | 密码修改成功 |
 | API20 | 用户列表(管理员) | GET /api/v1/users | 返回所有用户 |
 | API21 | 创建用户(管理员) | POST /api/v1/users | 返回新用户 |
 | API22 | 更新用户(管理员) | PATCH /api/v1/users/{id} | 更新成功 |
@@ -371,12 +371,26 @@
 | API25 | 获取个人配置 | GET /api/v1/users/config | 返回当前用户所有配置 |
 | API26 | 设置个人配置 | PUT /api/v1/users/config/{key} | 设置成功 |
 
+### 13.6 API Key 鉴权
+| ID | 测试场景 | 操作 | 预期结果 |
+|----|----------|------|----------|
+| AK01 | 生成 API Key | 登录后调用 POST /api/v1/auth/api-key/generate | 返回 base64url 格式的 key |
+| AK02 | 查询 API Key | 登录后调用 GET /api/v1/auth/api-key | 返回已生成的 key 或空字符串 |
+| AK03 | 使用 API Key 调用 API | 请求头带 X-Api-Key，调用 GET /api/v1/accounts | 返回该用户的账户列表，200 成功 |
+| AK04 | 使用 API Key 创建交易 | 请求头带 X-Api-Key，调用 POST /api/v1/transactions | 创建成功，交易归属于 key 对应用户 |
+| AK05 | 使用错误 API Key | 请求头带错误的 X-Api-Key 值 | 返回未登录错误（code: 80001 或类似） |
+| AK06 | 不带任何鉴权 | 直接调用 GET /api/v1/accounts | 返回未登录错误 |
+| AK07 | API Key 数据隔离 | 用户 A 的 API Key 创建账户，用户 B 的 Key 查询 | 用户 B 看不到用户 A 的账户 |
+| AK08 | Token 和 API Key 同时存在 | 请求头同时带 Authorization 和 X-Api-Key | 优先使用 Token 校验 |
+| AK09 | API Key 调用登录接口 | 带 X-Api-Key 调用 POST /api/v1/auth/login | 正常处理（登录接口不走 API Key 逻辑） |
+| AK10 | 停用用户的 API Key | 管理员将用户的 apiKey 字段清空 | 该 API Key 失效，调用返回未登录 |
+
 ### 13.5 系统管理API
 | ID | 测试场景 | API | 预期结果 |
 |----|----------|-----|----------|
-| API27 | 清空测试数据 | DELETE /system/test-data | 返回清空的数据条数统计 |
-| API28 | 手动触发待确认交易检查 | POST /system/check-unconfirmed | 返回执行成功 |
-| API29 | 测试Telegram推送 | POST /system/telegram/test | 返回推送成功/失败 |
+| API27 | 清空测试数据 | DELETE /api/v1/system/test-data | 返回清空的数据条数统计 |
+| API28 | 手动触发待确认交易检查 | POST /api/v1/system/check-unconfirmed | 返回执行成功 |
+| API29 | 测试Telegram推送 | POST /api/v1/system/telegram/test | 返回推送成功/失败 |
 
 ---
 
@@ -461,9 +475,21 @@
 
 ```bash
 # 后端API测试 (使用curl或集成测试)
-curl -X GET http://localhost:6060/api/v1/accounts
-curl -X POST http://localhost:6060/api/v1/accounts -d '{"name":"测试账户","currency":"CNY","currentBalance":1000}'
-curl -X GET http://localhost:6060/api/v1/accounts/total-assets
+# 先生成 API Key（首次）
+TOKEN=$(curl -s -X POST http://localhost:6060/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | jq -r '.data.token')
+
+API_KEY=$(curl -s -X POST http://localhost:6060/api/v1/auth/api-key/generate \
+  -H "Authorization: $TOKEN" | jq -r '.data')
+
+# 使用 API Key 测试
+curl http://localhost:6060/api/v1/accounts -H "X-Api-Key: $API_KEY"
+curl -X POST http://localhost:6060/api/v1/accounts \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: $API_KEY" \
+  -d '{"name":"测试账户","currency":"CNY","initialBalance":1000}'
+curl http://localhost:6060/api/v1/accounts/total-assets -H "X-Api-Key: $API_KEY"
 
 # 前端E2E测试 (Playwright)
 cd frontend

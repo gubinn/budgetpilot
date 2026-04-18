@@ -455,6 +455,170 @@
 
 ---
 
+### 9. 认证与用户管理 (Auth & User)
+
+#### 9.1 认证接口
+
+**基础路径**: `/api/v1/auth`
+
+| 方法 | 路径 | 功能 | 请求体 | 需登录 |
+|------|------|------|--------|--------|
+| POST | `/api/v1/auth/login` | 用户登录 | `LoginDTO` | 否 |
+| POST | `/api/v1/auth/logout` | 退出登录 | - | 是 |
+| GET | `/api/v1/auth/info` | 获取当前用户信息 | - | 是 |
+| POST | `/api/v1/auth/change-password` | 修改密码 | `ChangePasswordDTO` | 是 |
+| POST | `/api/v1/auth/api-key/generate` | 生成 API Key | - | 是 |
+| GET | `/api/v1/auth/api-key` | 获取当前用户 API Key | - | 是 |
+
+##### LoginDTO（登录请求）
+
+```json
+{
+  "username": "用户名 (必填)",
+  "password": "密码 (必填)"
+}
+```
+
+##### LoginVO（登录响应）
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "token": "sa-token 登录凭证",
+    "id": 1,
+    "username": "admin",
+    "nickname": "管理员",
+    "role": "ADMIN"
+  }
+}
+```
+
+##### UserVO（用户信息响应）
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "id": 1,
+    "username": "admin",
+    "nickname": "管理员",
+    "role": "ADMIN",
+    "isActive": true,
+    "lastLogin": "2026-04-18T10:00:00",
+    "createdAt": "2026-04-15T00:00:00"
+  }
+}
+```
+
+##### ChangePasswordDTO
+
+```json
+{
+  "oldPassword": "旧密码 (必填)",
+  "newPassword": "新密码 (必填)"
+}
+```
+
+#### 9.2 用户管理 (User)
+
+**基础路径**: `/api/v1/users`
+
+| 方法 | 路径 | 功能 | 请求体 | 权限 |
+|------|------|------|--------|------|
+| GET | `/api/v1/users` | 获取用户列表 | - | ADMIN |
+| GET | `/api/v1/users/{id}` | 获取用户详情 | - | ADMIN |
+| POST | `/api/v1/users` | 创建用户 | `UserCreateDTO` | ADMIN |
+| PATCH | `/api/v1/users/{id}` | 更新用户 | `UserUpdateDTO` | ADMIN |
+| DELETE | `/api/v1/users/{id}` | 删除用户 | - | ADMIN |
+| PUT | `/api/v1/users/{id}/password` | 重置密码 | `{ "newPassword": "xxx" }` | ADMIN |
+
+##### UserCreateDTO
+
+```json
+{
+  "username": "登录名 (必填，唯一)",
+  "password": "密码 (必填)",
+  "nickname": "显示名",
+  "role": "角色 (ADMIN / USER，默认 USER)"
+}
+```
+
+##### UserUpdateDTO
+
+```json
+{
+  "nickname": "显示名",
+  "role": "角色 (ADMIN / USER)",
+  "isActive": "是否激活"
+}
+```
+
+#### 9.3 用户个人配置
+
+**基础路径**: `/api/v1/users/config`
+
+| 方法 | 路径 | 功能 | 参数 |
+|------|------|------|------|
+| GET | `/api/v1/users/config` | 获取当前用户所有配置 | - |
+| GET | `/api/v1/users/config/{key}` | 获取单个配置 | - |
+| PUT | `/api/v1/users/config/{key}` | 设置配置 | `{ "value": "xxx" }` |
+
+---
+
+### 10. 鉴权方式说明
+
+所有 `/api/v1/` 开头的接口（除 `/api/v1/auth/login` 外）都需要鉴权。支持以下两种方式：
+
+#### 方式一：Token 鉴权（浏览器/前端使用）
+
+在请求头中携带 token：
+
+```
+Authorization: <token值>
+```
+
+token 值来自登录接口 `/api/v1/auth/login` 返回的 `data.token` 字段。
+
+#### 方式二：API Key 鉴权（程序/脚本调用使用）
+
+在请求头中携带 API Key，无需登录流程：
+
+```
+X-Api-Key: <API Key 值>
+```
+
+API Key 通过以下方式获取：
+1. 登录后在「系统设置」页面查看
+2. 调用 `GET /api/v1/auth/api-key`
+3. 调用 `POST /api/v1/auth/api-key/generate` 重新生成
+
+**两种鉴权方式互斥**：如果请求头中同时存在 `Authorization` 和 `X-Api-Key`，优先使用 `Authorization` token 校验。
+
+##### API Key 调用示例
+
+```bash
+# 使用 API Key 创建交易（无需登录）
+curl -X POST http://127.0.0.1:6060/api/v1/transactions \
+  -H "Content-Type: application/json" \
+  -H "X-Api-Key: your-api-key-here" \
+  -d '{"type":1,"amount":50,"accountId":1,"categoryId":1,"transactionDate":"2026-04-18","note":"午餐"}'
+
+# 使用 API Key 查询账户列表
+curl http://127.0.0.1:6060/api/v1/accounts \
+  -H "X-Api-Key: your-api-key-here"
+
+# 使用 Token 查询（传统方式）
+curl http://127.0.0.1:6060/api/v1/accounts \
+  -H "Authorization: your-token-here"
+```
+
+> **注意**：通过 API Key 创建的交易会归属于该 API Key 对应的用户，数据隔离机制仍然生效。
+
+---
+
 ## 错误码汇总
 
 | 错误码 | 说明 |
@@ -464,6 +628,9 @@
 | 10002 | 资源不存在 |
 | 10003 | 系统内部异常 |
 | 10004 | 名称已存在 |
+| 10005 | 用户名或密码错误 |
+| 10006 | 用户已停用 |
+| 10007 | 旧密码不正确 |
 | 20001 | 账户不存在 |
 | 20002 | 账户已停用 |
 | 20003 | 账户余额不足 |
@@ -490,6 +657,9 @@
 | 70002 | 商户名称已存在 |
 | 70003 | 商户有关联交易记录，不可删除 |
 | 70004 | 系统预设商户不可修改/删除 |
+| 80001 | 未登录或登录已过期 |
+| 80002 | 无权限访问（需要 ADMIN 角色） |
+| 80003 | 用户名已存在 |
 
 ---
 
@@ -566,6 +736,8 @@
 | RecurringRuleController | `src/main/java/uk/gubin/budgetpilot/controller/RecurringRuleController.java` |
 | AlertRuleController | `src/main/java/uk/gubin/budgetpilot/controller/AlertRuleController.java` |
 | MerchantController | `src/main/java/uk/gubin/budgetpilot/controller/MerchantController.java` |
+| AuthController | `src/main/java/uk/gubin/budgetpilot/controller/AuthController.java` |
+| UserController | `src/main/java/uk/gubin/budgetpilot/controller/UserController.java` |
 
 ### DTO 文件
 
