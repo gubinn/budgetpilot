@@ -237,6 +237,7 @@ docker compose logs -f
 2. 根据 Dockerfile 构建 API 镜像
 3. 先启动 MySQL，健康检查通过后启动 API
 4. MySQL 首次启动会自动执行 `sql/` 目录下的初始化脚本
+5. API 启动后，`DataInitializer` 会自动创建默认管理员账号和系统预置分类（如果不存在）
 
 ### 2.7 验证部署
 
@@ -897,9 +898,12 @@ lsof -i :6060
 cd /opt/budgetpilot
 source .env
 
-# 手动执行初始化脚本
+# 手动执行初始化脚本（仅 schema.sql 需要手动执行，init_data.sql 由 DataInitializer 兜底）
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < sql/schema.sql
-docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < sql/init_data.sql
+
+# 系统预置分类和默认管理员会在 API 启动时由 DataInitializer 自动创建
+# 如需手动重新初始化分类，可清空数据后重启 API：
+# DELETE FROM t_category WHERE is_system = true;  # 然后重启 API
 ```
 
 ### 用户体系迁移（旧版本升级）
@@ -923,6 +927,28 @@ docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SELEC
 
 # 4. 重启 API
 docker compose restart budgetpilot-api
+```
+
+> 迁移后所有现有数据归属于默认 admin 用户（user_id = 1），数据隔离机制自动生效。
+
+### 商户/账户租户隔离迁移
+
+如果升级前已有商户和账户数据，需要执行租户唯一约束迁移脚本：
+
+```bash
+cd /opt/budgetpilot
+source .env
+
+# 1. 先备份数据库
+DATE=$(date +%Y%m%d_%H%M%S)
+docker compose exec mysql mysqldump -ubudgetpilot -p${DB_PASS} budgetpilot \
+  --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
+
+# 2. 执行迁移脚本
+cat sql/tenant_unique_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+
+# 3. 验证（确认 t_merchant 和 t_account 有 uk_user_name 联合唯一索引）
+docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SHOW INDEX FROM t_merchant WHERE Key_name='uk_user_name'; SHOW INDEX FROM t_account WHERE Key_name='uk_user_name';"
 ```
 
 > 迁移后所有现有数据归属于默认 admin 用户（user_id = 1），数据隔离机制自动生效。

@@ -4,7 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.event.EventListener;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -39,12 +40,12 @@ public class TransactionEventListener {
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
 
     @Async("asyncExecutor")
-    @EventListener
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onTransactionEvent(TransactionEvent event) {
         Transaction tx = event.getTransaction();
 
-        // 清除相关月份的报表缓存
-        clearReportCache(tx.getTransactionDate());
+        // 不再在此清除缓存，由 TransactionServiceImpl 同步执行
+        // 这里只处理预算更新和预警检查
 
         if (!Boolean.TRUE.equals(tx.getIsConfirmed()) || tx.getType() != 1) {
             return;
@@ -68,24 +69,6 @@ public class TransactionEventListener {
 
         // 2. 检查预警规则
         checkAlerts(tx, yearMonth);
-    }
-
-    /**
-     * 清除交易日期所在月份的报表缓存
-     */
-    private void clearReportCache(LocalDate date) {
-        String month = date.format(MONTH_FMT);
-        try {
-            // 清除月度汇总缓存
-            redisTemplate.delete("report:monthly-summary:" + month);
-            // 清除分类详情缓存（使用 SCAN 替代 keys，避免性能问题）
-            scanAndDelete("report:category-detail:" + month + ":*");
-            // 清除账户汇总缓存
-            redisTemplate.delete("report:account-summary");
-            log.info("Cleared report cache for month {}", month);
-        } catch (Exception e) {
-            log.warn("Failed to clear report cache for month {}", month, e);
-        }
     }
 
     /**

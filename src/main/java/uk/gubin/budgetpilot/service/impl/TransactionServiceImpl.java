@@ -11,6 +11,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.PageResult;
@@ -162,6 +164,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
             // 异步事件：预算更新 + 预警检查
             eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
+
+            // 事务提交后同步清除报表缓存（确保查询能看到新数据）
+            registerCacheClearSync(entity.getTransactionDate());
         }
 
         log.info("Created transaction: {} {} {} (confirmed={})", entity.getType(), entity.getAmount(), entity.getCurrency(), entity.getIsConfirmed());
@@ -335,6 +340,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
 
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.UPDATE));
+        registerCacheClearSync(entity.getTransactionDate());
         return toVO(entity, account, category, merchant);
     }
 
@@ -353,6 +359,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         baseMapper.deleteById(id);
 
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.DELETE));
+        registerCacheClearSync(entity.getTransactionDate());
         log.info("Deleted transaction: {}", id);
     }
 
@@ -375,6 +382,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 发布事件以清除缓存和更新预算
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
+
+        // 事务提交后同步清除报表缓存
+        registerCacheClearSync(entity.getTransactionDate());
 
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());
@@ -532,6 +542,56 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         uk.gubin.budgetpilot.entity.Category cat = categoryMapper.selectById(categoryId);
         if (cat == null) return null;
         return cat.getParentId() == 0 ? cat.getId() : cat.getParentId();
+    }
+
+    /**
+     * 注册事务提交后缓存清除回调，确保提交后再清除缓存
+     */
+    private void registerCacheClearSync(LocalDate date) {
+        String month = date.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
+        Long userId = getCurrentUserId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                clearReportCache(month, userId);
+            }
+        });
+    }
+
+    private void clearReportCache(String month, Long userId) {
+        try {
+            if (userId != null) {
+                redisTemplate.delete("report:monthly-summary:" + userId + ":" + month);
+            }
+            scanAndDelete("report:category-detail:" + month + ":*");
+            redisTemplate.delete("report:account-summary");
+            log.info("Cleared report cache for month {}", month);
+        } catch (Exception e) {
+            log.warn("Failed to clear report cache for month {}", month, e);
+        }
+    }
+
+    private void scanAndDelete(String pattern) {
+        try {
+            var cursor = redisTemplate.scan(org.springframework.data.redis.core.ScanOptions.scanOptions()
+                    .match(pattern)
+                    .count(100)
+                    .build());
+            while (cursor.hasNext()) {
+                redisTemplate.delete(cursor.next());
+            }
+            cursor.close();
+        } catch (Exception e) {
+            log.warn("Failed to scan and delete keys with pattern {}", pattern, e);
+        }
+    }
+
+    private Long getCurrentUserId() {
+        try {
+            return cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private com.baomidou.mybatisplus.core.toolkit.support.SFunction<Transaction, ?> mapSortField(String field) {

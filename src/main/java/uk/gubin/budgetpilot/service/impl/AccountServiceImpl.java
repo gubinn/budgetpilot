@@ -40,19 +40,19 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
 
     /**
-     * 清除所有报表缓存（账户变更可能影响所有月份）
+     * 清除当前用户的报表缓存（账户变更只影响当前用户）
      */
     private void clearAllReportCache() {
+        Long userId = getUserId();
         try {
-            // 清除所有月度汇总缓存
-            scanAndDelete("report:monthly-summary:*");
-            // 清除所有分类详情缓存
-            scanAndDelete("report:category-detail:*");
-            // 清除账户汇总缓存
+            if (userId != null) {
+                scanAndDelete("report:monthly-summary:" + userId + ":*");
+                scanAndDelete("report:category-detail:" + userId + ":*");
+            }
             redisTemplate.delete("report:account-summary");
-            log.info("Cleared all report cache due to account change");
+            log.info("Cleared report cache for user {}", userId);
         } catch (Exception e) {
-            log.warn("Failed to clear all report cache", e);
+            log.warn("Failed to clear report cache", e);
         }
     }
 
@@ -283,12 +283,23 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
      */
     private void clearReportCache(LocalDate date) {
         String month = date.format(MONTH_FMT);
+        Long userId = getUserId();
         try {
-            redisTemplate.delete("report:monthly-summary:" + month);
+            if (userId != null) {
+                redisTemplate.delete("report:monthly-summary:" + userId + ":" + month);
+            }
             redisTemplate.delete("report:account-summary");
             log.info("Cleared report cache for month {}", month);
         } catch (Exception e) {
             log.warn("Failed to clear report cache for month {}", month, e);
+        }
+    }
+
+    private Long getUserId() {
+        try {
+            return cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong();
+        } catch (Exception e) {
+            return null;
         }
     }
 

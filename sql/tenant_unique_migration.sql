@@ -42,7 +42,7 @@ ALTER TABLE t_merchant ADD UNIQUE INDEX uk_user_name (user_id, name);
 -- --------------------------------------------
 
 -- 2.1 删除旧的仅 name 的普通索引
-ALTER TABLE t_account DROP INDEX idx_name;
+ALTER TABLE t_account DROP INDEX uk_name;
 
 -- 2.2 添加 (user_id, name) 联合唯一索引
 ALTER TABLE t_account ADD UNIQUE INDEX uk_user_name (user_id, name);

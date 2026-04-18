@@ -31,17 +31,26 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     private final StringRedisTemplate redisTemplate;
 
     /**
-     * 清除所有报表缓存（分类变更可能影响所有月份）
+     * 清除当前用户的报表缓存（分类变更只影响当前用户）
      */
     private void clearAllReportCache() {
+        Long userId = getUserId();
         try {
-            // 清除所有月度汇总缓存（包含分类名称、颜色）
-            scanAndDelete("report:monthly-summary:*");
-            // 清除所有分类详情缓存
-            scanAndDelete("report:category-detail:*");
-            log.info("Cleared all report cache due to category change");
+            if (userId != null) {
+                scanAndDelete("report:monthly-summary:" + userId + ":*");
+                scanAndDelete("report:category-detail:" + userId + ":*");
+            }
+            log.info("Cleared report cache for user {}", userId);
         } catch (Exception e) {
-            log.warn("Failed to clear all report cache", e);
+            log.warn("Failed to clear report cache", e);
+        }
+    }
+
+    private Long getUserId() {
+        try {
+            return cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong();
+        } catch (Exception e) {
+            return null;
         }
     }
 

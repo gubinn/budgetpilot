@@ -13,10 +13,12 @@ public class TransactionEvent extends ApplicationEvent {
 
     private final Transaction transaction;
     private final Action action;
+    private final Long userId;
 
     public TransactionEvent(Object source, Transaction transaction, Action action) {
         super(source);
         this.transaction = transaction;
         this.action = action;
+        this.userId = transaction.getUserId();
     }
 }

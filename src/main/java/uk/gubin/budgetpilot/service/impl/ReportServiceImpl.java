@@ -1,5 +1,6 @@
 package uk.gubin.budgetpilot.service.impl;
 
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,7 +43,7 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public ReportVO monthlySummary(String month) {
-        String cacheKey = "report:monthly-summary:" + month;
+        String cacheKey = "report:monthly-summary:" + getUserId() + ":" + month;
         ReportVO cached = getCached(cacheKey);
         if (cached != null) return cached;
 
@@ -413,6 +414,14 @@ public class ReportServiceImpl implements ReportService {
             case 5 -> "投资账户";
             default -> "未知";
         };
+    }
+
+    private Long getUserId() {
+        try {
+            return StpUtil.getLoginIdAsLong();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private boolean isCurrentMonth(String month) {

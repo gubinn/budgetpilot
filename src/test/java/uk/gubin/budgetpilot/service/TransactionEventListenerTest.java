@@ -60,8 +60,8 @@ class TransactionEventListenerTest {
 
             eventListener.onTransactionEvent(event);
 
-            // 验证缓存清除
-            verify(redisTemplate).delete("report:monthly-summary:2026-04");
+            // 无登录上下文时 getUserId() 返回 null，不清除 userId 专属缓存
+            // 但仍清除全局缓存
             verify(redisTemplate).delete("report:account-summary");
         }
 
