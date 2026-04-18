@@ -116,6 +116,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 只有确认的交易才更新账户余额
         if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
+            // 余额校验：仅对支出和转账类型，且仅对借记账户和电子钱包（type != 2 信用卡）
+            if (entity.getType() == 1 || entity.getType() == 3) {
+                if (account.getType() != null && account.getType() != 2) { // 非信用卡
+                    if (account.getCurrentBalance() != null &&
+                        account.getCurrentBalance().compareTo(entity.getAmount()) < 0) {
+                        throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                    }
+                }
+            }
+
             BigDecimal adjustAmount = entity.getAmount();
             switch (entity.getType()) {
                 case 1 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate()); // 支出
@@ -262,6 +272,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());
         calculateBaseAmount(entity, account);
+
+        // 余额校验（与 create 保持一致）
+        if (Boolean.TRUE.equals(entity.getIsConfirmed()) && (entity.getType() == 1 || entity.getType() == 3)) {
+            if (account != null && account.getType() != null && account.getType() != 2) {
+                if (account.getCurrentBalance() != null &&
+                    account.getCurrentBalance().compareTo(entity.getAmount()) < 0) {
+                    throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                }
+            }
+        }
 
         baseMapper.updateById(entity);
 

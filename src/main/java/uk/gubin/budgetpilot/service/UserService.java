@@ -2,6 +2,7 @@ package uk.gubin.budgetpilot.service;
 
 import cn.dev33.satoken.secure.SaSecureUtil;
 import cn.dev33.satoken.stp.StpUtil;
+import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
@@ -12,15 +13,21 @@ import uk.gubin.budgetpilot.dto.ChangePasswordDTO;
 import uk.gubin.budgetpilot.dto.LoginDTO;
 import uk.gubin.budgetpilot.dto.UserCreateDTO;
 import uk.gubin.budgetpilot.dto.UserUpdateDTO;
+import uk.gubin.budgetpilot.entity.AlertRule;
+import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.User;
 import uk.gubin.budgetpilot.entity.UserConfig;
+import uk.gubin.budgetpilot.mapper.AlertRuleMapper;
+import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.UserConfigMapper;
 import uk.gubin.budgetpilot.mapper.UserMapper;
 import uk.gubin.budgetpilot.vo.LoginVO;
 import uk.gubin.budgetpilot.vo.UserVO;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,6 +36,8 @@ import java.util.stream.Collectors;
 public class UserService extends ServiceImpl<UserMapper, User> {
 
     private final UserConfigMapper userConfigMapper;
+    private final CategoryMapper categoryMapper;
+    private final AlertRuleMapper alertRuleMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
@@ -121,7 +130,87 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         user.setIsActive(dto.getIsActive() != null ? dto.getIsActive() : true);
 
         baseMapper.insert(user);
+
+        // 为新用户复制系统预置分类和预警规则
+        copyDefaultCategories(user.getId());
+        copyDefaultAlertRules(user.getId());
+
         return toVO(user);
+    }
+
+    /**
+     * 复制系统预置分类到新用户（忽略租户拦截器）
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    private void copyDefaultCategories(Long userId) {
+        List<Category> defaultCategories = categoryMapper.selectSystemDefaults();
+
+        // 先处理父分类（parent_id=0），建立旧ID→新ID映射
+        Map<Long, Long> idMapping = new HashMap<>();
+        for (Category cat : defaultCategories) {
+            if (cat.getParentId() == null || cat.getParentId() == 0L) {
+                Category newCat = new Category();
+                newCat.setUserId(userId);
+                newCat.setParentId(0L);
+                newCat.setName(cat.getName());
+                newCat.setType(cat.getType());
+                newCat.setIcon(cat.getIcon());
+                newCat.setColor(cat.getColor());
+                newCat.setSortOrder(cat.getSortOrder());
+                newCat.setIsSystem(false);
+                newCat.setIsActive(true);
+                categoryMapper.insert(newCat);
+                idMapping.put(cat.getId(), newCat.getId());
+            }
+        }
+
+        // 再处理子分类，用映射替换 parent_id
+        for (Category cat : defaultCategories) {
+            if (cat.getParentId() != null && cat.getParentId() > 0L && idMapping.containsKey(cat.getParentId())) {
+                Category newCat = new Category();
+                newCat.setUserId(userId);
+                newCat.setParentId(idMapping.get(cat.getParentId()));
+                newCat.setName(cat.getName());
+                newCat.setType(cat.getType());
+                newCat.setIcon(cat.getIcon());
+                newCat.setColor(cat.getColor());
+                newCat.setSortOrder(cat.getSortOrder());
+                newCat.setIsSystem(false);
+                newCat.setIsActive(true);
+                categoryMapper.insert(newCat);
+            }
+        }
+
+        log.info("Copied {} default categories for user {}", defaultCategories.size(), userId);
+    }
+
+    /**
+     * 复制系统预置预警规则到新用户（忽略租户拦截器，硬编码默认规则）
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    private void copyDefaultAlertRules(Long userId) {
+        Object[][] defaultRules = {
+                {"预算阈值预警", 1, "{\"threshold_pct\": 80}"},
+                {"单笔大额预警", 2, "{\"max_amount\": 1000}"},
+                {"日消费上限", 3, "{\"daily_limit\": 500}"},
+                {"周消费异常检测", 4, "{\"deviation_pct\": 50}"},
+                {"信用卡还款提醒", 5, "{\"advance_days\": 3}"},
+                {"周期账单提醒", 6, "{\"advance_days\": 1}"},
+                {"月度预算未设定", 7, "{\"check_day\": 25}"}
+        };
+
+        for (Object[] rule : defaultRules) {
+            AlertRule newRule = new AlertRule();
+            newRule.setUserId(userId);
+            newRule.setName((String) rule[0]);
+            newRule.setType((Integer) rule[1]);
+            newRule.setConfig((String) rule[2]);
+            newRule.setNotifyChannel("TELEGRAM");
+            newRule.setIsActive(true);
+            alertRuleMapper.insert(newRule);
+        }
+
+        log.info("Copied {} default alert rules for user {}", defaultRules.length, userId);
     }
 
     /**
