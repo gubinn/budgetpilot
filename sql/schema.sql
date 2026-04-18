@@ -87,7 +87,7 @@ CREATE TABLE t_transaction (
     exchange_rate       DECIMAL(12,6)   DEFAULT 1.000000 COMMENT '汇率快照：1原始币种=?CNY',
     account_id          BIGINT          NOT NULL COMMENT '所属账户',
     target_account_id   BIGINT          DEFAULT NULL COMMENT '转账目标账户',
-    category_id         BIGINT          NOT NULL COMMENT '分类ID',
+    category_id         BIGINT          DEFAULT NULL COMMENT '分类ID（转账可为空）',
     merchant_id         BIGINT          DEFAULT NULL COMMENT '商户ID',
     transaction_date    DATE            NOT NULL COMMENT '交易日期',
     transaction_time    TIME            DEFAULT NULL COMMENT '交易时间',
@@ -160,7 +160,7 @@ CREATE TABLE t_budget (
     is_locked       TINYINT(1)      DEFAULT 0 COMMENT '锁定后不可修改',
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE INDEX uk_month (`year_month`)
+    UNIQUE INDEX uk_user_month (`year_month`, user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='月度预算表';
 
 -- 预算分类明细表

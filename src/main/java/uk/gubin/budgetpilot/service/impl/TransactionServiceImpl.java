@@ -71,7 +71,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 转账类型校验（在分类校验之前，避免同账户转账报分类错误）
         if (dto.getType() == 3) {
             if (dto.getTargetAccountId() == null) {
-                throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
+                throw new BizException(ErrorCode.TRANSACTION_TARGET_ACCOUNT_REQUIRED);
             }
             if (dto.getAccountId().equals(dto.getTargetAccountId())) {
                 throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
