@@ -15,4 +15,5 @@ public class User extends BaseEntity {
     private String role;
     private Boolean isActive;
     private java.time.LocalDateTime lastLogin;
+    private String apiKey;
 }
