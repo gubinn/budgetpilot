@@ -35,9 +35,15 @@ CREATE TABLE IF NOT EXISTS t_user_config (
 
 -- 3. 创建默认管理员用户（如果 t_user 为空）
 -- 密码: admin123 (BCrypt $2b$)
+-- 如果 admin 用户已存在但密码是旧 hash（123456 的），则更新为 admin123
 INSERT INTO t_user (username, password, nickname, role, is_active)
 SELECT 'admin', '$2b$10$knPyjetWQdi.KOAUBc9aXOnUcYkjxL/qsBwhcKw4VP708nKQQhq1i', '管理员', 'ADMIN', 1
 WHERE NOT EXISTS (SELECT 1 FROM t_user);
+
+-- 如果 admin 已存在但密码是旧 hash，强制更新
+UPDATE t_user
+SET password = '$2b$10$knPyjetWQdi.KOAUBc9aXOnUcYkjxL/qsBwhcKw4VP708nKQQhq1i'
+WHERE username = 'admin' AND password != '$2b$10$knPyjetWQdi.KOAUBc9aXOnUcYkjxL/qsBwhcKw4VP708nKQQhq1i';
 
 -- 4. 为业务表添加 user_id 字段（如果不存在）
 ALTER TABLE t_account       ADD COLUMN user_id BIGINT NOT NULL DEFAULT 1 COMMENT '所属用户ID' AFTER id;
