@@ -19,6 +19,8 @@ public class RecurringRuleVO {
     private Long categoryId;
     private String categoryName;
     private String categoryColor;
+    private Long merchantId;
+    private String merchantName;
     private String frequency;
     private Integer executeDay;
     private LocalDate startDate;
@@ -41,6 +43,7 @@ public class RecurringRuleVO {
         vo.setCurrency(entity.getCurrency());
         vo.setAccountId(entity.getAccountId());
         vo.setCategoryId(entity.getCategoryId());
+        vo.setMerchantId(entity.getMerchantId());
         vo.setFrequency(entity.getFrequency());
         vo.setExecuteDay(entity.getExecuteDay());
         vo.setStartDate(entity.getStartDate());

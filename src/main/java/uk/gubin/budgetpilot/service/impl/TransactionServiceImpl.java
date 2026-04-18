@@ -211,6 +211,28 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 回滚旧余额
         rollbackBalance(entity);
 
+        // 商户处理逻辑（与 create 保持一致）
+        Merchant merchant = null;
+        Long merchantId = dto.getMerchantId();
+        if (merchantId == null && dto.getMerchantName() != null && !dto.getMerchantName().trim().isEmpty()) {
+            MerchantVO merchantVO = merchantService.findOrCreate(
+                    dto.getMerchantName().trim(),
+                    entity.getCategoryId(),
+                    Boolean.TRUE.equals(dto.getAutoCreateMerchant())
+            );
+            if (merchantVO != null) {
+                merchantId = merchantVO.getId();
+            }
+        }
+        // 如果 merchantId 为 null，表示清空商户；否则验证商户是否有效
+        if (merchantId != null) {
+            merchant = merchantMapper.selectById(merchantId);
+            if (merchant == null || !merchant.getIsActive()) {
+                throw new BizException(ErrorCode.MERCHANT_NOT_FOUND);
+            }
+        }
+        entity.setMerchantId(merchantId);
+
         // 更新字段
         if (dto.getType() != null) entity.setType(dto.getType());
         if (dto.getAmount() != null) entity.setAmount(dto.getAmount());
@@ -221,7 +243,6 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getAccountId() != null) entity.setAccountId(dto.getAccountId());
         if (dto.getTargetAccountId() != null) entity.setTargetAccountId(dto.getTargetAccountId());
         if (dto.getCategoryId() != null) entity.setCategoryId(dto.getCategoryId());
-        if (dto.getMerchantId() != null) entity.setMerchantId(dto.getMerchantId());
         if (dto.getTags() != null) {
             try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception ignored) {}
         }
@@ -239,13 +260,17 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 重新计算本位币金额
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());
-        Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
         calculateBaseAmount(entity, account);
 
         baseMapper.updateById(entity);
 
         // 重新应用余额
         applyBalance(entity);
+
+        // 更新商户使用统计
+        if (entity.getMerchantId() != null && Boolean.TRUE.equals(entity.getIsConfirmed())) {
+            merchantService.incrementUsage(entity.getMerchantId());
+        }
 
         // 跨月调整预算 spent：旧月退回，新月加上
         if (entity.getIsConfirmed() && entity.getType() == 1) {

@@ -18,6 +18,7 @@ public class RecurringRule extends BaseEntity {
     private String currency;
     private Long accountId;
     private Long categoryId;
+    private Long merchantId;
     private String frequency;
     private Integer executeDay;
     private LocalDate startDate;

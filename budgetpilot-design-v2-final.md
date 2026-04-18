@@ -200,6 +200,7 @@ transaction ──N:1── merchant
 alert_rule ──1:N── alert_log ──→ Telegram Bot
 
 recurring_rule ──1:N── transaction (auto-generated)
+recurring_rule ──N:1── merchant
 
 config (系统配置键值对)
 ```
@@ -608,6 +609,7 @@ CREATE TABLE t_recurring_rule (
     currency        CHAR(3)         DEFAULT 'CNY' COMMENT '币种',
     account_id      BIGINT          NOT NULL,
     category_id     BIGINT          NOT NULL,
+    merchant_id     BIGINT          DEFAULT NULL COMMENT '商户ID',
     frequency       VARCHAR(20)     NOT NULL COMMENT 'DAILY/WEEKLY/MONTHLY/YEARLY',
     execute_day     TINYINT         DEFAULT NULL COMMENT '执行日（月=1-28，周=1-7）',
     start_date      DATE            NOT NULL,
@@ -621,7 +623,8 @@ CREATE TABLE t_recurring_rule (
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_next (next_execute),
-    INDEX idx_active (is_active)
+    INDEX idx_active (is_active),
+    INDEX idx_merchant (merchant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='周期性交易规则表';
 ```
 
@@ -630,6 +633,7 @@ CREATE TABLE t_recurring_rule (
 - `execute_day` 限制为 1-28，规避月末日期不一致问题。
 - `auto_confirm=0` 时生成「待确认」交易（`is_confirmed=0`），打开 App 时提示确认。
 - `ext_fields` 会被复制到自动生成的交易记录中，如房贷交易自动带上 `{"project":"房贷"}`。
+- `merchant_id` 仅支持已有商户（不自动创建），周期交易自动生成时会将商户信息传递给交易记录。
 
 **周期记账详细说明**：
 
@@ -654,7 +658,7 @@ CREATE TABLE t_recurring_rule (
 
 2. 对每个规则执行:
    a. 创建交易记录
-      - type/amount/accountId/categoryId 从规则复制
+      - type/amount/accountId/categoryId/merchantId 从规则复制
       - is_confirmed = autoConfirm
       - is_recurring = true
       - recurring_id = rule.id
@@ -690,13 +694,14 @@ CREATE TABLE t_recurring_rule (
   "amount": 2000,
   "accountId": 2,
   "categoryId": 19,
+  "merchantId": 15,
   "frequency": "MONTHLY",
   "executeDay": 1,
   "startDate": "2026-04-01",
   "autoConfirm": true
 }
 ```
-效果：每月1号自动创建-2000支出
+效果：每月1号自动创建-2000支出，商户关联为"XX物业"
 
 **场景2: 每月工资**
 ```json

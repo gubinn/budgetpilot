@@ -98,6 +98,7 @@ CREATE TABLE t_recurring_rule (
     currency        CHAR(3)         DEFAULT 'CNY' COMMENT '币种',
     account_id      BIGINT          NOT NULL,
     category_id     BIGINT          NOT NULL,
+    merchant_id     BIGINT          DEFAULT NULL COMMENT '商户ID',
     frequency       VARCHAR(20)     NOT NULL COMMENT 'DAILY/WEEKLY/MONTHLY/YEARLY',
     execute_day     TINYINT         DEFAULT NULL COMMENT '执行日（月=1-28，周=1-7）',
     start_date      DATE            NOT NULL,
@@ -111,7 +112,8 @@ CREATE TABLE t_recurring_rule (
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_next (next_execute),
-    INDEX idx_active (is_active)
+    INDEX idx_active (is_active),
+    INDEX idx_merchant (merchant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='周期性交易规则表';
 
 -- 月度预算表

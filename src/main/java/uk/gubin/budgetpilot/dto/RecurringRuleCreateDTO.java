@@ -26,6 +26,8 @@ public class RecurringRuleCreateDTO {
     @NotNull(message = "分类不能为空")
     private Long categoryId;
 
+    private Long merchantId;
+
     @NotNull(message = "频率不能为空")
     private String frequency; // DAILY/WEEKLY/MONTHLY/YEARLY
 

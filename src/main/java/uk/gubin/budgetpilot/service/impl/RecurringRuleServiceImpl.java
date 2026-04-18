@@ -67,6 +67,7 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         dto.setCurrency(rule.getCurrency());
         dto.setAccountId(rule.getAccountId());
         dto.setCategoryId(rule.getCategoryId());
+        dto.setMerchantId(rule.getMerchantId());
         dto.setTransactionDate(LocalDate.now());
         dto.setNote(rule.getNote());
         dto.setIsConfirmed(rule.getAutoConfirm());
@@ -93,6 +94,7 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         rule.setCurrency(dto.getCurrency() != null ? dto.getCurrency() : "CNY");
         rule.setAccountId(dto.getAccountId());
         rule.setCategoryId(dto.getCategoryId());
+        rule.setMerchantId(dto.getMerchantId());
         rule.setFrequency(dto.getFrequency());
         rule.setExecuteDay(dto.getExecuteDay());
         rule.setStartDate(dto.getStartDate());
@@ -119,6 +121,7 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         if (dto.getCurrency() != null) rule.setCurrency(dto.getCurrency());
         if (dto.getAccountId() != null) rule.setAccountId(dto.getAccountId());
         if (dto.getCategoryId() != null) rule.setCategoryId(dto.getCategoryId());
+        if (dto.getMerchantId() != null) rule.setMerchantId(dto.getMerchantId());
         if (dto.getFrequency() != null) rule.setFrequency(dto.getFrequency());
         if (dto.getExecuteDay() != null) rule.setExecuteDay(dto.getExecuteDay());
         if (dto.getStartDate() != null) rule.setStartDate(dto.getStartDate());

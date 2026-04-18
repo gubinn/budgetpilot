@@ -96,6 +96,10 @@ const columns = [
     render: (row) => h('span', { style: { color: row.categoryColor, fontWeight: 500 } }, row.categoryName || '-')
   },
   {
+    title: '商户', key: 'merchantName', width: 120,
+    render: (row) => row.merchantName ? h('span', { style: { color: row.merchantColor || '#666' } }, row.merchantName) : '-'
+  },
+  {
     title: '金额', key: 'amount', width: 140, align: 'right',
     render: (row) => {
       const color = row.type === 1 ? '#e74c3c' : row.type === 2 ? '#27ae60' : '#333'

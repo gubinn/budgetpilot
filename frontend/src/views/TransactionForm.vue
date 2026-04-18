@@ -39,7 +39,7 @@
         />
       </n-form-item>
 
-      <n-form-item v-if="form.type === 1" label="商户" path="merchantId">
+      <n-form-item v-if="form.type !== 3" label="商户" path="merchantId">
         <n-select
           v-model:value="form.merchantId"
           :options="merchantOptions"

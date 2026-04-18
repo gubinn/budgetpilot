@@ -99,6 +99,17 @@
           />
         </n-form-item>
 
+        <n-form-item v-if="createForm.type === 1" label="商户">
+          <n-select
+            v-model:value="createForm.merchantId"
+            :options="merchantOptions"
+            placeholder="可选，选择已有商户"
+            filterable
+            clearable
+            style="width: 100%"
+          />
+        </n-form-item>
+
         <n-form-item label="频率" required>
           <n-select v-model:value="createForm.frequency" :options="frequencyOptions" style="width: 100%" />
         </n-form-item>
@@ -143,7 +154,7 @@
 import { ref, computed, onMounted, h } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { CheckmarkCircleOutline, AlarmOutline } from '@vicons/ionicons5'
-import { recurringApi, accountApi, categoryApi, systemApi } from '@/api'
+import { recurringApi, accountApi, categoryApi, systemApi, merchantApi } from '@/api'
 import dayjs from 'dayjs'
 
 const message = useMessage()
@@ -156,6 +167,7 @@ const editingId = ref(null)
 const accounts = ref([])
 const categories = ref([])
 const currencies = ref([])
+const merchants = ref([])
 
 const createForm = ref({
   name: '',
@@ -164,6 +176,7 @@ const createForm = ref({
   currency: 'CNY',
   accountId: null,
   categoryId: null,
+  merchantId: null,
   frequency: 'MONTHLY',
   executeDay: null,
   startDate: Date.now(),
@@ -174,6 +187,7 @@ const createForm = ref({
 
 const currencyOptions = computed(() => currencies.value.map(c => ({ label: c, value: c })))
 const accountOptions = computed(() => accounts.value.map(a => ({ label: a.name, value: a.id })))
+const merchantOptions = computed(() => merchants.value.map(m => ({ label: m.name, value: m.id })))
 const categoryTree = computed(() => buildCategoryTree(categories.value))
 
 const frequencyOptions = [
@@ -216,10 +230,11 @@ async function loadRules() {
 
 async function loadOptions() {
   try {
-    const [accRes, catRes, sysRes] = await Promise.all([
+    const [accRes, catRes, sysRes, merchRes] = await Promise.all([
       accountApi.list(),
       categoryApi.tree(),
-      systemApi.currencies()
+      systemApi.currencies(),
+      merchantApi.list({ isActive: true })
     ])
     accounts.value = accRes.data || []
     // flatten categories for tree
@@ -233,6 +248,7 @@ async function loadOptions() {
     flatten(catRes.data || [])
     categories.value = flatCats
     currencies.value = sysRes.data || ['CNY', 'USD', 'EUR']
+    merchants.value = merchRes.data || []
   } catch (e) {}
 }
 
@@ -275,6 +291,7 @@ function openEdit(rule) {
     currency: rule.currency || 'CNY',
     accountId: rule.accountId,
     categoryId: rule.categoryId,
+    merchantId: rule.merchantId || null,
     frequency: rule.frequency,
     executeDay: rule.executeDay,
     startDate: rule.startDate ? new Date(rule.startDate) : Date.now(),
@@ -293,6 +310,7 @@ function resetForm() {
     currency: 'CNY',
     accountId: null,
     categoryId: null,
+    merchantId: null,
     frequency: 'MONTHLY',
     executeDay: null,
     startDate: Date.now(),

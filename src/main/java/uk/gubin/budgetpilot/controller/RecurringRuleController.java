@@ -6,6 +6,9 @@ import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.dto.RecurringRuleCreateDTO;
 import uk.gubin.budgetpilot.dto.RecurringRuleUpdateDTO;
+import uk.gubin.budgetpilot.entity.Merchant;
+import uk.gubin.budgetpilot.entity.RecurringRule;
+import uk.gubin.budgetpilot.mapper.MerchantMapper;
 import uk.gubin.budgetpilot.service.RecurringRuleService;
 import uk.gubin.budgetpilot.vo.RecurringRuleVO;
 
@@ -17,27 +20,39 @@ import java.util.List;
 public class RecurringRuleController {
 
     private final RecurringRuleService recurringRuleService;
+    private final MerchantMapper merchantMapper;
 
     @GetMapping
     public Result<List<RecurringRuleVO>> list() {
         return Result.ok(recurringRuleService.list().stream()
-                .map(RecurringRuleVO::fromEntity)
+                .map(this::toVO)
                 .toList());
     }
 
     @GetMapping("/{id}")
     public Result<RecurringRuleVO> get(@PathVariable Long id) {
-        return Result.ok(RecurringRuleVO.fromEntity(recurringRuleService.getById(id)));
+        return Result.ok(toVO(recurringRuleService.getById(id)));
+    }
+
+    private RecurringRuleVO toVO(RecurringRule entity) {
+        RecurringRuleVO vo = RecurringRuleVO.fromEntity(entity);
+        if (entity.getMerchantId() != null) {
+            Merchant m = merchantMapper.selectById(entity.getMerchantId());
+            if (m != null) {
+                vo.setMerchantName(m.getName());
+            }
+        }
+        return vo;
     }
 
     @PostMapping
     public Result<RecurringRuleVO> create(@Valid @RequestBody RecurringRuleCreateDTO dto) {
-        return Result.ok(RecurringRuleVO.fromEntity(recurringRuleService.create(dto)));
+        return Result.ok(toVO(recurringRuleService.create(dto)));
     }
 
     @PutMapping("/{id}")
     public Result<RecurringRuleVO> update(@PathVariable Long id, @Valid @RequestBody RecurringRuleUpdateDTO dto) {
-        return Result.ok(RecurringRuleVO.fromEntity(recurringRuleService.update(id, dto)));
+        return Result.ok(toVO(recurringRuleService.update(id, dto)));
     }
 
     @DeleteMapping("/{id}")
@@ -48,7 +63,7 @@ public class RecurringRuleController {
 
     @PostMapping("/{id}/toggle")
     public Result<RecurringRuleVO> toggle(@PathVariable Long id) {
-        return Result.ok(RecurringRuleVO.fromEntity(recurringRuleService.toggleActive(id)));
+        return Result.ok(toVO(recurringRuleService.toggleActive(id)));
     }
 
     @PostMapping("/{id}/execute")
