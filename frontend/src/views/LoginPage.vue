@@ -45,11 +45,9 @@ const rules = {
 }
 
 async function handleLogin() {
-  const valid = await formRef.value?.validate()
-  if (valid) return
-
   loading.value = true
   try {
+    await formRef.value?.validate()
     const res = await auth.login(form.username, form.password)
     if (res.code === 0) {
       message.success('登录成功')
@@ -59,6 +57,8 @@ async function handleLogin() {
       message.error(res.message || '登录失败')
     }
   } catch (e) {
+    // validate() 失败会 reject，但不用提示
+    if (e?.message || e?.length) return
     message.error('登录失败，请检查网络连接')
   } finally {
     loading.value = false

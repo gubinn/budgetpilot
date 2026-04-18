@@ -83,7 +83,14 @@ onMounted(() => {
 const renderIcon = (icon) => () => h(NIcon, null, { default: () => h(icon) })
 
 const menuOptions = computed(() => {
-  const items = [
+  // Admin: only see Users menu
+  if (auth.isAdmin) {
+    return [
+      { label: '用户', key: 'Users', icon: renderIcon(PeopleOutline) }
+    ]
+  }
+  // Non-admin: all menus except Users
+  return [
     { label: '首页', key: 'Dashboard', icon: renderIcon(HomeOutline) },
     { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
     { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
@@ -95,10 +102,6 @@ const menuOptions = computed(() => {
     { label: '报表', key: 'Reports', icon: renderIcon(BarChartOutline) },
     { label: '设置', key: 'Settings', icon: renderIcon(SettingsOutline) }
   ]
-  if (auth.isAdmin) {
-    items.push({ label: '用户', key: 'Users', icon: renderIcon(PeopleOutline) })
-  }
-  return items
 })
 
 const currentRoute = computed(() => route.name || 'Dashboard')

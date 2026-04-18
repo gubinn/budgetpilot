@@ -354,6 +354,18 @@
 
 **说明**: 清空所有业务数据（交易、账户、周期规则、预警规则、预警日志、预算），保留系统预置分类，同时清除 Redis 缓存。
 
+#### Telegram 配置说明
+
+Telegram 推送服务的配置读取优先级为：
+1. 数据库 `t_config` 表中的 `telegram_bot_token` 和 `telegram_chat_id`
+2. 回退到 `application.yml` 中的 `budgetpilot.telegram.bot-token` / `budgetpilot.telegram.chat-id`
+
+可通过 `PUT /api/v1/system/config/{key}` 修改数据库中的配置，如：
+```
+PUT /api/v1/system/config/telegram_bot_token
+{ "value": "123456:ABC-xxx" }
+```
+
 ---
 
 ### 7. 周期规则管理 (RecurringRuleController)
@@ -616,6 +628,15 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 ```
 
 > **注意**：通过 API Key 创建的交易会归属于该 API Key 对应的用户，数据隔离机制仍然生效。
+
+#### 角色与菜单可见性
+
+前端根据登录接口返回的 `role` 字段控制菜单可见性：
+
+| role | 可见菜单 |
+|------|---------|
+| `ADMIN` | 仅"用户"管理菜单 |
+| `USER` | 首页、交易、账户、分类、商户、预算、周期、预警、报表、设置（不可见"用户"菜单） |
 
 ---
 

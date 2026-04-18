@@ -285,6 +285,10 @@ docker compose ps mysql
 3. 使用默认管理员账户登录
 4. 在「系统设置」页面修改密码
 
+**角色与菜单说明**：
+- 管理员（`ADMIN`）登录后仅能看到"用户"菜单
+- 普通用户（`USER`）登录后可看到所有业务菜单（首页、交易、账户等），看不到"用户"菜单
+
 ### 2.10 通过 API 登录
 
 ```bash
@@ -516,6 +520,8 @@ cd /opt/budgetpilot
 docker compose restart budgetpilot-api
 ```
 
+> **配置优先级**：数据库 `t_config` > `application.yml` 环境变量。推荐通过方式一或方式二修改，实时生效无需重启。
+
 ### 4.4 测试推送
 
 ```bash
@@ -638,14 +644,21 @@ npm install
 npm run build
 
 # 同时更新两个目录（nginx web 目录和 Spring Boot static 目录）
+rm -rf /opt/budgetpilot/web/assets/* /opt/budgetpilot/src/main/resources/static/assets/*
 cp -r dist/* /opt/budgetpilot/web/
 cp -r dist/* /opt/budgetpilot/src/main/resources/static/
+
+# 重新构建 JAR 并重启容器（Spring Boot 静态文件打包在 JAR 中）
+cd /opt/budgetpilot
+mvn package -DskipTests -q
+docker compose build budgetpilot-api
+docker compose up -d budgetpilot-api
 
 # 刷新 Nginx 缓存
 sudo nginx -s reload
 ```
 
-> **注意**：如果使用 nginx 代理前端，需要更新 `/opt/budgetpilot/web/` 目录；如果直接访问 Spring Boot 端口，需要更新 `src/main/resources/static/` 目录。两个目录都更新可以确保两种访问方式都生效。
+> **注意**：Spring Boot 的静态文件打包在 JAR 中，仅复制文件到 `src/main/resources/static/` 不会生效，必须重新构建 JAR 并重启容器。Nginx 代理的前端只需更新 `/opt/budgetpilot/web/` 目录。
 
 ### 6.6 数据库备份
 

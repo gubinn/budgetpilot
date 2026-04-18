@@ -1223,7 +1223,7 @@ CREATE TABLE t_user_config (
 - `telegram_bot_token` — 用户个人 Telegram Bot Token
 - `telegram_chat_id` — 用户个人 Telegram Chat ID
 
-**回退策略**：如果用户未配置个人 Telegram 信息，则回退到全局 `t_config` 中的配置。
+**当前实现状态**：`t_user_config` 表已定义并可用，但 `TelegramNotifyService` 当前仅读取 `t_config` 全局配置，尚未接入用户个人配置。后续可根据需求扩展为：优先读取用户的 `telegram_bot_token` / `telegram_chat_id`，未配置时回退到 `t_config`。
 
 #### 3.3.15 业务表 user_id 字段
 
@@ -1793,23 +1793,29 @@ _距还款日还有 3 天_
 @RequiredArgsConstructor
 public class TelegramNotifyService {
 
-    private final RestTemplate restTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final ConfigService configService;
 
-    private static final String API_URL = "https://api.telegram.org/bot%s/sendMessage";
+    @Value("${budgetpilot.telegram.bot-token:}")
+    private String defaultBotToken;
+
+    @Value("${budgetpilot.telegram.chat-id:}")
+    private String defaultChatId;
 
     public boolean send(String title, String content) {
-        String token = configService.get("telegram_bot_token");
-        String chatId = configService.get("telegram_chat_id");
+        // 优先读取数据库配置（t_config 表），回退到 application.yml
+        String token = resolveConfig("telegram_bot_token", defaultBotToken);
+        String chatId = resolveConfig("telegram_chat_id", defaultChatId);
         if (token.isBlank() || chatId.isBlank()) {
             log.warn("Telegram 未配置，跳过推送");
             return false;
         }
 
         String url = String.format(API_URL, token);
+        String escapedContent = escapeMarkdownV2(content);
         Map<String, Object> body = Map.of(
             "chat_id", chatId,
-            "text", content,
+            "text", escapedContent,
             "parse_mode", "MarkdownV2"
         );
 
@@ -1821,8 +1827,25 @@ public class TelegramNotifyService {
             return false;
         }
     }
+
+    // Redis 去重（每个规则每天仅推送一次）
+    public boolean sendWithDedup(String ruleId, String title, String content) {
+        String dedupKey = "telegram:dedup:" + ruleId + ":" + LocalDate.now();
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(dedupKey))) return false;
+        boolean sent = send(title, content);
+        if (sent) redisTemplate.opsForValue().set(dedupKey, "1", 24, HOURS);
+        return sent;
+    }
+
+    private String resolveConfig(String key, String defaultValue) {
+        String fromConfig = configService.get(key);  // 查 t_config 表
+        if (fromConfig != null && !fromConfig.isBlank()) return fromConfig;
+        return defaultValue;  // 回退到 application.yml
+    }
 }
 ```
+
+**配置读取优先级**：`t_config` 表（数据库） > `application.yml`（配置文件）。
 
 **网络路径**：
 
@@ -1985,6 +2008,39 @@ public class TelegramNotifyService {
 
 两种方式互斥：同时存在时优先校验 Token。
 
+### 6.10.2 角色与菜单可见性
+
+前端根据用户角色（`role` 字段）控制菜单可见性：
+
+| 角色 | 可见菜单 | 说明 |
+|------|---------|------|
+| `ADMIN` | 仅"用户" | 管理员只能管理用户，看不到业务菜单 |
+| `USER` | 首页、交易、账户、分类、商户、预算、周期、预警、报表、设置 | 普通用户可见所有业务菜单，不可见"用户"菜单 |
+
+### 6.10.3 前端路由守卫与用户信息初始化
+
+前端采用 **路由守卫中等待 `fetchUser` 完成** 的模式，确保页面刷新后角色信息已加载：
+
+```javascript
+// router/index.js — 路由守卫
+let authInit = false
+router.beforeEach(async (to, from, next) => {
+  if (!authInit) {
+    authInit = true
+    const auth = useAuthStore()
+    if (auth.token) {
+      await auth.fetchUser()  // 等待用户信息加载完成
+    }
+  }
+  // 后续导航判断...
+})
+```
+
+**设计要点**：
+- `main.js` 不再直接调用 `fetchUser()`，避免竞态条件
+- 路由守卫中只执行一次 `fetchUser()`，后续导航不重复请求
+- 用户信息加载完成后，`auth.isAdmin` 才能正确计算，菜单才会根据角色正确渲染
+
 ### 6.11 统一响应结构
 
 ```json
@@ -2047,8 +2103,8 @@ public class TelegramNotifyService {
     "api_key": "32 字节随机 base64url，存 t_user.api_key",
     "data_isolation": "MyBatis-Plus TenantLineInnerInterceptor（SQL 级 WHERE user_id）",
     "role": {
-      "ADMIN": "可管理用户、查看所有数据",
-      "USER": "仅可管理自己的数据"
+      "ADMIN": "仅可管理用户，看不到业务菜单",
+      "USER": "可管理自身业务数据，不可见用户管理菜单"
     }
   },
   "network": {

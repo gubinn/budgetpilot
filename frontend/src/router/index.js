@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const routes = [
   {
@@ -35,8 +36,18 @@ const router = createRouter({
   routes
 })
 
-// Navigation guard: redirect to login if not authenticated
-router.beforeEach((to, from, next) => {
+let authInit = false
+
+router.beforeEach(async (to, from, next) => {
+  // Fetch user info on first navigation (page refresh)
+  if (!authInit) {
+    authInit = true
+    const auth = useAuthStore()
+    if (auth.token) {
+      await auth.fetchUser()
+    }
+  }
+
   const token = localStorage.getItem('token')
   if (to.meta.requiresAuth && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })

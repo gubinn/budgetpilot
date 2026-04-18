@@ -2,12 +2,11 @@
   <div>
     <n-space justify="space-between" style="margin-bottom: 16px">
       <h3>用户管理</h3>
-      <n-button type="primary" @click="openCreate">新增用户</n-button>
+      <n-button type="primary" @click="showModal = true">新增用户</n-button>
     </n-space>
 
     <n-data-table :columns="columns" :data="users" :loading="loading" :bordered="false" />
 
-    <!-- 新增 / 编辑弹窗 -->
     <n-modal v-model:show="showModal" preset="card" :title="editId ? '编辑用户' : '新增用户'" style="width: 480px">
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="80">
         <n-form-item label="用户名" path="username">
@@ -34,7 +33,6 @@
       </template>
     </n-modal>
 
-    <!-- 重置密码弹窗 -->
     <n-modal v-model:show="showPwdModal" preset="card" title="重置密码" style="width: 400px">
       <n-form :model="pwdForm" label-placement="left" label-width="80">
         <n-form-item label="新密码">
@@ -52,8 +50,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, h, onMounted } from 'vue'
-import { NButton, NSpace, NTag, useMessage, useDialog } from 'naive-ui'
+import { ref, reactive, h, onMounted, computed } from 'vue'
+import { NTag, useMessage, useDialog } from 'naive-ui'
 import { userApi } from '@/api'
 
 const message = useMessage()
@@ -81,15 +79,16 @@ const rules = {
   role: { required: true, message: '请选择角色', trigger: 'change' }
 }
 
-const columns = [
+const columns = computed(() => [
   { title: 'ID', key: 'id', width: 60 },
   { title: '用户名', key: 'username' },
   { title: '昵称', key: 'nickname' },
   {
     title: '角色',
     key: 'role',
+    width: 100,
     render(row) {
-      return h(NTag, { type: row.role === 'ADMIN' ? 'error' : 'info', size: 'small' }, { default: () => row.role })
+      return h(NTag, { type: row.role === 'ADMIN' ? 'error' : 'info', size: 'small', bordered: false }, { default: () => row.role })
     }
   },
   {
@@ -97,32 +96,31 @@ const columns = [
     key: 'isActive',
     width: 80,
     render(row) {
-      return h(NTag, { type: row.isActive ? 'success' : 'default', size: 'small' }, { default: () => row.isActive ? '启用' : '禁用' })
+      return h(NTag, { type: row.isActive ? 'success' : 'default', size: 'small', bordered: false }, { default: () => row.isActive ? '启用' : '禁用' })
     }
   },
   { title: '最后登录', key: 'lastLogin', width: 180, render(row) { return row.lastLogin || '-' } },
   {
     title: '操作',
     key: 'actions',
-    width: 200,
+    width: 220,
     render(row) {
-      return h(NSpace, { size: 'small' }, {
-        default: () => [
-          h(NButton, { size: 'small', onClick: () => openEdit(row) }, { default: () => '编辑' }),
-          h(NButton, { size: 'small', type: 'warning', onClick: () => openResetPwd(row) }, { default: () => '重置密码' }),
-          h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row) }, { default: () => '删除' })
-        ]
-      })
+      return h('div', {}, [
+        h('a', { style: { marginRight: '8px', cursor: 'pointer' }, onClick: () => openEdit(row) }, '编辑'),
+        h('a', { style: { marginRight: '8px', cursor: 'pointer' }, onClick: () => openResetPwd(row) }, '重置密码'),
+        h('a', { style: { cursor: 'pointer', color: 'red' }, onClick: () => handleDelete(row) }, '删除')
+      ])
     }
   }
-]
+])
 
 async function loadUsers() {
   loading.value = true
   try {
     const res = await userApi.list()
-    users.value = res
-  } catch {
+    users.value = res.data || res
+  } catch (e) {
+    console.error('loadUsers error:', e)
     message.error('加载用户列表失败')
   } finally {
     loading.value = false
@@ -142,8 +140,11 @@ function openEdit(row) {
 }
 
 async function handleSave() {
-  const valid = await formRef.value?.validate()
-  if (valid) return
+  try {
+    await formRef.value?.validate()
+  } catch {
+    return
+  }
 
   saving.value = true
   try {
