@@ -16,6 +16,8 @@ import java.time.LocalDate;
 @TableName("t_merchant")
 public class Merchant extends BaseEntity {
 
+    private Long userId;
+
     /**
      * 商户名称（唯一）
      */

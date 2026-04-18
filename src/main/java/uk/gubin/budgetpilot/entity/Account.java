@@ -10,6 +10,7 @@ import uk.gubin.budgetpilot.common.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 @TableName("t_account")
 public class Account extends BaseEntity {
+    private Long userId;
     private String name;
     private Integer type;
     private String icon;

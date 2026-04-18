@@ -4,9 +4,37 @@
 CREATE DATABASE IF NOT EXISTS budgetpilot DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE budgetpilot;
 
+-- 用户表
+CREATE TABLE t_user (
+    id          BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    username    VARCHAR(50)     NOT NULL UNIQUE COMMENT '登录名',
+    password    VARCHAR(255)    NOT NULL COMMENT 'BCrypt加密',
+    nickname    VARCHAR(50)     DEFAULT '' COMMENT '显示名',
+    role        VARCHAR(20)     DEFAULT 'USER' COMMENT 'ADMIN / USER',
+    is_active   TINYINT(1)      DEFAULT 1,
+    last_login  DATETIME        DEFAULT NULL COMMENT '最后登录时间',
+    created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_username (username),
+    INDEX idx_role (role)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表';
+
+-- 用户配置表
+CREATE TABLE t_user_config (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL,
+    config_key      VARCHAR(50)     NOT NULL,
+    config_value    TEXT            NOT NULL,
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_user_key (user_id, config_key),
+    INDEX idx_user (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户配置表';
+
 -- 账户表
 CREATE TABLE t_account (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '账户名称（唯一）',
     type            TINYINT         NOT NULL COMMENT '1-现金 2-储蓄卡 3-信用卡 4-电子钱包 5-投资账户',
     icon            VARCHAR(50)     DEFAULT 'wallet' COMMENT '图标标识',
@@ -22,7 +50,8 @@ CREATE TABLE t_account (
     metadata        JSON            DEFAULT NULL COMMENT '系统元数据',
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE INDEX uk_name (name),
+    INDEX idx_user (user_id),
+    INDEX idx_name (name),
     INDEX idx_type (type),
     INDEX idx_active_sort (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账户表';
@@ -30,6 +59,7 @@ CREATE TABLE t_account (
 -- 分类表
 CREATE TABLE t_category (
     id          BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id     BIGINT          NOT NULL COMMENT '所属用户ID',
     parent_id   BIGINT          DEFAULT 0 COMMENT '父分类ID，0=顶级',
     name        VARCHAR(30)     NOT NULL COMMENT '分类名称',
     type        TINYINT         NOT NULL COMMENT '1-支出 2-收入',
@@ -40,6 +70,7 @@ CREATE TABLE t_category (
     is_active   TINYINT(1)      DEFAULT 1,
     created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_user (user_id),
     INDEX idx_parent (parent_id),
     INDEX idx_type_active (type, is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='收支分类表';
@@ -47,6 +78,7 @@ CREATE TABLE t_category (
 -- 交易记录表
 CREATE TABLE t_transaction (
     id                  BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id             BIGINT          NOT NULL COMMENT '所属用户ID',
     type                TINYINT         NOT NULL COMMENT '1-支出 2-收入 3-转账',
     amount              DECIMAL(14,2)   NOT NULL COMMENT '原始金额（原始币种，正数）',
     currency            CHAR(3)         DEFAULT 'CNY' COMMENT '原始币种 ISO 4217',
@@ -92,6 +124,7 @@ CREATE TABLE t_currency_rate (
 -- 周期交易规则表
 CREATE TABLE t_recurring_rule (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
     type            TINYINT         NOT NULL COMMENT '1-支出 2-收入',
     amount          DECIMAL(14,2)   NOT NULL,
@@ -119,6 +152,7 @@ CREATE TABLE t_recurring_rule (
 -- 月度预算表
 CREATE TABLE t_budget (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     `year_month`      CHAR(7)         NOT NULL COMMENT 'YYYY-MM',
     total_amount    DECIMAL(14,2)   NOT NULL COMMENT '月度总预算（CNY）',
     note            VARCHAR(200)    DEFAULT NULL,
@@ -131,6 +165,7 @@ CREATE TABLE t_budget (
 -- 预算分类明细表
 CREATE TABLE t_budget_item (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     budget_id       BIGINT          NOT NULL,
     category_id     BIGINT          NOT NULL COMMENT '一级分类',
     amount          DECIMAL(14,2)   NOT NULL COMMENT '该分类预算额度（CNY）',
@@ -144,6 +179,7 @@ CREATE TABLE t_budget_item (
 -- 预警规则表
 CREATE TABLE t_alert_rule (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
     type            TINYINT         NOT NULL COMMENT '类型：1-预算阈值 2-单笔大额 3-日消费上限 4-周异常 5-信用卡还款 6-周期账单 7-预算未设定',
     config          JSON            NOT NULL COMMENT '规则配置',
@@ -156,6 +192,7 @@ CREATE TABLE t_alert_rule (
 -- 预警日志表
 CREATE TABLE t_alert_log (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     rule_id         BIGINT          NOT NULL,
     alert_type      TINYINT         NOT NULL,
     title           VARCHAR(100)    NOT NULL,
@@ -171,6 +208,7 @@ CREATE TABLE t_alert_log (
 -- 商户表
 CREATE TABLE t_merchant (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(100)    NOT NULL COMMENT '商户名称',
     alias           VARCHAR(200)    DEFAULT NULL COMMENT '别名（用于模糊匹配）',
     category_id     BIGINT          DEFAULT NULL COMMENT '关联分类ID',

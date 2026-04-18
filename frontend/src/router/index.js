@@ -2,8 +2,14 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/LoginPage.vue')
+  },
+  {
     path: '/',
     component: () => import('@/views/Layout.vue'),
+    meta: { requiresAuth: true },
     children: [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
@@ -18,7 +24,8 @@ const routes = [
       { path: 'alert-rules', name: 'AlertRules', component: () => import('@/views/AlertRulePage.vue') },
       { path: 'alerts', name: 'Alerts', component: () => import('@/views/AlertList.vue') },
       { path: 'reports', name: 'Reports', component: () => import('@/views/ReportPage.vue') },
-      { path: 'settings', name: 'Settings', component: () => import('@/views/SettingsPage.vue') }
+      { path: 'settings', name: 'Settings', component: () => import('@/views/SettingsPage.vue') },
+      { path: 'users', name: 'Users', component: () => import('@/views/UserList.vue') }
     ]
   }
 ]
@@ -26,6 +33,18 @@ const routes = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// Navigation guard: redirect to login if not authenticated
+router.beforeEach((to, from, next) => {
+  const token = localStorage.getItem('token')
+  if (to.meta.requiresAuth && !token) {
+    next({ path: '/login', query: { redirect: to.fullPath } })
+  } else if (to.path === '/login' && token) {
+    next('/')
+  } else {
+    next()
+  }
 })
 
 export default router

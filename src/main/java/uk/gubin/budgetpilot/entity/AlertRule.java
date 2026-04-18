@@ -10,6 +10,7 @@ import uk.gubin.budgetpilot.common.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 @TableName("t_alert_rule")
 public class AlertRule extends BaseEntity {
+    private Long userId;
     private String name;
     private Integer type;
     @TableField("config")

@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 public class AlertLog {
     @TableId(type = IdType.AUTO)
     private Long id;
+    private Long userId;
     private Long ruleId;
     private Integer alertType;
     private String title;

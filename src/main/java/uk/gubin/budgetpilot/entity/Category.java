@@ -9,6 +9,7 @@ import uk.gubin.budgetpilot.common.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 @TableName("t_category")
 public class Category extends BaseEntity {
+    private Long userId;
     private Long parentId;
     private String name;
     private Integer type;

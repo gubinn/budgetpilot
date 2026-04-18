@@ -10,6 +10,7 @@ import uk.gubin.budgetpilot.common.BaseEntity;
 @EqualsAndHashCode(callSuper = true)
 @TableName("t_budget")
 public class Budget extends BaseEntity {
+    private Long userId;
     @TableField("`year_month`")
     private String yearMonth;
     private java.math.BigDecimal totalAmount;

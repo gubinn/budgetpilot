@@ -12,6 +12,7 @@ import java.time.LocalDate;
 @EqualsAndHashCode(callSuper = true)
 @TableName("t_recurring_rule")
 public class RecurringRule extends BaseEntity {
+    private Long userId;
     private String name;
     private Integer type;
     private java.math.BigDecimal amount;

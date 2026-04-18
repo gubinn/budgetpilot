@@ -5,15 +5,11 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import uk.gubin.budgetpilot.common.BaseEntity;
 
-import java.math.BigDecimal;
-
 @Data
 @EqualsAndHashCode(callSuper = true)
-@TableName("t_budget_item")
-public class BudgetItem extends BaseEntity {
+@TableName("t_user_config")
+public class UserConfig extends BaseEntity {
     private Long userId;
-    private Long budgetId;
-    private Long categoryId;
-    private BigDecimal amount;
-    private BigDecimal spent;
+    private String configKey;
+    private String configValue;
 }

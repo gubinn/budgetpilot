@@ -76,3 +76,13 @@ export const systemApi = {
   markAlertRead: (id) => api.put(`/system/alerts/${id}/read`),
   testTelegram: () => api.post('/system/telegram/test')
 }
+
+export const userApi = {
+  list: () => api.get('/users'),
+  create: (data) => api.post('/users', data),
+  update: (id, data) => api.patch(`/users/${id}`, data),
+  remove: (id) => api.delete(`/users/${id}`),
+  resetPassword: (id, newPassword) => api.put(`/users/${id}/password`, { newPassword }),
+  getMyConfig: () => api.get('/users/config'),
+  setMyConfig: (key, value) => api.put(`/users/config/${key}`, { value })
+}

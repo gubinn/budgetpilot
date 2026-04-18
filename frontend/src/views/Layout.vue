@@ -32,7 +32,7 @@
           </n-button>
           <h3 style="font-size: 16px">{{ pageTitle }}</h3>
         </n-space>
-        <n-space :size="8">
+        <n-space :size="8" align="center">
           <n-badge :value="alertCount" :show="alertCount > 0">
             <n-button quaternary circle size="small" @click="router.push('/alerts')">
               <template #icon><n-icon><notifications-outline /></n-icon></template>
@@ -42,6 +42,11 @@
             <template #icon><n-icon><add-outline /></n-icon></template>
             <span class="add-text">记一笔</span>
           </n-button>
+          <n-dropdown :options="userDropdownOptions" @select="handleUserSelect" trigger="click">
+            <n-button quaternary circle size="small">
+              <template #icon><n-icon><person-outline /></n-icon></template>
+            </n-button>
+          </n-dropdown>
         </n-space>
       </n-layout-header>
       <n-layout-content content-style="padding: 16px;">
@@ -54,14 +59,18 @@
 <script setup>
 import { ref, computed, h, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
-  BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline
+  BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline,
+  PersonOutline, LogOutOutline, PeopleOutline
 } from '@vicons/ionicons5'
-import { NIcon } from 'naive-ui'
+import { NIcon, useDialog } from 'naive-ui'
 
 const router = useRouter()
 const route = useRoute()
+const auth = useAuthStore()
+const dialog = useDialog()
 const collapsed = ref(false)
 
 // 移动端默认收起侧边栏
@@ -73,18 +82,24 @@ onMounted(() => {
 
 const renderIcon = (icon) => () => h(NIcon, null, { default: () => h(icon) })
 
-const menuOptions = [
-  { label: '首页', key: 'Dashboard', icon: renderIcon(HomeOutline) },
-  { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
-  { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
-  { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
-  { label: '商户', key: 'Merchants', icon: renderIcon(BusinessOutline) },
-  { label: '预算', key: 'Budget', icon: renderIcon(BarChartOutline) },
-  { label: '周期', key: 'Recurring', icon: renderIcon(RepeatOutline) },
-  { label: '预警', key: 'AlertRules', icon: renderIcon(AlertOutline) },
-  { label: '报表', key: 'Reports', icon: renderIcon(BarChartOutline) },
-  { label: '设置', key: 'Settings', icon: renderIcon(SettingsOutline) }
-]
+const menuOptions = computed(() => {
+  const items = [
+    { label: '首页', key: 'Dashboard', icon: renderIcon(HomeOutline) },
+    { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
+    { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
+    { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
+    { label: '商户', key: 'Merchants', icon: renderIcon(BusinessOutline) },
+    { label: '预算', key: 'Budget', icon: renderIcon(BarChartOutline) },
+    { label: '周期', key: 'Recurring', icon: renderIcon(RepeatOutline) },
+    { label: '预警', key: 'AlertRules', icon: renderIcon(AlertOutline) },
+    { label: '报表', key: 'Reports', icon: renderIcon(BarChartOutline) },
+    { label: '设置', key: 'Settings', icon: renderIcon(SettingsOutline) }
+  ]
+  if (auth.isAdmin) {
+    items.push({ label: '用户', key: 'Users', icon: renderIcon(PeopleOutline) })
+  }
+  return items
+})
 
 const currentRoute = computed(() => route.name || 'Dashboard')
 const alertCount = ref(0)
@@ -103,16 +118,38 @@ const pageTitle = computed(() => {
     AlertRules: '预警规则',
     Alerts: '告警通知',
     Reports: '统计报表',
-    Settings: '系统设置'
+    Settings: '系统设置',
+    Users: '用户管理'
   }
   return map[route.name] || 'BudgetPilot'
 })
+
+const userDropdownOptions = computed(() => [
+  { label: `${auth.nickname}`, key: 'profile', disabled: true },
+  { label: '---', key: 'divider', type: 'divider' },
+  { label: '退出登录', key: 'logout', icon: renderIcon(LogOutOutline) }
+])
 
 const navigate = (key) => {
   router.push({ name: key })
   // 移动端导航后自动收起侧边栏
   if (window.innerWidth < 768) {
     collapsed.value = true
+  }
+}
+
+async function handleUserSelect(key) {
+  if (key === 'logout') {
+    dialog.warning({
+      title: '确认退出',
+      content: '确定要退出登录吗？',
+      positiveText: '退出',
+      negativeText: '取消',
+      onPositiveClick: async () => {
+        await auth.logout()
+        router.push('/login')
+      }
+    })
   }
 }
 </script>

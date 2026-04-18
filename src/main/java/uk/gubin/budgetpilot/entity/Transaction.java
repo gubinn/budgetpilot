@@ -13,6 +13,7 @@ import java.time.LocalTime;
 @EqualsAndHashCode(callSuper = true)
 @TableName("t_transaction")
 public class Transaction extends BaseEntity {
+    private Long userId;
     private Integer type;
     private java.math.BigDecimal amount;
     private String currency;
