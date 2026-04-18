@@ -1,6 +1,7 @@
 package uk.gubin.budgetpilot.dto;
 
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -11,6 +12,7 @@ public class BudgetUpdateDTO {
     @Positive(message = "总预算必须大于0")
     private BigDecimal totalAmount;
 
+    @Size(max = 200, message = "备注不能超过200个字符")
     private String note;
 
     private List<BudgetItemDTO> items;

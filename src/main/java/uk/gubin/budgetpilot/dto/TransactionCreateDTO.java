@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ public class TransactionCreateDTO {
     private String currency = "CNY";
     private LocalDate transactionDate;
     private LocalTime transactionTime;
+    @Size(max = 200, message = "备注不能超过200个字符")
     private String note;
 
     @NotNull(message = "账户不能为空")
@@ -33,10 +35,10 @@ public class TransactionCreateDTO {
 
     private Long targetAccountId;
 
-    @NotNull(message = "分类不能为空")
     private Long categoryId;
 
     private Long merchantId;
+    @Size(max = 50, message = "商户名称不能超过50个字符")
     private String merchantName;
     private Boolean autoCreateMerchant = true;
 

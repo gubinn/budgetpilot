@@ -82,18 +82,36 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         daysPassed = Math.min(daysPassed, daysTotal);
         daysPassed = Math.max(daysPassed, 1);
 
-        // 计算总已消费
+        // 计算总已消费（仅统计预算内分类的交易）
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.atEndOfMonth();
-        LambdaQueryWrapper<Transaction> totalQuery = new LambdaQueryWrapper<>();
-        totalQuery.eq(Transaction::getType, 1)
-                .eq(Transaction::getIsConfirmed, true)
-                .ge(Transaction::getTransactionDate, start)
-                .le(Transaction::getTransactionDate, end);
-        List<Transaction> txs = transactionMapper.selectList(totalQuery);
-        BigDecimal totalSpent = txs.stream()
-                .map(Transaction::getAmountBase)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // 获取预算包含的所有分类ID（含子分类）
+        LambdaQueryWrapper<BudgetItem> itemQuery = new LambdaQueryWrapper<>();
+        itemQuery.eq(BudgetItem::getBudgetId, budget.getId());
+        List<BudgetItem> budgetItems = budgetItemMapper.selectList(itemQuery);
+
+        List<Long> budgetCatIds = new ArrayList<>();
+        for (BudgetItem item : budgetItems) {
+            budgetCatIds.add(item.getCategoryId());
+            budgetCatIds.addAll(getChildCategoryIds(item.getCategoryId()));
+        }
+
+        BigDecimal totalSpent;
+        if (budgetCatIds.isEmpty()) {
+            totalSpent = BigDecimal.ZERO;
+        } else {
+            LambdaQueryWrapper<Transaction> totalQuery = new LambdaQueryWrapper<>();
+            totalQuery.eq(Transaction::getType, 1)
+                    .eq(Transaction::getIsConfirmed, true)
+                    .in(Transaction::getCategoryId, budgetCatIds)
+                    .ge(Transaction::getTransactionDate, start)
+                    .le(Transaction::getTransactionDate, end);
+            List<Transaction> txs = transactionMapper.selectList(totalQuery);
+            totalSpent = txs.stream()
+                    .map(Transaction::getAmountBase)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
 
         BigDecimal remaining = budget.getTotalAmount().subtract(totalSpent);
         BigDecimal progressPct = totalSpent.divide(budget.getTotalAmount(), 4, RoundingMode.HALF_UP)

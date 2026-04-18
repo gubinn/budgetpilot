@@ -100,7 +100,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         return roots.stream().map(root -> {
             CategoryVO vo = toVO(root);
             List<CategoryVO> children = all.stream()
-                    .filter(c -> c.getParentId().equals(root.getId()))
+                    .filter(c -> c.getParentId() != null && c.getParentId().equals(root.getId()))
                     .map(this::toVO)
                     .collect(Collectors.toList());
             vo.setChildren(children);

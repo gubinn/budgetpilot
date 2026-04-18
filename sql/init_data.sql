@@ -23,7 +23,7 @@ INSERT INTO t_category (user_id, parent_id, name, type, icon, color, is_system, 
 (0, 0, '娱乐', 1, 'entertainment', '#98D8C8', 1, 7),
 (0, 0, '社交', 1, 'social', '#F7DC6F', 1, 8),
 (0, 0, '金融', 1, 'finance', '#BB8FCE', 1, 9),
-(0, '其他支出', 1, 'other-expense', '#BDC3C7', 1, 10);
+(0, 0, '其他支出', 1, 'other-expense', '#BDC3C7', 1, 10);
 
 -- 餐饮子类
 INSERT INTO t_category (user_id, parent_id, name, type, icon, is_system, sort_order) VALUES

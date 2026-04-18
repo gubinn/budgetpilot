@@ -81,7 +81,11 @@ public class ReportServiceImpl implements ReportService {
             ReportVO.MonthlySummary.CategoryShareItem item = new ReportVO.MonthlySummary.CategoryShareItem();
             item.setCategoryId(entry.getKey());
             item.setAmount(entry.getValue());
-            item.setPercentage(entry.getValue().divide(totalExpense, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
+            if (totalExpense.compareTo(BigDecimal.ZERO) == 0) {
+                item.setPercentage(BigDecimal.ZERO);
+            } else {
+                item.setPercentage(entry.getValue().divide(totalExpense, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
+            }
 
             Category cat = categoryMapper.selectById(entry.getKey());
             if (cat != null) {

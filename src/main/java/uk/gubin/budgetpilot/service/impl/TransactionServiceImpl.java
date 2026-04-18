@@ -68,18 +68,26 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             throw new BizException(ErrorCode.ACCOUNT_DISABLED);
         }
 
-        // 校验分类
-        Category category = categoryMapper.selectById(dto.getCategoryId());
-        if (category == null) {
-            throw new BizException(ErrorCode.TRANSACTION_CATEGORY_NOT_FOUND);
+        // 转账类型校验（在分类校验之前，避免同账户转账报分类错误）
+        if (dto.getType() == 3) {
+            if (dto.getTargetAccountId() == null) {
+                throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
+            }
+            if (dto.getAccountId().equals(dto.getTargetAccountId())) {
+                throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
+            }
         }
 
-        // 转账类型校验
-        if (dto.getType() == 3 && dto.getTargetAccountId() == null) {
-            throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
-        }
-        if (dto.getType() == 3 && dto.getAccountId().equals(dto.getTargetAccountId())) {
-            throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
+        // 校验分类（转账不需要分类）
+        Category category = null;
+        if (dto.getType() != 3) {
+            if (dto.getCategoryId() == null) {
+                throw new BizException(ErrorCode.TRANSACTION_CATEGORY_NOT_FOUND);
+            }
+            category = categoryMapper.selectById(dto.getCategoryId());
+            if (category == null) {
+                throw new BizException(ErrorCode.TRANSACTION_CATEGORY_NOT_FOUND);
+            }
         }
 
         // 商户处理逻辑
@@ -440,6 +448,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             entity.setExchangeRate(BigDecimal.ONE);
         } else {
             BigDecimal rate = currencyRateService.getRate(entity.getCurrency(), entity.getTransactionDate());
+            if (rate == null) {
+                rate = BigDecimal.ONE;
+            }
             entity.setExchangeRate(rate);
             entity.setAmountBase(entity.getAmount().multiply(rate).setScale(2, java.math.RoundingMode.HALF_UP));
         }

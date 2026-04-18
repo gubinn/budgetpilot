@@ -37,7 +37,7 @@ public class AccountController {
     }
 
     @PatchMapping("/{id}")
-    public Result<AccountVO> update(@PathVariable Long id, @RequestBody AccountUpdateDTO dto) {
+    public Result<AccountVO> update(@PathVariable Long id, @Valid @RequestBody AccountUpdateDTO dto) {
         return Result.ok(accountService.update(id, dto));
     }
 

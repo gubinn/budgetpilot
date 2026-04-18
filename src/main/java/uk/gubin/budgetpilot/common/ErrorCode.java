@@ -10,6 +10,9 @@ public enum ErrorCode {
     RESOURCE_NOT_FOUND(10002, "资源不存在: %s"),
     SYSTEM_ERROR(10003, "系统内部异常"),
     DUPLICATE_NAME(10004, "名称已存在: %s"),
+    AUTH_WRONG_CREDENTIALS(10005, "用户名或密码错误"),
+    AUTH_USER_DISABLED(10006, "账户已被停用"),
+    AUTH_WRONG_OLD_PASSWORD(10007, "原密码错误"),
 
     // 账户 20001-20099
     ACCOUNT_NOT_FOUND(20001, "账户不存在"),
@@ -48,6 +51,10 @@ public enum ErrorCode {
     MERCHANT_NAME_EXISTS(70002, "商户名称已存在: %s"),
     MERCHANT_HAS_TRANSACTIONS(70003, "商户有关联交易记录，不可删除"),
     MERCHANT_SYSTEM_IMMUTABLE(70004, "系统预设商户不可删除"),
+
+    // 鉴权 80001-80099
+    AUTH_NOT_LOGGED_IN(80001, "未登录或登录已过期"),
+    AUTH_NO_PERMISSION(80002, "无权限访问"),
 
     ;
 

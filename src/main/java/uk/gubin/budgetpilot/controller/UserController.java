@@ -33,7 +33,7 @@ public class UserController {
 
     @PatchMapping("/{id}")
     @SaCheckRole("ADMIN")
-    public uk.gubin.budgetpilot.common.Result<UserVO> update(@PathVariable Long id, @RequestBody UserUpdateDTO dto) {
+    public uk.gubin.budgetpilot.common.Result<UserVO> update(@PathVariable Long id, @Valid @RequestBody UserUpdateDTO dto) {
         return uk.gubin.budgetpilot.common.Result.ok(userService.update(id, dto));
     }
 

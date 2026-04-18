@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.ChangePasswordDTO;
 import uk.gubin.budgetpilot.dto.LoginDTO;
 import uk.gubin.budgetpilot.dto.UserCreateDTO;
@@ -49,11 +51,11 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         User user = baseMapper.selectOne(query);
 
         if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-            throw new RuntimeException("用户名或密码错误");
+            throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
         }
 
         if (!user.getIsActive()) {
-            throw new RuntimeException("账户已被停用");
+            throw new BizException(ErrorCode.AUTH_USER_DISABLED);
         }
 
         // Sa-Token 登录
@@ -101,7 +103,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         User user = baseMapper.selectById(userId);
 
         if (!passwordEncoder.matches(dto.getOldPassword(), user.getPassword())) {
-            throw new RuntimeException("原密码错误");
+            throw new BizException(ErrorCode.AUTH_WRONG_OLD_PASSWORD);
         }
 
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));

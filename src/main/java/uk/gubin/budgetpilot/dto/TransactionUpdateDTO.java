@@ -3,6 +3,7 @@ package uk.gubin.budgetpilot.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -23,6 +24,7 @@ public class TransactionUpdateDTO {
     private String currency;
     private LocalDate transactionDate;
     private LocalTime transactionTime;
+    @Size(max = 200, message = "备注不能超过200个字符")
     private String note;
     private Long accountId;
     private Long targetAccountId;

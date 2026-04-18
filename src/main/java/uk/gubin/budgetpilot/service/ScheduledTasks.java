@@ -103,7 +103,7 @@ public class ScheduledTasks {
                         card.getName(),
                         paymentDate.getMonthValue(), paymentDate.getDayOfMonth(),
                         card.getCreditLimit() != null ? card.getCreditLimit().toPlainString() : "未设置",
-                        card.getCurrentBalance().toPlainString(),
+                        card.getCurrentBalance() != null ? card.getCurrentBalance().toPlainString() : "0",
                         daysUntil,
                         LocalDate.now());
                 alertLogService.logAndNotify(5L, 5, title, content, "TELEGRAM");
