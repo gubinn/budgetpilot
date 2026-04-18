@@ -28,7 +28,15 @@
       </n-form-item>
 
       <n-form-item label="分类" path="categoryId">
-        <n-select v-model:value="form.categoryId" :options="categoryOptions" placeholder="选择分类" filterable />
+        <n-cascader
+          v-model:value="form.categoryId"
+          :options="categoryTree"
+          placeholder="选择分类"
+          check-strategy="child"
+          cascade="false"
+          show-path
+          filterable
+        />
       </n-form-item>
 
       <n-form-item label="日期" path="transactionDate">
@@ -69,7 +77,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
@@ -103,7 +111,7 @@ const rules = {
   type: { required: true, message: '请选择类型', trigger: 'change' },
   amount: { required: true, type: 'number', message: '请输入金额', trigger: 'blur' },
   accountId: { required: true, type: 'number', message: '请选择账户', trigger: 'change' },
-  categoryId: { required: true, type: 'number', message: '请选择分类', trigger: 'change' },
+  categoryId: { required: true, message: '请选择分类', trigger: 'change' },
   transactionDate: { required: true, message: '请选择日期', trigger: 'change' }
 }
 
@@ -120,7 +128,39 @@ const currencyOptions = [
 ]
 
 const accountOptions = ref([])
-const categoryOptions = ref([])
+const allCategoryTree = ref([])
+
+// 根据交易类型筛选分类（保持树形结构）
+const categoryTree = computed(() => {
+  return allCategoryTree.value.filter(c => c.type === form.value.type).map(toCascaderOption)
+})
+
+function toCascaderOption(c) {
+  const opt = { label: c.name, value: c.id }
+  if (c.children?.length) {
+    opt.children = c.children.map(toCascaderOption)
+  }
+  return opt
+}
+
+// 类型变化时清空分类选择
+watch(() => form.value.type, () => {
+  if (form.value.categoryId) {
+    // 检查当前分类是否在新类型的树中
+    const found = findInTree(categoryTree.value, form.value.categoryId)
+    if (!found) {
+      form.value.categoryId = null
+    }
+  }
+})
+
+function findInTree(tree, id) {
+  for (const node of tree) {
+    if (node.value === id) return true
+    if (node.children?.length && findInTree(node.children, id)) return true
+  }
+  return false
+}
 
 async function handleSubmit() {
   try {
@@ -128,6 +168,10 @@ async function handleSubmit() {
     submitting.value = true
 
     const data = { ...form.value }
+    // cascader 可能返回数组，取最后一个值（叶子节点）
+    if (Array.isArray(data.categoryId)) {
+      data.categoryId = data.categoryId[data.categoryId.length - 1]
+    }
     if (extFieldsStr.value.trim()) {
       try {
         data.extFields = JSON.parse(extFieldsStr.value)
@@ -162,15 +206,8 @@ onMounted(async () => {
   ])
   accountOptions.value = accRes.data.map(a => ({ label: a.name, value: a.id }))
 
-  const allCats = []
-  function flatten(list, depth = 0) {
-    list.forEach(c => {
-      allCats.push({ label: '  '.repeat(depth) + c.name, value: c.id })
-      if (c.children?.length) flatten(c.children, depth + 1)
-    })
-  }
-  flatten(catRes.data)
-  categoryOptions.value = allCats
+  // 保持分类的树形结构
+  allCategoryTree.value = catRes.data
 
   // 加载编辑数据
   if (isEdit.value) {
@@ -183,7 +220,7 @@ onMounted(async () => {
         currency: t.currency,
         accountId: t.accountId,
         targetAccountId: t.targetAccountId,
-        categoryId: t.categoryId,
+        categoryId: t.categoryId, // 后端返回的是数字，cascader 能接受
         transactionDate: t.transactionDate,
         transactionTime: t.transactionTime,
         note: t.note,

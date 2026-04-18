@@ -52,4 +52,9 @@ public class AccountController {
         accountService.adjustBalanceWithRecord(id, dto.getNewBalance(), dto.getReason());
         return Result.ok();
     }
+
+    @GetMapping("/total-assets")
+    public Result<java.math.BigDecimal> getTotalAssets() {
+        return Result.ok(accountService.getTotalAssets());
+    }
 }

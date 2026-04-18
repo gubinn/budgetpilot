@@ -17,4 +17,5 @@ public interface AccountService extends IService<Account> {
     void delete(Long id);
     void adjustBalance(Long accountId, BigDecimal amount);
     void adjustBalanceWithRecord(Long accountId, BigDecimal newBalance, String reason);
+    BigDecimal getTotalAssets();
 }

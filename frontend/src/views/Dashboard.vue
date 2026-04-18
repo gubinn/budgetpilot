@@ -1,5 +1,13 @@
 <template>
   <div class="dashboard">
+    <!-- 总资产卡片 -->
+    <n-card title="总资产" hoverable style="margin-bottom: 16px">
+      <div class="total-assets">
+        <div class="assets-value">¥ {{ formatNum(totalAssets) }}</div>
+        <div class="assets-sub">所有 CNY 账户余额合计</div>
+      </div>
+    </n-card>
+
     <n-grid :cols="4" :x-gap="16" :y-gap="16">
       <n-gi v-for="card in summaryCards" :key="card.label">
         <n-card :title="card.label" hoverable>
@@ -63,13 +71,14 @@
 import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { reportApi, budgetApi, transactionApi } from '@/api'
+import { reportApi, budgetApi, transactionApi, accountApi } from '@/api'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 
 const router = useRouter()
 const message = useMessage()
 const loading = ref(true)
+const totalAssets = ref(0)
 const summaryCards = ref([])
 const budgetProgress = ref([])
 const recentTransactions = ref([])
@@ -98,10 +107,11 @@ onMounted(async () => {
   const month = now.format('YYYY-MM')
 
   try {
-    const [summaryRes, budgetRes, txRes] = await Promise.allSettled([
+    const [summaryRes, budgetRes, txRes, assetsRes] = await Promise.allSettled([
       reportApi.monthlySummary(month),
       budgetApi.progress(month),
-      transactionApi.list({ page: 1, size: 10, sort: 'transaction_date,desc' })
+      transactionApi.list({ page: 1, size: 10, sort: 'transaction_date,desc' }),
+      accountApi.totalAssets()
     ])
 
     if (summaryRes.status === 'fulfilled' && summaryRes.value.data?.monthlySummary) {
@@ -148,6 +158,10 @@ onMounted(async () => {
         amount: formatNum(t.amount)
       }))
     }
+
+    if (assetsRes.status === 'fulfilled' && assetsRes.value.data != null) {
+      totalAssets.value = assetsRes.value.data
+    }
   } catch (e) {
     message.error('加载首页数据失败')
   } finally {
@@ -176,6 +190,10 @@ function formatNum(n) {
 .green { color: #27ae60; }
 .red { color: #e74c3c; }
 .blue { color: #3498db; }
+
+.total-assets { text-align: center; padding: 12px 0; }
+.assets-value { font-size: 36px; font-weight: 700; color: #2c3e50; }
+.assets-sub { font-size: 14px; color: #888; margin-top: 8px; }
 
 .budget-list { max-height: 300px; overflow-y: auto; }
 .budget-item { margin-bottom: 16px; }

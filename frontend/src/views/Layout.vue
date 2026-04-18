@@ -99,6 +99,7 @@ const pageTitle = computed(() => {
     Budget: '预算管理',
     Recurring: '周期交易',
     AlertRules: '预警规则',
+    Alerts: '告警通知',
     Reports: '统计报表',
     Settings: '系统设置'
   }

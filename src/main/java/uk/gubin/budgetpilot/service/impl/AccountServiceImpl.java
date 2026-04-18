@@ -260,6 +260,24 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         log.info("Adjusted account balance: {} -> {}, reason: {}", currentBalance, newBalance, reason);
     }
 
+    @Override
+    public BigDecimal getTotalAssets() {
+        LambdaQueryWrapper<Account> query = new LambdaQueryWrapper<>();
+        query.eq(Account::getIsActive, true);
+        List<Account> accounts = list(query);
+
+        BigDecimal total = BigDecimal.ZERO;
+        for (Account account : accounts) {
+            if (account.getCurrentBalance() != null) {
+                // 只统计 CNY 账户，其他币种需要汇率换算
+                if ("CNY".equals(account.getCurrency())) {
+                    total = total.add(account.getCurrentBalance());
+                }
+            }
+        }
+        return total;
+    }
+
     /**
      * 清除交易日期所在月份的报表缓存
      */

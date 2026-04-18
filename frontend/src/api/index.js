@@ -6,7 +6,8 @@ export const accountApi = {
   create: (data) => api.post('/accounts', data),
   update: (id, data) => api.patch(`/accounts/${id}`, data),
   remove: (id) => api.delete(`/accounts/${id}`),
-  adjustBalance: (id, data) => api.post(`/accounts/${id}/adjust-balance`, data)
+  adjustBalance: (id, data) => api.post(`/accounts/${id}/adjust-balance`, data),
+  totalAssets: () => api.get('/accounts/total-assets')
 }
 
 export const transactionApi = {
