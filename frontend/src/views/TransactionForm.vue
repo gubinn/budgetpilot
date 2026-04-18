@@ -108,7 +108,7 @@ const form = ref({
 const extFieldsStr = ref('')
 
 const rules = {
-  type: { required: true, message: '请选择类型', trigger: 'change' },
+  type: { required: true, type: 'number', message: '请选择类型', trigger: 'change' },
   amount: { required: true, type: 'number', message: '请输入金额', trigger: 'blur' },
   accountId: { required: true, type: 'number', message: '请选择账户', trigger: 'change' },
   categoryId: { required: true, message: '请选择分类', trigger: 'change' },
