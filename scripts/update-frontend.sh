@@ -1,6 +1,11 @@
 #!/bin/bash
 # BudgetPilot 前端更新脚本
 # 用途：构建前端并同步到 nginx web 目录和 Spring Boot static 目录
+#
+# 为什么同步两处？
+# - /opt/budgetpilot/web: nginx (HTTPS 6061) 提供静态文件，生产入口
+# - src/main/resources/static: Spring Boot 内嵌，Docker 容器 (6060) 提供，
+#   mvn package 时打包进 JAR，E2E 测试和直连走这个路径
 
 set -e
 
@@ -49,7 +54,7 @@ rm -rf "$WEB_DIR"/*
 cp -r dist/* "$WEB_DIR/"
 echo "完成，文件数量: $(ls -1 "$WEB_DIR/assets" | wc -l)"
 
-# 同步到 Spring Boot static 目录
+# 同步到 Spring Boot static 目录（Docker JAR 打包需要）
 echo ""
 echo "同步到 Spring Boot static 目录: $STATIC_DIR"
 mkdir -p "$STATIC_DIR"
