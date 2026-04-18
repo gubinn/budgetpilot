@@ -11,7 +11,7 @@ export const useAuthStore = defineStore('auth', () => {
   const nickname = computed(() => user.value?.nickname || user.value?.username || '')
 
   async function login(username, password) {
-    const res = await axios.post('/api/auth/login', { username, password })
+    const res = await axios.post('/api/v1/auth/login', { username, password })
     if (res.data.code === 0) {
       token.value = res.data.data.token
       user.value = res.data.data
@@ -22,7 +22,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      await axios.post('/api/auth/logout', null, {
+      await axios.post('/api/v1/auth/logout', null, {
         headers: { Authorization: token.value }
       })
     } finally {
@@ -35,7 +35,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchUser() {
     if (!token.value) return
     try {
-      const res = await axios.get('/api/auth/info', {
+      const res = await axios.get('/api/v1/auth/info', {
         headers: { Authorization: token.value }
       })
       if (res.data.code === 0) {
@@ -49,7 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function changePassword(oldPassword, newPassword) {
-    const res = await axios.post('/api/auth/change-password', { oldPassword, newPassword }, {
+    const res = await axios.post('/api/v1/auth/change-password', { oldPassword, newPassword }, {
       headers: { Authorization: token.value }
     })
     return res.data

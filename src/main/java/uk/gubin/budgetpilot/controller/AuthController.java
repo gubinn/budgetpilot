@@ -11,7 +11,7 @@ import uk.gubin.budgetpilot.vo.LoginVO;
 import uk.gubin.budgetpilot.vo.UserVO;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
 
