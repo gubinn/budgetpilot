@@ -12,6 +12,7 @@ CREATE TABLE t_user (
     nickname    VARCHAR(50)     DEFAULT '' COMMENT '显示名',
     role        VARCHAR(20)     DEFAULT 'USER' COMMENT 'ADMIN / USER',
     is_active   TINYINT(1)      DEFAULT 1,
+    api_key     VARCHAR(100)    DEFAULT NULL COMMENT 'API Key',
     last_login  DATETIME        DEFAULT NULL COMMENT '最后登录时间',
     created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
