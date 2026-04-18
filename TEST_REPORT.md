@@ -148,7 +148,43 @@
 
 ---
 
-## 五、测试文件位置
+## 六、新增功能测试结果
+
+### 6.1 用户管理与登录系统
+
+| 测试项 | 结果 | 备注 |
+|--------|------|------|
+| 默认管理员初始化 | ✅ | DataInitializer 自动创建 admin/admin123 |
+| 用户登录 | ✅ | BCrypt 密码验证，Sa-Token 生成 token |
+| 获取当前用户信息 | ✅ | GET /api/auth/info 返回用户信息 |
+| 用户列表查询（管理员） | ✅ | 返回所有用户列表 |
+| 创建用户（管理员） | ✅ | 用户名唯一校验，BCrypt 加密 |
+| 更新用户（管理员） | ✅ | 修改昵称/角色/启用状态 |
+| 删除用户（管理员） | ✅ | 删除成功 |
+| 重置密码（管理员） | ✅ | BCrypt 新密码加密 |
+| 用户配置读写 | ✅ | t_user_config 增删改查 |
+| 前端登录页 | ✅ | Naive UI 表单，自动跳转 |
+| 前端路由守卫 | ✅ | 未登录自动跳转 /login |
+| Layout 用户菜单 | ✅ | 显示昵称、退出登录 |
+| 用户管理页 | ✅ | 用户列表/创建/编辑/重置密码/删除 |
+| 角色权限校验 | ✅ | 非管理员无法访问 /api/v1/users |
+| 数据隔离（TenantLine） | ✅ | SQL 自动注入 user_id 条件 |
+
+### 6.2 架构变更
+
+| 变更 | 说明 |
+|------|------|
+| 数据库 | 新增 t_user、t_user_config 表 |
+| 数据库 | 9张业务表添加 user_id 字段和索引 |
+| 后端 | Sa-Token 认证 + StpInterface 角色校验 |
+| 后端 | TenantLineInnerInterceptor 数据隔离 |
+| 后端 | MetaObjectHandler 自动填充 userId |
+| 前端 | Pinia auth store 管理登录状态 |
+| 前端 | 新增 LoginPage.vue、UserList.vue |
+
+---
+
+## 七、测试文件位置
 
 - 测试案例文档：`TEST_CASES.md`
 - 测试报告：`TEST_REPORT.md`
@@ -157,14 +193,16 @@
 
 ---
 
-## 六、运行测试命令
+## 八、运行测试命令
 
 ```bash
-# 后端API测试
-curl http://localhost:6060/api/v1/accounts
-curl http://localhost:6060/api/v1/transactions
-curl http://localhost:6060/api/v1/recurring-rules/3/toggle
-curl http://localhost:6060/api/v1/recurring-rules/3/execute
+# 用户登录
+curl -X POST http://localhost:6060/api/auth/login -d '{"username":"admin","password":"admin123"}' -H 'Content-Type: application/json'
+
+# 后端API测试（需要 token）
+TOKEN="your-token-here"
+curl http://localhost:6060/api/v1/users -H "Authorization: $TOKEN"
+curl http://localhost:6060/api/v1/accounts -H "Authorization: $TOKEN"
 
 # 前端E2E测试
 cd frontend
