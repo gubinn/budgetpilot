@@ -37,6 +37,14 @@
         <n-form-item label="排序">
           <n-input-number v-model:value="form.sortOrder" :min="0" style="width: 100px" />
         </n-form-item>
+        <n-form-item label="扩展字段">
+          <n-dynamic-input v-model:value="extFieldsList" :on-create="() => ({ key: '', value: '' })">
+            <template #default="{ index }">
+              <n-input v-model:value="extFieldsList[index].key" placeholder="键" style="width: 40%" />
+              <n-input v-model:value="extFieldsList[index].value" placeholder="值" style="width: 55%; margin-left: 2%" />
+            </template>
+          </n-dynamic-input>
+        </n-form-item>
         <n-form-item>
           <n-space>
             <n-button type="primary" :loading="submitting" @click="handleSubmit">保存</n-button>
@@ -107,8 +115,11 @@ const form = ref({
   creditLimit: null,
   billingDay: null,
   paymentDay: null,
-  sortOrder: 0
+  sortOrder: 0,
+  extFields: {}
 })
+
+const extFieldsList = ref([])
 
 const typeOptions = [
   { label: '现金', value: 1 },
@@ -150,6 +161,19 @@ const columns = [
       : h(NTag, { type: 'default', size: 'small', bordered: false }, { default: () => '停用' })
   },
   {
+    title: '扩展字段', key: 'extFields', width: 180,
+    render: (row) => {
+      const ext = row.extFields
+      if (!ext || typeof ext !== 'object' || Object.keys(ext).length === 0) return '-'
+      const tags = Object.entries(ext).map(([k, v]) =>
+        h(NTag, { size: 'tiny', type: 'default', bordered: false, style: { marginRight: '4px', marginBottom: '2px' } }, {
+          default: () => `${k}:${v}`
+        })
+      )
+      return h('div', { style: { display: 'flex', flexWrap: 'wrap' } }, tags)
+    }
+  },
+  {
     title: '操作', key: 'actions', width: 160,
     render: (row) => h(NSpace, { size: 8 }, [
       h(NButton, { size: 'small', type: 'primary', onClick: () => handleEdit(row) }, { default: () => '编辑' }),
@@ -183,8 +207,10 @@ function handleEdit(row) {
     creditLimit: row.creditLimit,
     billingDay: row.billingDay,
     paymentDay: row.paymentDay,
-    sortOrder: row.sortOrder
+    sortOrder: row.sortOrder,
+    extFields: row.extFields || {}
   }
+  extFieldsList.value = row.extFields ? Object.entries(row.extFields).map(([k, v]) => ({ key: k, value: String(v) })) : []
   showCreate.value = true
 }
 
@@ -204,10 +230,30 @@ async function handleSubmit() {
         return
       }
       // 余额没变化，直接更新其他字段
-      await accountApi.update(editingId.value, form.value)
+      const data = { ...form.value }
+      if (extFieldsList.value.length > 0) {
+        const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
+        if (valid.length > 0) {
+          data.extFields = {}
+          valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
+        }
+      } else {
+        data.extFields = undefined
+      }
+      await accountApi.update(editingId.value, data)
       message.success('更新成功')
     } else {
-      await accountApi.create(form.value)
+      const data = { ...form.value }
+      if (extFieldsList.value.length > 0) {
+        const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
+        if (valid.length > 0) {
+          data.extFields = {}
+          valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
+        }
+      } else {
+        data.extFields = undefined
+      }
+      await accountApi.create(data)
       message.success('创建成功')
     }
     showCreate.value = false
@@ -227,7 +273,19 @@ async function confirmBalanceAdjust() {
   }
   adjusting.value = true
   try {
-    // 调用余额调整接口
+    // 先更新扩展字段（不含余额）
+    const updateData = {}
+    if (extFieldsList.value.length > 0) {
+      const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
+      if (valid.length > 0) {
+        updateData.extFields = {}
+        valid.forEach(item => { updateData.extFields[item.key.trim()] = item.value })
+      }
+    }
+    if (Object.keys(updateData).length > 0) {
+      await accountApi.update(editingId.value, updateData)
+    }
+    // 再调用余额调整
     await accountApi.adjustBalance(editingId.value, {
       newBalance: form.value.currentBalance,
       reason: adjustReason.value.trim()
@@ -268,7 +326,8 @@ async function handleActivate(id) {
 
 function resetForm() {
   editingId.value = null
-  form.value = { name: '', type: 2, currency: 'CNY', currentBalance: 0, creditLimit: null, billingDay: null, paymentDay: null, sortOrder: 0 }
+  extFieldsList.value = []
+  form.value = { name: '', type: 2, currency: 'CNY', currentBalance: 0, creditLimit: null, billingDay: null, paymentDay: null, sortOrder: 0, extFields: {} }
 }
 
 function formatNum(n) {

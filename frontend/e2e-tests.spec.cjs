@@ -64,6 +64,38 @@ test.describe('BudgetPilot 前端测试', () => {
     await expect(page.locator('.n-card-header__main').filter({ hasText: '账户管理' })).toBeVisible({ timeout: 5000 });
   });
 
+  test('A02: 账户扩展字段添加', async ({ page }) => {
+    await page.goto(BASE_URL);
+    await page.waitForLoadState('networkidle');
+
+    await page.getByRole('menu').getByText('账户', { exact: true }).click();
+    await page.waitForTimeout(1000);
+
+    await page.getByRole('button', { name: '新增账户' }).click();
+    await page.waitForTimeout(1000);
+
+    // 检查扩展字段区域存在
+    await expect(page.locator('.n-form-item-label').filter({ hasText: '扩展字段' })).toBeVisible();
+
+    // 点击添加按钮
+    await page.locator('.n-dynamic-input button').first().click();
+    await page.waitForTimeout(300);
+
+    // 填写键值对
+    const keyInput = page.locator('input[placeholder="键"]').first();
+    const valueInput = page.locator('input[placeholder="值"]').first();
+    await expect(keyInput).toBeVisible();
+    await expect(valueInput).toBeVisible();
+
+    await keyInput.fill('账户标签');
+    await valueInput.fill('主力账户');
+    await expect(keyInput).toHaveValue('账户标签');
+    await expect(valueInput).toHaveValue('主力账户');
+
+    // 取消弹窗
+    await page.getByRole('button', { name: '取消' }).first().click();
+  });
+
   // =====================
   // 四、交易管理测试（重点：类型切换）
   // =====================
