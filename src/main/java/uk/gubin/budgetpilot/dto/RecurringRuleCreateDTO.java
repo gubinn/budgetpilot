@@ -1,5 +1,6 @@
 package uk.gubin.budgetpilot.dto;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -10,7 +11,7 @@ import java.time.LocalDate;
 
 @Data
 public class RecurringRuleCreateDTO {
-    @NotNull(message = "规则名称不能为空")
+    @NotBlank(message = "规则名称不能为空")
     @Size(max = 50, message = "规则名称不能超过50个字符")
     private String name;
 

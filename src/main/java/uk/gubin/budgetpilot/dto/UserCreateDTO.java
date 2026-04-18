@@ -2,6 +2,7 @@ package uk.gubin.budgetpilot.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -19,6 +20,7 @@ public class UserCreateDTO {
     private String nickname;
 
     @NotNull(message = "角色不能为空")
+    @Pattern(regexp = "ADMIN|USER", message = "角色必须为ADMIN或USER之一")
     private String role;
 
     private Boolean isActive = true;

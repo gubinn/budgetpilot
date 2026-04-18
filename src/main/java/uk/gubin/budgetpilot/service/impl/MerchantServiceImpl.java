@@ -162,8 +162,11 @@ public class MerchantServiceImpl extends ServiceImpl<MerchantMapper, Merchant> i
             query.eq(Merchant::getCategoryId, dto.getCategoryId());
         }
 
+        // 默认仅查询活跃商户
         if (dto.getIsActive() != null) {
             query.eq(Merchant::getIsActive, dto.getIsActive());
+        } else {
+            query.eq(Merchant::getIsActive, true);
         }
 
         // 解析排序

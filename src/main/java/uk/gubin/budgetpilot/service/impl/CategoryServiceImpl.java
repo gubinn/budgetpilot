@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.CategoryCreateDTO;
+import uk.gubin.budgetpilot.dto.CategoryUpdateDTO;
 import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.Transaction;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
@@ -147,23 +148,69 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
 
     @Override
     @Transactional
-    public CategoryVO update(Long id, CategoryCreateDTO dto) {
+    public CategoryVO update(Long id, CategoryUpdateDTO dto) {
         Category entity = baseMapper.selectById(id);
         if (entity == null) {
             throw new BizException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+
+        // 系统分类不可修改类型
+        if (dto.getType() != null && !dto.getType().equals(entity.getType())) {
+            throw new BizException(ErrorCode.CATEGORY_SYSTEM_IMMUTABLE);
         }
 
         if (dto.getName() != null) entity.setName(dto.getName());
         if (dto.getIcon() != null) entity.setIcon(dto.getIcon());
         if (dto.getColor() != null) entity.setColor(dto.getColor());
         if (dto.getSortOrder() != null) entity.setSortOrder(dto.getSortOrder());
-        // 不允许修改 type
+
+        // 处理 parentId 修改
+        if (dto.getParentId() != null && !dto.getParentId().equals(entity.getParentId())) {
+            // 不能将自己设为自己的父节点
+            if (dto.getParentId().equals(id)) {
+                throw new BizException(ErrorCode.CATEGORY_CIRCULAR_REFERENCE, "分类不能设为自己的父节点");
+            }
+            // 循环引用检测：检查新父节点是否会成为当前分类的子节点
+            if (dto.getParentId() != 0 && isDescendant(entity.getId(), dto.getParentId())) {
+                throw new BizException(ErrorCode.CATEGORY_CIRCULAR_REFERENCE, "会导致循环引用");
+            }
+            entity.setParentId(dto.getParentId());
+        }
+
         baseMapper.updateById(entity);
 
         // 清除报表缓存（分类名称、颜色变更会影响报表显示）
         clearAllReportCache();
 
         return toVO(entity);
+    }
+
+    /**
+     * 检查 targetId 是否是 categoryId 的后代（间接子节点）
+     */
+    private boolean isDescendant(Long categoryId, Long targetId) {
+        List<Category> all = list(new LambdaQueryWrapper<Category>().eq(Category::getIsActive, true));
+        return checkDescendant(categoryId, targetId, all, new java.util.HashSet<>());
+    }
+
+    private boolean checkDescendant(Long ancestorId, Long targetId, List<Category> all, java.util.Set<Long> visited) {
+        if (ancestorId.equals(targetId)) {
+            return true;
+        }
+        if (visited.contains(ancestorId)) {
+            return false;
+        }
+        visited.add(ancestorId);
+
+        List<Category> children = all.stream()
+                .filter(c -> ancestorId.equals(c.getParentId()))
+                .collect(Collectors.toList());
+        for (Category child : children) {
+            if (checkDescendant(child.getId(), targetId, all, visited)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

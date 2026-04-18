@@ -97,8 +97,9 @@ public class CurrencyRateServiceImpl extends ServiceImpl<CurrencyRateMapper, Cur
             return fallback;
         }
 
-        throw new BizException(ErrorCode.CURRENCY_API_FAILED,
-                String.format("无法获取 %s 在 %s 的汇率", currency, date));
+        // All sources exhausted — silent fallback to 1:1
+        log.warn("Unable to get exchange rate for {} on {}, defaulting to 1:1", currency, date);
+        return BigDecimal.ONE;
     }
 
     @Override

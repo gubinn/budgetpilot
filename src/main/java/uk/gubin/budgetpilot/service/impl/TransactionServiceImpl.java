@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.gubin.budgetpilot.common.BizException;
@@ -55,10 +56,20 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     private final BudgetService budgetService;
     private final MerchantService merchantService;
     private final ApplicationEventPublisher eventPublisher;
+    private final StringRedisTemplate redisTemplate;
 
     @Override
     @Transactional
     public TransactionVO create(TransactionCreateDTO dto) {
+        // 幂等校验：防止短时间重复提交
+        String idempotentKey = "txn:duplicate:" + cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong()
+                + ":" + dto.getType() + ":" + dto.getAmount() + ":" + dto.getAccountId()
+                + ":" + dto.getCategoryId() + ":" + dto.getTransactionDate() + ":" + dto.getNote();
+        String keyHash = cn.dev33.satoken.secure.SaSecureUtil.md5(idempotentKey);
+        if (Boolean.FALSE.equals(redisTemplate.opsForValue().setIfAbsent("idempotency:" + keyHash, "1", 3, java.util.concurrent.TimeUnit.SECONDS))) {
+            log.warn("Duplicate transaction submission detected: {}", keyHash);
+            throw new BizException(ErrorCode.DUPLICATE_NAME, "交易");
+        }
         // 校验账户
         Account account = accountMapper.selectById(dto.getAccountId());
         if (account == null) {
@@ -87,6 +98,10 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             category = categoryMapper.selectById(dto.getCategoryId());
             if (category == null) {
                 throw new BizException(ErrorCode.TRANSACTION_CATEGORY_NOT_FOUND);
+            }
+            // 校验分类类型与交易类型匹配
+            if (category.getType() != null && !category.getType().equals(dto.getType())) {
+                throw new BizException(ErrorCode.TRANSACTION_CATEGORY_MISMATCH);
             }
         }
 
@@ -124,11 +139,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 只有确认的交易才更新账户余额
         if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
-            // 余额校验：仅对支出和转账类型，且仅对借记账户和电子钱包（type != 2 信用卡）
+            // 余额校验：仅对支出和转账类型，且仅对非信用卡账户（type=3 信用卡允许透支）
             if (entity.getType() == 1 || entity.getType() == 3) {
-                if (account.getType() != null && account.getType() != 2) { // 非信用卡
-                    if (account.getCurrentBalance() != null &&
-                        account.getCurrentBalance().compareTo(entity.getAmount()) < 0) {
+                Integer accountType = account.getType();
+                if (accountType == null || accountType != 3) {
+                    BigDecimal balance = account.getCurrentBalance();
+                    if (balance != null && balance.compareTo(entity.getAmount()) < 0) {
                         throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
                     }
                 }

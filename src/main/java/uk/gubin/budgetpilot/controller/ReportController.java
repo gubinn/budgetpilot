@@ -1,11 +1,16 @@
 package uk.gubin.budgetpilot.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.service.ReportService;
 import uk.gubin.budgetpilot.vo.ReportVO;
+
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 @RestController
 @RequestMapping("/api/v1/reports")
@@ -14,15 +19,30 @@ public class ReportController {
 
     private final ReportService reportService;
 
+    private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
+
+    private void validateMonth(String month) {
+        if (month == null || month.trim().isEmpty()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "月份参数不能为空");
+        }
+        try {
+            LocalDate.parse(month + "-01", DateTimeFormatter.ISO_LOCAL_DATE);
+        } catch (DateTimeParseException e) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "月份格式不正确，应为 yyyy-MM");
+        }
+    }
+
     @GetMapping("/monthly-summary")
-    public Result<ReportVO> monthlySummary(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month) {
+    public Result<ReportVO> monthlySummary(@RequestParam String month) {
+        validateMonth(month);
         return Result.ok(reportService.monthlySummary(month));
     }
 
     @GetMapping("/category-detail")
     public Result<ReportVO> categoryDetail(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month,
+            @RequestParam String month,
             @RequestParam Long categoryId) {
+        validateMonth(month);
         return Result.ok(reportService.categoryDetail(month, categoryId));
     }
 
@@ -35,8 +55,10 @@ public class ReportController {
 
     @GetMapping("/compare")
     public Result<ReportVO> compare(
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month,
-            @RequestParam @DateTimeFormat(pattern = "yyyy-MM") String compareWith) {
+            @RequestParam String month,
+            @RequestParam String compareWith) {
+        validateMonth(month);
+        validateMonth(compareWith);
         return Result.ok(reportService.compare(month, compareWith));
     }
 
@@ -51,17 +73,20 @@ public class ReportController {
     }
 
     @GetMapping("/budget-review")
-    public Result<ReportVO> budgetReview(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month) {
+    public Result<ReportVO> budgetReview(@RequestParam String month) {
+        validateMonth(month);
         return Result.ok(reportService.budgetReview(month));
     }
 
     @GetMapping("/currency-distribution")
-    public Result<ReportVO> currencyDistribution(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month) {
+    public Result<ReportVO> currencyDistribution(@RequestParam String month) {
+        validateMonth(month);
         return Result.ok(reportService.currencyDistribution(month));
     }
 
     @GetMapping("/merchant-distribution")
-    public Result<ReportVO> merchantDistribution(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month) {
+    public Result<ReportVO> merchantDistribution(@RequestParam String month) {
+        validateMonth(month);
         return Result.ok(reportService.merchantDistribution(month));
     }
 }

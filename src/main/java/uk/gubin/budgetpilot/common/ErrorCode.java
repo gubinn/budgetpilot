@@ -13,6 +13,7 @@ public enum ErrorCode {
     AUTH_WRONG_CREDENTIALS(10005, "用户名或密码错误"),
     AUTH_USER_DISABLED(10006, "账户已被停用"),
     AUTH_WRONG_OLD_PASSWORD(10007, "原密码错误"),
+    AUTH_USERNAME_EXISTS(80003, "用户名已存在"),
 
     // 账户 20001-20099
     ACCOUNT_NOT_FOUND(20001, "账户不存在"),

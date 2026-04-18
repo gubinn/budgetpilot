@@ -45,6 +45,11 @@ public class SystemController {
         return Result.ok(configService.getAll());
     }
 
+    @GetMapping("/config/{key}")
+    public Result<String> getConfig(@PathVariable String key) {
+        return Result.ok(configService.get(key));
+    }
+
     @PutMapping("/config/{key}")
     public Result<Void> setConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
         configService.set(key, body.get("value"));
@@ -65,6 +70,14 @@ public class SystemController {
         LambdaQueryWrapper<CurrencyRate> q = new LambdaQueryWrapper<>();
         q.eq(CurrencyRate::getRateDate, queryDate).orderByAsc(CurrencyRate::getTargetCurrency);
         return Result.ok(currencyRateMapper.selectList(q));
+    }
+
+    @GetMapping("/rate")
+    public Result<java.math.BigDecimal> getRate(
+            @RequestParam String currency,
+            @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate date) {
+        LocalDate queryDate = date != null ? date : LocalDate.now();
+        return Result.ok(currencyRateService.getRate(currency, queryDate));
     }
 
     @PostMapping("/rates/refresh")

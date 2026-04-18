@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.dto.CategoryCreateDTO;
+import uk.gubin.budgetpilot.dto.CategoryUpdateDTO;
 import uk.gubin.budgetpilot.service.CategoryService;
 import uk.gubin.budgetpilot.vo.CategoryVO;
 
@@ -35,7 +36,7 @@ public class CategoryController {
     }
 
     @PutMapping("/{id}")
-    public Result<CategoryVO> update(@PathVariable Long id, @Valid @RequestBody CategoryCreateDTO dto) {
+    public Result<CategoryVO> update(@PathVariable Long id, @Valid @RequestBody CategoryUpdateDTO dto) {
         return Result.ok(categoryService.update(id, dto));
     }
 

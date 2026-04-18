@@ -50,12 +50,16 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         query.eq(User::getUsername, dto.getUsername());
         User user = baseMapper.selectOne(query);
 
-        if (user == null || !passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+        if (user == null) {
             throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
         }
 
         if (!user.getIsActive()) {
             throw new BizException(ErrorCode.AUTH_USER_DISABLED);
+        }
+
+        if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+            throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
         }
 
         // Sa-Token 登录
@@ -121,7 +125,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
         query.eq(User::getUsername, dto.getUsername());
         if (baseMapper.selectCount(query) > 0) {
-            throw new RuntimeException("用户名已存在");
+            throw new BizException(ErrorCode.AUTH_USERNAME_EXISTS);
         }
 
         User user = new User();
