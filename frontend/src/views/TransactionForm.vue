@@ -69,12 +69,13 @@
       </n-form-item>
 
       <n-form-item label="扩展字段">
-        <n-input
-          v-model:value="extFieldsStr"
-          type="textarea"
-          placeholder='{"merchant": "商户名", "location": "地点"}'
-          :autosize="{ minRows: 2, maxRows: 4 }"
-        />
+        <n-dynamic-input v-model:value="extFieldsList" placeholder="键值对">
+          <template #create-button-default>添加扩展字段</template>
+          <template #default="{ index }">
+            <n-input v-model:value="extFieldsList[index].key" placeholder="键" style="width: 40%" />
+            <n-input v-model:value="extFieldsList[index].value" placeholder="值" style="width: 55%; margin-left: 2%" />
+          </template>
+        </n-dynamic-input>
       </n-form-item>
 
       <n-form-item>
@@ -120,7 +121,7 @@ const form = ref({
   extFields: {}
 })
 
-const extFieldsStr = ref('')
+const extFieldsList = ref([])
 
 const rules = {
   type: { required: true, type: 'number', message: '请选择类型', trigger: 'change' },
@@ -246,12 +247,11 @@ async function handleSubmit() {
       data.autoCreateMerchant = undefined
     }
 
-    if (extFieldsStr.value.trim()) {
-      try {
-        data.extFields = JSON.parse(extFieldsStr.value)
-      } catch (e) {
-        message.error('扩展字段 JSON 格式错误')
-        return
+    if (extFieldsList.value.length > 0) {
+      const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
+      if (valid.length > 0) {
+        data.extFields = {}
+        valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
       }
     } else {
       data.extFields = undefined
@@ -307,7 +307,7 @@ onMounted(async () => {
       if (t.merchantId && t.merchantName) {
         merchantOptions.value = [{ label: t.merchantName, value: t.merchantId }]
       }
-      extFieldsStr.value = t.extFields ? JSON.stringify(t.extFields, null, 2) : ''
+      extFieldsList.value = t.extFields ? Object.entries(t.extFields).map(([k, v]) => ({ key: k, value: String(v) })) : []
     } catch (e) {
       message.error('加载交易详情失败')
     }

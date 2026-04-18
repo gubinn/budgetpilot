@@ -121,6 +121,19 @@ const columns = [
     }, { default: () => row.isConfirmed ? '已确认' : '待确认' })
   },
   {
+    title: '扩展字段', key: 'extFields', width: 180,
+    render: (row) => {
+      const ext = row.extFields
+      if (!ext || typeof ext !== 'object' || Object.keys(ext).length === 0) return '-'
+      const tags = Object.entries(ext).map(([k, v]) =>
+        h(NTag, { size: 'tiny', type: 'default', bordered: false, style: { marginRight: '4px', marginBottom: '2px' } }, {
+          default: () => `${k}:${v}`
+        })
+      )
+      return h('div', { style: { display: 'flex', flexWrap: 'wrap' } }, tags)
+    }
+  },
+  {
     title: '标签', key: 'tags', width: 100,
     render: (row) => row.tags?.length ? h(NSpace, { size: 4 }, row.tags.map(t =>
       h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => t })
