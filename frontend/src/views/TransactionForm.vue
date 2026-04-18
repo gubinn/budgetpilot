@@ -39,6 +39,19 @@
         />
       </n-form-item>
 
+      <n-form-item v-if="form.type === 1" label="商户" path="merchantId">
+        <n-select
+          v-model:value="form.merchantId"
+          :options="merchantOptions"
+          placeholder="输入商户名搜索或创建"
+          filterable
+          clearable
+          remote
+          :loading="merchantLoading"
+          @search="handleMerchantSearch"
+        />
+      </n-form-item>
+
       <n-form-item label="日期" path="transactionDate">
         <n-date-picker v-model:value="form.transactionDate" type="date" style="width: 100%" />
       </n-form-item>
@@ -80,7 +93,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { transactionApi, accountApi, categoryApi } from '@/api'
+import { transactionApi, accountApi, categoryApi, merchantApi } from '@/api'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -98,6 +111,8 @@ const form = ref({
   accountId: null,
   targetAccountId: null,
   categoryId: null,
+  merchantId: null,
+  merchantName: '',
   transactionDate: dayjs().format('YYYY-MM-DD'),
   transactionTime: dayjs().format('HH:mm:ss'),
   note: '',
@@ -111,7 +126,15 @@ const rules = {
   type: { required: true, type: 'number', message: '请选择类型', trigger: 'change' },
   amount: { required: true, type: 'number', message: '请输入金额', trigger: 'blur' },
   accountId: { required: true, type: 'number', message: '请选择账户', trigger: 'change' },
-  categoryId: { required: true, message: '请选择分类', trigger: 'change' },
+  categoryId: {
+    required: true,
+    validator: (rule, value) => {
+      if (!value) return new Error('请选择分类')
+      if (Array.isArray(value) && value.length === 0) return new Error('请选择分类')
+      return true
+    },
+    trigger: 'change'
+  },
   transactionDate: { required: true, message: '请选择日期', trigger: 'change' }
 }
 
@@ -129,6 +152,9 @@ const currencyOptions = [
 
 const accountOptions = ref([])
 const allCategoryTree = ref([])
+const merchantOptions = ref([])
+const merchantLoading = ref(false)
+const merchantSearchTimer = ref(null)
 
 // 根据交易类型筛选分类（保持树形结构）
 const categoryTree = computed(() => {
@@ -162,6 +188,44 @@ function findInTree(tree, id) {
   return false
 }
 
+// 商户模糊搜索（防抖）
+async function handleMerchantSearch(keyword) {
+  if (merchantSearchTimer.value) {
+    clearTimeout(merchantSearchTimer.value)
+  }
+
+  if (!keyword || keyword.trim().length < 1) {
+    merchantOptions.value = []
+    return
+  }
+
+  merchantSearchTimer.value = setTimeout(async () => {
+    merchantLoading.value = true
+    try {
+      const res = await merchantApi.search(keyword.trim(), 10)
+      const options = (res.data || []).map(m => ({
+        label: m.name + (m.categoryName ? ` (${m.categoryName})` : ''),
+        value: m.id
+      }))
+
+      // 如果没有匹配结果，显示"创建新商户"选项
+      if (options.length === 0) {
+        options.push({
+          label: `创建新商户 "${keyword.trim()}"`,
+          value: 'new'
+        })
+      }
+
+      merchantOptions.value = options
+      form.value.merchantName = keyword.trim()
+    } catch (e) {
+      message.error('搜索失败')
+    } finally {
+      merchantLoading.value = false
+    }
+  }, 300)
+}
+
 async function handleSubmit() {
   try {
     await formRef.value?.validate()
@@ -172,6 +236,16 @@ async function handleSubmit() {
     if (Array.isArray(data.categoryId)) {
       data.categoryId = data.categoryId[data.categoryId.length - 1]
     }
+
+    // 商户处理：如果选择的是 'new'，则设置 merchantName 让后端自动创建
+    if (data.merchantId === 'new') {
+      data.merchantId = null
+      data.autoCreateMerchant = true
+    } else if (data.merchantId) {
+      data.merchantName = undefined
+      data.autoCreateMerchant = undefined
+    }
+
     if (extFieldsStr.value.trim()) {
       try {
         data.extFields = JSON.parse(extFieldsStr.value)
@@ -220,12 +294,18 @@ onMounted(async () => {
         currency: t.currency,
         accountId: t.accountId,
         targetAccountId: t.targetAccountId,
-        categoryId: t.categoryId, // 后端返回的是数字，cascader 能接受
+        categoryId: t.categoryId,
+        merchantId: t.merchantId,
+        merchantName: t.merchantName || '',
         transactionDate: t.transactionDate,
         transactionTime: t.transactionTime,
         note: t.note,
         tags: t.tags || [],
         extFields: t.extFields || {}
+      }
+      // 如果有商户，加载商户选项
+      if (t.merchantId && t.merchantName) {
+        merchantOptions.value = [{ label: t.merchantName, value: t.merchantId }]
       }
       extFieldsStr.value = t.extFields ? JSON.stringify(t.extFields, null, 2) : ''
     } catch (e) {

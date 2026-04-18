@@ -43,6 +43,12 @@ public enum ErrorCode {
     CURRENCY_API_FAILED(60002, "汇率获取失败: %s"),
     CURRENCY_API_LIMIT(60003, "汇率 API 限流"),
 
+    // 商户 70001-70099
+    MERCHANT_NOT_FOUND(70001, "商户不存在"),
+    MERCHANT_NAME_EXISTS(70002, "商户名称已存在: %s"),
+    MERCHANT_HAS_TRANSACTIONS(70003, "商户有关联交易记录，不可删除"),
+    MERCHANT_SYSTEM_IMMUTABLE(70004, "系统预设商户不可删除"),
+
     ;
 
     private final int code;

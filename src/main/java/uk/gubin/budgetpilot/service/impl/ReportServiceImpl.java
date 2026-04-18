@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 
 import uk.gubin.budgetpilot.entity.Account;
 import uk.gubin.budgetpilot.entity.Category;
+import uk.gubin.budgetpilot.entity.Merchant;
 import uk.gubin.budgetpilot.entity.Transaction;
 import uk.gubin.budgetpilot.mapper.AccountMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
+import uk.gubin.budgetpilot.mapper.MerchantMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 import uk.gubin.budgetpilot.service.ReportService;
 import uk.gubin.budgetpilot.vo.ReportVO;
@@ -34,6 +36,7 @@ public class ReportServiceImpl implements ReportService {
     private final TransactionMapper transactionMapper;
     private final CategoryMapper categoryMapper;
     private final AccountMapper accountMapper;
+    private final MerchantMapper merchantMapper;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
 
@@ -302,6 +305,72 @@ public class ReportServiceImpl implements ReportService {
             items.add(item);
         }
         vo.setCurrencyDistribution(items);
+        return vo;
+    }
+
+    @Override
+    public ReportVO merchantDistribution(String month) {
+        ReportVO vo = new ReportVO();
+
+        YearMonth ym = YearMonth.parse(month);
+        LocalDate start = ym.atDay(1);
+        LocalDate end = ym.atEndOfMonth();
+
+        // 查询当月支出交易（商户维度）
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.eq(Transaction::getType, 1)
+                .eq(Transaction::getIsConfirmed, true)
+                .ge(Transaction::getTransactionDate, start)
+                .le(Transaction::getTransactionDate, end)
+                .isNotNull(Transaction::getMerchantId);
+
+        List<Transaction> txs = transactionMapper.selectList(query);
+
+        // 按商户聚合
+        Map<Long, List<Transaction>> byMerchant = txs.stream()
+                .filter(t -> t.getMerchantId() != null)
+                .collect(Collectors.groupingBy(Transaction::getMerchantId));
+
+        BigDecimal grandTotal = sumBase(txs);
+        List<ReportVO.MerchantShareItem> items = new ArrayList<>();
+
+        for (Map.Entry<Long, List<Transaction>> entry : byMerchant.entrySet()) {
+            ReportVO.MerchantShareItem item = new ReportVO.MerchantShareItem();
+            item.setMerchantId(entry.getKey());
+
+            BigDecimal merchantTotal = sumBase(entry.getValue());
+            item.setAmount(merchantTotal);
+            item.setTransactionCount(entry.getValue().size());
+
+            if (grandTotal.compareTo(BigDecimal.ZERO) > 0) {
+                item.setPercentage(merchantTotal
+                        .divide(grandTotal, 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100))
+                        .setScale(1, RoundingMode.HALF_UP));
+            }
+
+            // 填充商户信息
+            Merchant merchant = merchantMapper.selectById(entry.getKey());
+            if (merchant != null) {
+                item.setMerchantName(merchant.getName());
+                item.setMerchantColor(merchant.getColor());
+                item.setCategoryId(merchant.getCategoryId());
+
+                // 填充分类信息
+                if (merchant.getCategoryId() != null) {
+                    Category cat = categoryMapper.selectById(merchant.getCategoryId());
+                    if (cat != null) {
+                        item.setCategoryName(cat.getName());
+                    }
+                }
+            }
+            items.add(item);
+        }
+
+        // 按金额排序，取前 10 个
+        items.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
+        vo.setMerchantShares(items.stream().limit(10).collect(Collectors.toList()));
+
         return vo;
     }
 

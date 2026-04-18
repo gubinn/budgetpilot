@@ -27,10 +27,15 @@
       <div ref="trendChartRef" style="width: 100%; height: 320px"></div>
     </n-card>
 
-    <n-grid :cols="2" :x-gap="16" :y-gap="16" style="margin-top: 16px">
+    <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 16px">
       <n-gi>
         <n-card title="分类占比" hoverable>
           <div ref="pieChartRef" style="width: 100%; height: 300px"></div>
+        </n-card>
+      </n-gi>
+      <n-gi>
+        <n-card title="商户消费" hoverable>
+          <div ref="merchantChartRef" style="width: 100%; height: 300px"></div>
         </n-card>
       </n-gi>
       <n-gi>
@@ -81,9 +86,10 @@ const compareData = ref(null)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
+const merchantChartRef = ref(null)
 const currencyChartRef = ref(null)
 
-let trendChart, pieChart, currencyChart
+let trendChart, pieChart, merchantChart, currencyChart
 
 const monthOptions = ref([])
 for (let i = -12; i <= 0; i++) {
@@ -93,10 +99,11 @@ for (let i = -12; i <= 0; i++) {
 
 async function loadAll() {
   try {
-    const [summary, trend, currencyDist] = await Promise.allSettled([
+    const [summary, trend, currencyDist, merchantDist] = await Promise.allSettled([
       reportApi.monthlySummary(selectedMonth.value),
       reportApi.trend(trendMonths.value),
-      reportApi.currencyDistribution(selectedMonth.value)
+      reportApi.currencyDistribution(selectedMonth.value),
+      reportApi.merchantDistribution(selectedMonth.value)
     ])
 
     // 月度总览
@@ -165,6 +172,25 @@ async function loadAll() {
       })
     }
 
+    // 商户消费分布
+    if (merchantDist.status === 'fulfilled' && merchantDist.value.data?.merchantShares?.length) {
+      if (merchantChart) merchantChart.dispose()
+      merchantChart = echarts.init(merchantChartRef.value)
+      merchantChart.setOption({
+        tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+        legend: { bottom: 0, type: 'scroll' },
+        series: [{
+          type: 'pie', radius: ['35%', '65%'], center: ['50%', '45%'],
+          itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+          label: { show: true, formatter: '{b}\n{d}%' },
+          data: merchantDist.value.data.merchantShares.map(m => ({
+            name: m.merchantName, value: Number(m.amount),
+            itemStyle: { color: m.merchantColor || '#3498db' }
+          }))
+        }]
+      })
+    }
+
     // 月度对比
     const prevMonth = dayjs(selectedMonth.value).subtract(1, 'month').format('YYYY-MM')
     try {
@@ -186,6 +212,7 @@ onMounted(() => {
   window.addEventListener('resize', () => {
     trendChart?.resize()
     pieChart?.resize()
+    merchantChart?.resize()
     currencyChart?.resize()
   })
 })

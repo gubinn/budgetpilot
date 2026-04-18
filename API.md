@@ -111,6 +111,9 @@
   "accountId": "账户ID (必填)",
   "targetAccountId": "目标账户ID (转账用)",
   "categoryId": "分类ID (必填)",
+  "merchantId": "商户ID (支出交易可选)",
+  "merchantName": "商户名称 (用于自动创建商户)",
+  "autoCreateMerchant": "是否自动创建商户 (默认 false)",
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认 (默认 true)",
@@ -155,6 +158,7 @@
   "accountId": "账户ID",
   "targetAccountId": "目标账户ID",
   "categoryId": "分类ID",
+  "merchantId": "商户ID",
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认",
@@ -237,7 +241,62 @@
 
 ---
 
-### 5. 报表管理 (ReportController)
+### 5. 商户管理 (MerchantController)
+
+**基础路径**: `/api/v1/merchants`
+
+| 方法 | 路径 | 功能 | 请求体 |
+|------|------|------|--------|
+| POST | `/api/v1/merchants` | 创建商户 | `MerchantCreateDTO` |
+| GET | `/api/v1/merchants` | 商户列表（分页） | `MerchantQueryDTO` |
+| GET | `/api/v1/merchants/{id}` | 商户详情 | - |
+| PUT | `/api/v1/merchants/{id}` | 更新商户 | `MerchantUpdateDTO` |
+| DELETE | `/api/v1/merchants/{id}` | 删除商户 | - |
+| GET | `/api/v1/merchants/search?keyword=xxx` | 模糊搜索商户 | `keyword` (query) |
+
+#### MerchantCreateDTO
+
+```json
+{
+  "name": "商户名称 (必填)",
+  "alias": "别名（用于模糊匹配，如：SBK,Starbucks）",
+  "categoryId": "关联分类ID",
+  "color": "颜色 (默认 #3498db)",
+  "icon": "图标标识",
+  "description": "商户描述",
+  "tags": ["标签列表"]
+}
+```
+
+#### MerchantUpdateDTO
+
+```json
+{
+  "name": "商户名称",
+  "alias": "别名",
+  "categoryId": "关联分类ID",
+  "color": "颜色",
+  "icon": "图标标识",
+  "description": "商户描述",
+  "tags": ["标签列表"],
+  "isActive": "是否启用"
+}
+```
+
+#### MerchantQueryDTO (Query Parameters)
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `keyword` | string | 名称/别名模糊搜索 |
+| `categoryId` | long | 分类ID筛选 |
+| `isActive` | boolean | 是否启用筛选 |
+| `page` | int | 页码 (默认 1) |
+| `size` | int | 每页条数 (默认 20) |
+| `sort` | string | 排序字段 (默认 usage_count,desc) |
+
+---
+
+### 6. 报表管理 (ReportController)
 
 **基础路径**: `/api/v1/reports`
 
@@ -251,6 +310,7 @@
 | GET | `/api/v1/reports/daily-heatmap` | 每日热力图 | `year` (必填) |
 | GET | `/api/v1/reports/budget-review` | 预算审查 | `month` (yyyy-MM, 必填) |
 | GET | `/api/v1/reports/currency-distribution` | 货币分布 | `month` (yyyy-MM, 必填) |
+| GET | `/api/v1/reports/merchant-distribution` | 商户消费分布 | `month` (yyyy-MM, 必填) |
 
 ---
 
@@ -422,6 +482,10 @@
 | 60001 | 币种不支持 |
 | 60002 | 汇率获取失败 |
 | 60003 | 汇率 API 限流 |
+| 70001 | 商户不存在 |
+| 70002 | 商户名称已存在 |
+| 70003 | 商户有关联交易记录，不可删除 |
+| 70004 | 系统预设商户不可修改/删除 |
 
 ---
 
@@ -497,6 +561,7 @@
 | SystemController | `src/main/java/uk/gubin/budgetpilot/controller/SystemController.java` |
 | RecurringRuleController | `src/main/java/uk/gubin/budgetpilot/controller/RecurringRuleController.java` |
 | AlertRuleController | `src/main/java/uk/gubin/budgetpilot/controller/AlertRuleController.java` |
+| MerchantController | `src/main/java/uk/gubin/budgetpilot/controller/MerchantController.java` |
 
 ### DTO 文件
 

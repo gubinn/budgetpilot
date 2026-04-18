@@ -21,6 +21,7 @@ public class Transaction extends BaseEntity {
     private Long accountId;
     private Long targetAccountId;
     private Long categoryId;
+    private Long merchantId;
     private LocalDate transactionDate;
     private LocalTime transactionTime;
     private String note;

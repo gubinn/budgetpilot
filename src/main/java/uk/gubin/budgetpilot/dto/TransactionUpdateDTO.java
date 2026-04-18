@@ -27,6 +27,7 @@ public class TransactionUpdateDTO {
     private Long accountId;
     private Long targetAccountId;
     private Long categoryId;
+    private Long merchantId;
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed;

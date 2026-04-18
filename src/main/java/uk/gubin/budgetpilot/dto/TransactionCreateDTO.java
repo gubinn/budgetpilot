@@ -36,6 +36,10 @@ public class TransactionCreateDTO {
     @NotNull(message = "分类不能为空")
     private Long categoryId;
 
+    private Long merchantId;
+    private String merchantName;
+    private Boolean autoCreateMerchant = true;
+
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed = true;

@@ -12,6 +12,7 @@ const routes = [
       { path: 'transactions/edit/:id', name: 'EditTransaction', component: () => import('@/views/TransactionForm.vue') },
       { path: 'accounts', name: 'Accounts', component: () => import('@/views/AccountList.vue') },
       { path: 'categories', name: 'Categories', component: () => import('@/views/CategoryList.vue') },
+      { path: 'merchants', name: 'Merchants', component: () => import('@/views/MerchantList.vue') },
       { path: 'budget', name: 'Budget', component: () => import('@/views/BudgetPage.vue') },
       { path: 'recurring', name: 'Recurring', component: () => import('@/views/RecurringPage.vue') },
       { path: 'alert-rules', name: 'AlertRules', component: () => import('@/views/AlertRulePage.vue') },

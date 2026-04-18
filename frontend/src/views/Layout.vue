@@ -56,7 +56,7 @@ import { ref, computed, h, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
-  BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline
+  BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline
 } from '@vicons/ionicons5'
 import { NIcon } from 'naive-ui'
 
@@ -78,6 +78,7 @@ const menuOptions = [
   { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
   { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
   { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
+  { label: '商户', key: 'Merchants', icon: renderIcon(BusinessOutline) },
   { label: '预算', key: 'Budget', icon: renderIcon(BarChartOutline) },
   { label: '周期', key: 'Recurring', icon: renderIcon(RepeatOutline) },
   { label: '预警', key: 'AlertRules', icon: renderIcon(AlertOutline) },
@@ -96,6 +97,7 @@ const pageTitle = computed(() => {
     EditTransaction: '编辑交易',
     Accounts: '账户管理',
     Categories: '分类管理',
+    Merchants: '商户管理',
     Budget: '预算管理',
     Recurring: '周期交易',
     AlertRules: '预警规则',

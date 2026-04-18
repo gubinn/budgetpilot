@@ -19,7 +19,7 @@
       </n-gi>
     </n-grid>
 
-    <n-grid :cols="2" :x-gap="16" :y-gap="16" style="margin-top: 16px">
+    <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 16px">
       <n-gi>
         <n-card title="预算进度" hoverable>
           <div v-if="budgetProgress" class="budget-list">
@@ -48,6 +48,11 @@
       <n-gi>
         <n-card title="分类占比" hoverable>
           <div ref="pieChartRef" style="width: 100%; height: 300px"></div>
+        </n-card>
+      </n-gi>
+      <n-gi>
+        <n-card title="商户消费" hoverable>
+          <div ref="merchantPieRef" style="width: 100%; height: 300px"></div>
         </n-card>
       </n-gi>
     </n-grid>
@@ -83,6 +88,7 @@ const summaryCards = ref([])
 const budgetProgress = ref([])
 const recentTransactions = ref([])
 const pieChartRef = ref(null)
+const merchantPieRef = ref(null)
 
 const columns = [
   { title: '日期', key: 'date', width: 110 },
@@ -107,11 +113,12 @@ onMounted(async () => {
   const month = now.format('YYYY-MM')
 
   try {
-    const [summaryRes, budgetRes, txRes, assetsRes] = await Promise.allSettled([
+    const [summaryRes, budgetRes, txRes, assetsRes, merchantRes] = await Promise.allSettled([
       reportApi.monthlySummary(month),
       budgetApi.progress(month),
       transactionApi.list({ page: 1, size: 10, sort: 'transaction_date,desc' }),
-      accountApi.totalAssets()
+      accountApi.totalAssets(),
+      reportApi.merchantDistribution(month)
     ])
 
     if (summaryRes.status === 'fulfilled' && summaryRes.value.data?.monthlySummary) {
@@ -161,6 +168,29 @@ onMounted(async () => {
 
     if (assetsRes.status === 'fulfilled' && assetsRes.value.data != null) {
       totalAssets.value = assetsRes.value.data
+    }
+
+    // 商户饼图
+    if (merchantRes.status === 'fulfilled' && merchantRes.value.data?.merchantShares?.length) {
+      if (merchantPieRef.value) {
+        const merchantChart = echarts.init(merchantPieRef.value)
+        merchantChart.setOption({
+          tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+          legend: { bottom: 0, type: 'scroll' },
+          series: [{
+            type: 'pie',
+            radius: ['40%', '70%'],
+            avoidLabelOverlap: false,
+            itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+            label: { show: true, formatter: '{b}\n{d}%' },
+            data: merchantRes.value.data.merchantShares.map(m => ({
+              name: m.merchantName,
+              value: Number(m.amount),
+              itemStyle: { color: m.merchantColor || '#3498db' }
+            }))
+          }]
+        })
+      }
     }
   } catch (e) {
     message.error('加载首页数据失败')

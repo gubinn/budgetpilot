@@ -53,7 +53,17 @@ export const reportApi = {
   accountSummary: () => api.get('/reports/account-summary'),
   dailyHeatmap: (year) => api.get('/reports/daily-heatmap', { params: { year } }),
   budgetReview: (month) => api.get('/reports/budget-review', { params: { month } }),
-  currencyDistribution: (month) => api.get('/reports/currency-distribution', { params: { month } })
+  currencyDistribution: (month) => api.get('/reports/currency-distribution', { params: { month } }),
+  merchantDistribution: (month) => api.get('/reports/merchant-distribution', { params: { month } })
+}
+
+export const merchantApi = {
+  list: (params) => api.get('/merchants', { params }),
+  get: (id) => api.get(`/merchants/${id}`),
+  create: (data) => api.post('/merchants', data),
+  update: (id, data) => api.put(`/merchants/${id}`, data),
+  remove: (id) => api.delete(`/merchants/${id}`),
+  search: (keyword, limit = 10) => api.get('/merchants/search', { params: { keyword, limit } })
 }
 
 export const systemApi = {

@@ -59,4 +59,9 @@ public class ReportController {
     public Result<ReportVO> currencyDistribution(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month) {
         return Result.ok(reportService.currencyDistribution(month));
     }
+
+    @GetMapping("/merchant-distribution")
+    public Result<ReportVO> merchantDistribution(@RequestParam @DateTimeFormat(pattern = "yyyy-MM") String month) {
+        return Result.ok(reportService.merchantDistribution(month));
+    }
 }

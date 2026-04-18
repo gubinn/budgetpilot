@@ -18,15 +18,19 @@ import uk.gubin.budgetpilot.dto.TransactionQueryDTO;
 import uk.gubin.budgetpilot.dto.TransactionUpdateDTO;
 import uk.gubin.budgetpilot.entity.Account;
 import uk.gubin.budgetpilot.entity.Category;
+import uk.gubin.budgetpilot.entity.Merchant;
 import uk.gubin.budgetpilot.entity.Transaction;
 import uk.gubin.budgetpilot.event.TransactionEvent;
 import uk.gubin.budgetpilot.mapper.AccountMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
+import uk.gubin.budgetpilot.mapper.MerchantMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 import uk.gubin.budgetpilot.service.AccountService;
 import uk.gubin.budgetpilot.service.BudgetService;
 import uk.gubin.budgetpilot.service.CurrencyRateService;
+import uk.gubin.budgetpilot.service.MerchantService;
 import uk.gubin.budgetpilot.service.TransactionService;
+import uk.gubin.budgetpilot.vo.MerchantVO;
 import uk.gubin.budgetpilot.vo.TransactionVO;
 
 import java.math.BigDecimal;
@@ -46,8 +50,10 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     private final CurrencyRateService currencyRateService;
     private final AccountMapper accountMapper;
     private final CategoryMapper categoryMapper;
+    private final MerchantMapper merchantMapper;
     private final AccountService accountService;
     private final BudgetService budgetService;
+    private final MerchantService merchantService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Override
@@ -76,9 +82,37 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
         }
 
+        // 商户处理逻辑
+        Long merchantId = dto.getMerchantId();
+        Merchant merchant = null;
+        if (merchantId == null && dto.getMerchantName() != null && !dto.getMerchantName().trim().isEmpty()) {
+            // 模糊匹配或自动创建商户
+            MerchantVO merchantVO = merchantService.findOrCreate(
+                    dto.getMerchantName().trim(),
+                    dto.getCategoryId(),
+                    Boolean.TRUE.equals(dto.getAutoCreateMerchant())
+            );
+            if (merchantVO != null) {
+                merchantId = merchantVO.getId();
+            }
+        }
+
+        // 验证商户是否存在
+        if (merchantId != null) {
+            merchant = merchantMapper.selectById(merchantId);
+            if (merchant == null || !merchant.getIsActive()) {
+                throw new BizException(ErrorCode.MERCHANT_NOT_FOUND);
+            }
+        }
+
         // 构建实体
-        Transaction entity = buildEntity(dto, account, category);
+        Transaction entity = buildEntity(dto, account, category, merchantId);
         baseMapper.insert(entity);
+
+        // 更新商户使用统计
+        if (merchantId != null && Boolean.TRUE.equals(entity.getIsConfirmed())) {
+            merchantService.incrementUsage(merchantId);
+        }
 
         // 只有确认的交易才更新账户余额
         if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
@@ -97,7 +131,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
 
         log.info("Created transaction: {} {} {} (confirmed={})", entity.getType(), entity.getAmount(), entity.getCurrency(), entity.getIsConfirmed());
-        return toVO(entity, account, category);
+        return toVO(entity, account, category, merchant);
     }
 
     @Override
@@ -141,9 +175,10 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 批量加载关联数据
         Map<Long, Account> accountMap = loadAccounts(result.getRecords());
         Map<Long, Category> categoryMap = loadCategories(result.getRecords());
+        Map<Long, Merchant> merchantMap = loadMerchants(result.getRecords());
 
         List<TransactionVO> items = result.getRecords().stream()
-                .map(t -> toVO(t, accountMap.get(t.getAccountId()), categoryMap.get(t.getCategoryId())))
+                .map(t -> toVO(t, accountMap.get(t.getAccountId()), categoryMap.get(t.getCategoryId()), merchantMap.get(t.getMerchantId())))
                 .collect(Collectors.toList());
 
         return PageResult.of(items, result.getTotal(), dto.getPage(), dto.getSize());
@@ -157,7 +192,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());
-        return toVO(entity, account, category);
+        Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
+        return toVO(entity, account, category, merchant);
     }
 
     @Override
@@ -185,6 +221,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getAccountId() != null) entity.setAccountId(dto.getAccountId());
         if (dto.getTargetAccountId() != null) entity.setTargetAccountId(dto.getTargetAccountId());
         if (dto.getCategoryId() != null) entity.setCategoryId(dto.getCategoryId());
+        if (dto.getMerchantId() != null) entity.setMerchantId(dto.getMerchantId());
         if (dto.getTags() != null) {
             try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception ignored) {}
         }
@@ -202,6 +239,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 重新计算本位币金额
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());
+        Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
         calculateBaseAmount(entity, account);
 
         baseMapper.updateById(entity);
@@ -227,7 +265,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
 
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.UPDATE));
-        return toVO(entity, account, category);
+        return toVO(entity, account, category, merchant);
     }
 
     @Override
@@ -270,7 +308,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = categoryMapper.selectById(entity.getCategoryId());
-        return toVO(entity, account, category);
+        Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
+        return toVO(entity, account, category, merchant);
     }
 
     @Override
@@ -314,7 +353,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
     // ==================== Internal Methods ====================
 
-    private Transaction buildEntity(TransactionCreateDTO dto, Account account, Category category) {
+    private Transaction buildEntity(TransactionCreateDTO dto, Account account, Category category, Long merchantId) {
         Transaction entity = new Transaction();
         entity.setType(dto.getType());
         entity.setAmount(dto.getAmount());
@@ -322,6 +361,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         entity.setAccountId(dto.getAccountId());
         entity.setTargetAccountId(dto.getTargetAccountId());
         entity.setCategoryId(dto.getCategoryId());
+        entity.setMerchantId(merchantId);
         entity.setTransactionDate(dto.getTransactionDate() != null ? dto.getTransactionDate() : LocalDate.now());
         entity.setTransactionTime(dto.getTransactionTime());
         entity.setNote(dto.getNote());
@@ -397,6 +437,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                 .collect(Collectors.toMap(Category::getId, c -> c));
     }
 
+    private Map<Long, Merchant> loadMerchants(List<Transaction> transactions) {
+        List<Long> ids = transactions.stream()
+                .map(Transaction::getMerchantId)
+                .filter(id -> id != null)
+                .distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        return merchantMapper.selectBatchIds(ids).stream()
+                .collect(Collectors.toMap(Merchant::getId, m -> m));
+    }
+
     private List<Long> getChildCategoryIds(Long parentId) {
         LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category> query = new LambdaQueryWrapper<>();
         query.eq(uk.gubin.budgetpilot.entity.Category::getParentId, parentId)
@@ -419,7 +469,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         };
     }
 
-    private TransactionVO toVO(Transaction entity, Account account, Category category) {
+    private TransactionVO toVO(Transaction entity, Account account, Category category, Merchant merchant) {
         TransactionVO vo = new TransactionVO();
         vo.setId(entity.getId());
         vo.setType(entity.getType());
@@ -430,6 +480,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         vo.setAccountId(entity.getAccountId());
         vo.setTargetAccountId(entity.getTargetAccountId());
         vo.setCategoryId(entity.getCategoryId());
+        vo.setMerchantId(entity.getMerchantId());
         vo.setTransactionDate(entity.getTransactionDate());
         vo.setTransactionTime(entity.getTransactionTime());
         vo.setNote(entity.getNote());
@@ -450,6 +501,18 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             vo.setCategoryName(category.getName());
             vo.setCategoryIcon(category.getIcon());
             vo.setCategoryColor(category.getColor());
+        }
+
+        // 商户信息
+        if (merchant != null) {
+            vo.setMerchantName(merchant.getName());
+            vo.setMerchantColor(merchant.getColor());
+        } else if (entity.getMerchantId() != null) {
+            Merchant m = merchantMapper.selectById(entity.getMerchantId());
+            if (m != null) {
+                vo.setMerchantName(m.getName());
+                vo.setMerchantColor(m.getColor());
+            }
         }
 
         if (entity.getTags() != null) {

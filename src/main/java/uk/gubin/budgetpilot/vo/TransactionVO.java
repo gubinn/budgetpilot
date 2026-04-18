@@ -26,6 +26,9 @@ public class TransactionVO {
     private String categoryName;
     private String categoryIcon;
     private String categoryColor;
+    private Long merchantId;
+    private String merchantName;
+    private String merchantColor;
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate transactionDate;
     @JsonFormat(pattern = "HH:mm:ss")

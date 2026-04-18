@@ -55,6 +55,7 @@ CREATE TABLE t_transaction (
     account_id          BIGINT          NOT NULL COMMENT '所属账户',
     target_account_id   BIGINT          DEFAULT NULL COMMENT '转账目标账户',
     category_id         BIGINT          NOT NULL COMMENT '分类ID',
+    merchant_id         BIGINT          DEFAULT NULL COMMENT '商户ID',
     transaction_date    DATE            NOT NULL COMMENT '交易日期',
     transaction_time    TIME            DEFAULT NULL COMMENT '交易时间',
     note                VARCHAR(200)    DEFAULT NULL COMMENT '备注',
@@ -70,6 +71,7 @@ CREATE TABLE t_transaction (
     INDEX idx_date (transaction_date),
     INDEX idx_account (account_id),
     INDEX idx_category (category_id),
+    INDEX idx_merchant (merchant_id),
     INDEX idx_type_date (type, transaction_date),
     INDEX idx_confirmed (is_confirmed)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易记录表';
@@ -163,6 +165,28 @@ CREATE TABLE t_alert_log (
     INDEX idx_unread (is_read, triggered_at),
     INDEX idx_rule (rule_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='预警日志表';
+
+-- 商户表
+CREATE TABLE t_merchant (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    name            VARCHAR(100)    NOT NULL COMMENT '商户名称',
+    alias           VARCHAR(200)    DEFAULT NULL COMMENT '别名（用于模糊匹配）',
+    category_id     BIGINT          DEFAULT NULL COMMENT '关联分类ID',
+    icon            VARCHAR(50)     DEFAULT NULL COMMENT '图标标识',
+    color           CHAR(7)         DEFAULT NULL COMMENT '#RRGGBB',
+    description     VARCHAR(200)    DEFAULT NULL COMMENT '商户描述',
+    tags            JSON            DEFAULT NULL COMMENT '标签数组',
+    usage_count     INT             DEFAULT 0 COMMENT '使用次数',
+    last_used_at    DATE            DEFAULT NULL COMMENT '最近使用日期',
+    is_active       TINYINT(1)      DEFAULT 1 COMMENT '是否启用',
+    is_system       TINYINT(1)      DEFAULT 0 COMMENT '系统预设商户',
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_name (name),
+    INDEX idx_category (category_id),
+    INDEX idx_usage (usage_count DESC),
+    INDEX idx_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商户表';
 
 -- 系统配置表
 CREATE TABLE t_config (

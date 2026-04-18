@@ -25,6 +25,8 @@ public class ReportVO {
     private List<HeatmapItem> heatmap;
     /** 币种分布 */
     private List<CurrencyItem> currencyDistribution;
+    /** 商户消费占比 */
+    private List<MerchantShareItem> merchantShares;
 
     @Data
     public static class MonthlySummary {
@@ -34,6 +36,8 @@ public class ReportVO {
         private BigDecimal balance;
         private BigDecimal avgDailyExpense;
         private List<CategoryShareItem> categoryShares;
+        /** 商户消费占比（月度总览中包含） */
+        private List<MerchantShareItem> merchantShares;
 
         @Data
         public static class CategoryShareItem {
@@ -43,6 +47,18 @@ public class ReportVO {
             private BigDecimal amount;
             private BigDecimal percentage;
         }
+    }
+
+    @Data
+    public static class MerchantShareItem {
+        private Long merchantId;
+        private String merchantName;
+        private String merchantColor;
+        private Long categoryId;
+        private String categoryName;
+        private BigDecimal amount;
+        private BigDecimal percentage;
+        private Integer transactionCount;
     }
 
     @Data

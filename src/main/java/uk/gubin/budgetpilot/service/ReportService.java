@@ -13,4 +13,5 @@ public interface ReportService {
     ReportVO dailyHeatmap(int year);
     ReportVO budgetReview(String month);
     ReportVO currencyDistribution(String month);
+    ReportVO merchantDistribution(String month);
 }

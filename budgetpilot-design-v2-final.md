@@ -130,6 +130,7 @@ budgetpilot/
 │   │   ├── Account.java
 │   │   ├── Transaction.java
 │   │   ├── Category.java
+│   │   ├── Merchant.java
 │   │   ├── CurrencyRate.java
 │   │   ├── Budget.java         # 注意：yearMonth字段需用@TableField("`year_month`")
 │   │   ├── BudgetItem.java
@@ -144,6 +145,9 @@ budgetpilot/
 │   │   ├── TransactionUpdateDTO.java
 │   │   ├── TransactionQueryDTO.java
 │   │   ├── CategoryCreateDTO.java
+│   │   ├── MerchantCreateDTO.java
+│   │   ├── MerchantUpdateDTO.java
+│   │   ├── MerchantQueryDTO.java
 │   │   ├── BudgetCreateDTO.java
 │   │   ├── BudgetUpdateDTO.java
 │   │   ├── RecurringRuleCreateDTO.java
@@ -154,6 +158,7 @@ budgetpilot/
 │   │   ├── AccountVO.java
 │   │   ├── TransactionVO.java
 │   │   ├── CategoryVO.java
+│   │   ├── MerchantVO.java
 │   │   ├── BudgetProgressVO.java
 │   │   ├── RecurringRuleVO.java
 │   │   ├── AlertRuleVO.java
@@ -184,11 +189,14 @@ budgetpilot/
                     currency_rate
                          │
 account ──1:N── transaction ──N:1── category
-   │                 │
-   └── currency      │
-                     │
+   │                 │                 │
+   │                 │                 │
+   └── currency      │                 │
+                     │                 │
 budget ──1:N── budget_item ──1:1── category
-                     
+
+transaction ──N:1── merchant
+
 alert_rule ──1:N── alert_log ──→ Telegram Bot
 
 recurring_rule ──1:N── transaction (auto-generated)
@@ -434,6 +442,7 @@ CREATE TABLE t_transaction (
     account_id          BIGINT          NOT NULL COMMENT '所属账户',
     target_account_id   BIGINT          DEFAULT NULL COMMENT '转账目标账户',
     category_id         BIGINT          NOT NULL COMMENT '分类ID',
+    merchant_id         BIGINT          DEFAULT NULL COMMENT '商户ID',
     transaction_date    DATE            NOT NULL COMMENT '交易日期',
     transaction_time    TIME            DEFAULT NULL COMMENT '交易时间',
     note                VARCHAR(200)    DEFAULT NULL COMMENT '备注',
@@ -449,6 +458,7 @@ CREATE TABLE t_transaction (
     INDEX idx_date (transaction_date),
     INDEX idx_account (account_id),
     INDEX idx_category (category_id),
+    INDEX idx_merchant (merchant_id),
     INDEX idx_type_date (type, transaction_date),
     INDEX idx_confirmed (is_confirmed)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易记录表';
@@ -478,7 +488,79 @@ CREATE TABLE t_transaction (
 - `ext_fields` 典型用途：商户、地点、参与人、项目编号、是否可报销。
 - `metadata` 典型用途：导入来源、导入批次号、设备信息、汇率数据来源。
 
-#### 3.3.4 汇率表 `t_currency_rate`
+#### 3.3.4 商户表 `t_merchant`
+
+管理常用消费商户，支持模糊匹配、关联分类、消费统计。
+
+```sql
+CREATE TABLE t_merchant (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    name            VARCHAR(100)    NOT NULL COMMENT '商户名称',
+    alias           VARCHAR(200)    DEFAULT NULL COMMENT '别名（用于模糊匹配）',
+    category_id     BIGINT          DEFAULT NULL COMMENT '关联分类ID',
+    icon            VARCHAR(50)     DEFAULT NULL COMMENT '图标标识',
+    color           CHAR(7)         DEFAULT NULL COMMENT '#RRGGBB',
+    description     VARCHAR(200)    DEFAULT NULL COMMENT '商户描述',
+    tags            JSON            DEFAULT NULL COMMENT '标签数组',
+    usage_count     INT             DEFAULT 0 COMMENT '使用次数',
+    last_used_at    DATE            DEFAULT NULL COMMENT '最近使用日期',
+    is_active       TINYINT(1)      DEFAULT 1 COMMENT '是否启用',
+    is_system       TINYINT(1)      DEFAULT 0 COMMENT '系统预设商户',
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_name (name),
+    INDEX idx_category (category_id),
+    INDEX idx_usage (usage_count DESC),
+    INDEX idx_active (is_active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商户表';
+```
+
+**设计要点**：
+
+- `name` 商户名称，唯一索引，防止重复创建。
+- `alias` 别名字段，用于模糊匹配。如"星巴克"可设置别名"SBK,Starbucks"。
+- `category_id` 关联默认分类，新建交易时自动带入。
+- `usage_count` 使用次数，按此字段排序推荐高频商户。
+- `last_used_at` 最近使用日期，用于推荐排序。
+- `is_system` 系统预设商户，不可删除修改。
+
+**商户匹配逻辑**：
+
+```
+用户在交易表单输入商户名 → 触发模糊搜索（300ms 防抖）
+    │
+    ├─ 后端搜索: WHERE name LIKE '%keyword%' OR alias LIKE '%keyword%'
+    │              ORDER BY usage_count DESC LIMIT 10
+    │
+    ├─ 有匹配结果 → 显示商户列表，用户选择已有商户
+    │
+    └─ 无匹配结果 → 显示"创建新商户"选项
+                   用户提交交易时设置 autoCreateMerchant=true
+                   后端自动创建新商户并关联
+```
+
+**商户统计报表**：
+
+商户维度消费分布，用于首页和报表页展示：
+
+```json
+{
+  "merchantShares": [
+    {
+      "merchantId": 1,
+      "merchantName": "星巴克",
+      "merchantColor": "#00704A",
+      "categoryId": 1,
+      "categoryName": "餐饮",
+      "amount": 350.00,
+      "percentage": 15.5,
+      "transactionCount": 10
+    }
+  ]
+}
+```
+
+#### 3.3.6 汇率表 `t_currency_rate`
 
 每日缓存汇率快照，避免频繁调用外部 API。
 
@@ -513,7 +595,7 @@ CREATE TABLE t_currency_rate (
 4. 降级策略   → 取最近一天的汇率（最多回溯 3 天），仍无则拒绝创建并提示
 ```
 
-#### 3.3.5 周期性交易规则表 `t_recurring_rule`
+#### 3.3.7 周期性交易规则表 `t_recurring_rule`
 
 自动生成水电费、房贷、订阅服务等固定支出。
 
@@ -770,7 +852,7 @@ POST /api/v1/transactions/{id}/confirm
 3. 预算进度更新
 4. 预警规则检查
 
-#### 3.3.6 预算表 `t_budget`
+#### 3.3.8 预算表 `t_budget`
 
 月度预算，统一以本位币 CNY 计价。月度起始日=每月1日。
 
@@ -787,7 +869,7 @@ CREATE TABLE t_budget (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='月度预算表';
 ```
 
-#### 3.3.7 预算明细表 `t_budget_item`
+#### 3.3.9 预算明细表 `t_budget_item`
 
 将总预算拆解到各一级分类。
 
@@ -811,7 +893,7 @@ CREATE TABLE t_budget_item (
 - 预算按一级分类粒度管控，子分类消费自动归集到父类。
 - 预算和已消费均以 CNY 计，多币种交易通过 `amount_base` 统一口径。
 
-#### 3.3.8 预警规则表 `t_alert_rule`
+#### 3.3.10 预警规则表 `t_alert_rule`
 
 ```sql
 CREATE TABLE t_alert_rule (
@@ -1019,7 +1101,7 @@ _2026-04-18_
 - 手动创建的交易标记为待确认
 - 系统提醒用户及时核对账目
 
-#### 3.3.9 预警日志表 `t_alert_log`
+#### 3.3.11 预警日志表 `t_alert_log`
 
 ```sql
 CREATE TABLE t_alert_log (
@@ -1037,7 +1119,7 @@ CREATE TABLE t_alert_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='预警日志表';
 ```
 
-#### 3.3.10 系统配置表 `t_config`
+#### 3.3.12 系统配置表 `t_config`
 
 ```sql
 CREATE TABLE t_config (
@@ -1644,7 +1726,18 @@ public class TelegramNotifyService {
 | PUT | `/api/v1/categories/{id}` | 更新分类 | 200 |
 | DELETE | `/api/v1/categories/{id}` | 逻辑删除 | 204 |
 
-### 6.4 预算 `/api/v1/budgets`
+### 6.4 商户 `/api/v1/merchants`
+
+| 方法 | 路径 | 说明 | 状态码 |
+|------|------|------|--------|
+| POST | `/api/v1/merchants` | 创建商户 | 201 |
+| GET | `/api/v1/merchants` | 商户列表（分页） | 200 |
+| GET | `/api/v1/merchants/{id}` | 商户详情 | 200 |
+| PUT | `/api/v1/merchants/{id}` | 更新商户 | 200 |
+| DELETE | `/api/v1/merchants/{id}` | 删除商户 | 204 |
+| GET | `/api/v1/merchants/search?keyword=xxx` | 模糊搜索商户 | 200 |
+
+### 6.5 预算 `/api/v1/budgets`
 
 | 方法 | 路径 | 说明 | 状态码 |
 |------|------|------|--------|
@@ -1654,7 +1747,7 @@ public class TelegramNotifyService {
 | POST | `/api/v1/budgets/{yearMonth}/copy-from/{source}` | 复制预算 | 201 |
 | GET | `/api/v1/budgets/{yearMonth}/progress` | 执行进度 | 200 |
 
-### 6.5 报表 `/api/v1/reports`
+### 6.6 报表 `/api/v1/reports`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1666,8 +1759,9 @@ public class TelegramNotifyService {
 | GET | `/api/v1/reports/daily-heatmap` | 日历热力图 |
 | GET | `/api/v1/reports/budget-review` | 预算执行报告 |
 | GET | `/api/v1/reports/currency-distribution` | 币种分布 |
+| GET | `/api/v1/reports/merchant-distribution` | 商户消费分布 |
 
-### 6.6 周期规则 `/api/v1/recurring-rules`
+### 6.7 周期规则 `/api/v1/recurring-rules`
 
 | 方法 | 路径 | 说明 | 状态码 |
 |------|------|------|--------|
@@ -1679,7 +1773,7 @@ public class TelegramNotifyService {
 | POST | `/api/v1/recurring-rules/{id}/toggle` | 启用/停用 | 200 |
 | POST | `/api/v1/recurring-rules/{id}/execute` | 立即执行 | 200 |
 
-### 6.7 预警规则 `/api/v1/alert-rules`
+### 6.8 预警规则 `/api/v1/alert-rules`
 
 | 方法 | 路径 | 说明 | 状态码 |
 |------|------|------|--------|
@@ -1690,7 +1784,7 @@ public class TelegramNotifyService {
 | DELETE | `/api/v1/alert-rules/{id}` | 删除规则 | 200 |
 | POST | `/api/v1/alert-rules/{id}/toggle` | 启用/停用 | 200 |
 
-### 6.8 系统 `/api/v1/system`
+### 6.9 系统 `/api/v1/system`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -1703,7 +1797,7 @@ public class TelegramNotifyService {
 | PUT | `/api/v1/system/alerts/{id}/read` | 标记已读 |
 | POST | `/api/v1/system/telegram/test` | Telegram 推送测试 |
 
-### 6.9 统一响应结构
+### 6.10 统一响应结构
 
 ```json
 // 成功
@@ -1736,7 +1830,7 @@ public class TelegramNotifyService {
 }
 ```
 
-### 6.8 错误码体系
+### 6.11 错误码体系
 
 | 范围 | 模块 | 示例 |
 |------|------|------|
@@ -1746,6 +1840,7 @@ public class TelegramNotifyService {
 | 40001-40099 | 分类 | 不存在、系统分类不可改、有子分类、有交易引用 |
 | 50001-50099 | 预算 | 不存在、已锁定、月份重复 |
 | 60001-60099 | 汇率 | 币种不支持、汇率获取失败、API 限流 |
+| 70001-70099 | 商户 | 不存在、名称已存在、有交易引用、系统商户不可改 |
 
 ---
 
