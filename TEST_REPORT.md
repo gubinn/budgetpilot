@@ -1,6 +1,6 @@
 # BudgetPilot 系统测试报告
 
-测试日期：2026-04-18（商户功能更新）
+测试日期：2026-04-18（扩展字段与日期时间优化更新）
 
 ## 一、后端API测试结果 ✅ 全部通过
 
@@ -19,7 +19,7 @@
 
 ---
 
-## 二、前端E2E测试结果 ✅ 全部通过
+## 二、前端E2E测试结果 ✅ 全部通过 (19/19)
 
 | 测试项 | 结果 | 备注 |
 |--------|------|------|
@@ -29,7 +29,7 @@
 | D04: 最近交易 | ✅ | 交易列表显示 |
 | A01: 账户列表 | ✅ | 页面加载正常 |
 | T01: 进入交易创建 | ✅ | URL正确(/add) |
-| T07/T09: 类型切换 | ✅ | **核心bug已修复验证** |
+| T07/T09: 类型切换 | ✅ | 核心bug已修复验证 |
 | T10: 分类字段 | ✅ | 表单字段可见 |
 | T16: 转账目标账户 | ✅ | 类型切换后字段显示 |
 | C01: 分类页面 | ✅ | 页面加载正常 |
@@ -40,28 +40,30 @@
 | S01: 设置页面 | ✅ | 页面加载正常 |
 | L04: 小屏幕适配 | ✅ | 响应式正常 |
 | AL01: 告警通知 | ✅ | 路由正确 |
+| **EF01: 扩展字段添加** | ✅ | 新增测试 |
+| **EF02: 日期时间选择器** | ✅ | 新增测试 |
 
 ---
 
-## 三、修复内容汇总
+## 三、修复与优化内容汇总
+
+### 前端修复
+- **扩展字段编辑器**：从原始JSON textarea改为 `n-dynamic-input` 动态键值对编辑器
+  - 使用 `:on-create="() => ({ key: '', value: '' })"` 确保新项正确初始化
+  - 列表页以 NTag 标签形式展示 `key:value`
+- **日期时间选择器**：合并日期+时间为单个 `n-date-picker type="datetime"`
+  - 解决 `NTimePicker` 未从 naive-ui 导出的问题
+  - 表单数据使用 `YYYY-MM-DDTHH:mm:ss` 格式，提交时自动拆分
+- **交易类型切换验证**：添加 `type: 'number'` 到验证规则
 
 ### 后端修复
-- 周期交易toggle/execute API：确认API正常，之前测试失败是因规则ID错误
+- **merchantMap NPE**：修复 `ImmutableCollections$MapN.get(null)` 导致的500错误
+  - `t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null`
 - 交易UpdateDTO增加merchantName和autoCreateMerchant字段，支持编辑时补填商户
 - TransactionServiceImpl.update()增加商户findOrCreate逻辑
 - 周期规则Entity/DTO/VO增加merchantId字段
 - RecurringRuleController增加toVO()方法填充商户名称
 - RecurringRuleServiceImpl.create/update/generateTransaction传递merchantId
-
-### 前端修复
-- 交易类型切换验证：添加`type: 'number'`到验证规则（TransactionForm.vue:111）
-- 交易列表新增商户列（分类和金额之间）
-- 交易编辑表单商户字段对支出和收入类型均可见（v-if="form.type !== 3"）
-- 周期交易表单新增商户选择器（仅支出类型，仅已有商户）
-- E2E测试定位器优化：
-  - 使用`page.getByRole('menu')`限定菜单范围避免多元素匹配
-  - 使用`.n-card-header__main`定位器检查页面标题
-  - 所有17个测试现在稳定通过
 
 ### 数据库变更
 - `t_recurring_rule`表新增`merchant_id BIGINT`字段和`idx_merchant`索引
@@ -92,18 +94,38 @@
 | 规则不自动创建商户 | ✅ | 只能选择已有商户 |
 | 编辑规则更换商户 | ✅ | 商户更新成功 |
 
+### 4.3 扩展字段功能
+
+| 测试项 | 结果 | 备注 |
+|--------|------|------|
+| 扩展字段标签显示 | ✅ | 表单显示"扩展字段"label |
+| 点击添加按钮 | ✅ | 出现键/值输入框 |
+| 填写键值对 | ✅ | 输入框正确显示填写内容 |
+| 添加第二对 | ✅ | 显示两组输入框 |
+| 列表页展示 | ✅ | 以NTag标签展示 key:value |
+| 编辑时回显 | ✅ | 从后端加载后正确显示已保存键值 |
+
+### 4.4 日期时间功能
+
+| 测试项 | 结果 | 备注 |
+|--------|------|------|
+| 日期时间选择器显示 | ✅ | 单个datetime picker |
+| 选择日期时间 | ✅ | 表单字段正确更新 |
+| 提交时拆分 | ✅ | 自动拆分为date和time字段 |
+| 编辑时合并 | ✅ | date+time合并显示 |
+
 ---
 
 ## 五、测试文件位置
 
-- 测试案例文档：`/opt/budgetpilot/TEST_CASES.md`
-- 测试报告：`/opt/budgetpilot/TEST_REPORT.md`
-- 前端E2E测试：`/opt/budgetpilot/frontend/e2e-tests.spec.cjs`
-- Playwright配置：`/opt/budgetpilot/frontend/playwright.config.cjs`
+- 测试案例文档：`TEST_CASES.md`
+- 测试报告：`TEST_REPORT.md`
+- 前端E2E测试：`frontend/e2e-tests.spec.cjs`（19个测试）
+- Playwright配置：`frontend/playwright.config.cjs`
 
 ---
 
-## 五、运行测试命令
+## 六、运行测试命令
 
 ```bash
 # 后端API测试
@@ -113,6 +135,6 @@ curl http://localhost:6060/api/v1/recurring-rules/3/toggle
 curl http://localhost:6060/api/v1/recurring-rules/3/execute
 
 # 前端E2E测试
-cd /opt/budgetpilot/frontend
-npx playwright test e2e-tests.spec.cjs --reporter=list
+cd frontend
+npx playwright test e2e-tests.spec.cjs --config=playwright.config.cjs --reporter=list
 ```

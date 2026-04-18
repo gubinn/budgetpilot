@@ -235,4 +235,63 @@ test.describe('BudgetPilot 前端测试', () => {
     // 验证URL正确
     await expect(page).toHaveURL(/alerts/);
   });
+
+  // =====================
+  // 十三、扩展字段测试
+  // =====================
+  test('EF01: 扩展字段添加功能', async ({ page }) => {
+    await page.goto(BASE_URL);
+    await page.waitForLoadState('networkidle');
+
+    await page.getByRole('button', { name: /记一笔/ }).click();
+    await page.waitForTimeout(1000);
+
+    await expect(page.locator('.n-card-header__main').filter({ hasText: '新增交易' })).toBeVisible();
+
+    await expect(page.locator('.n-form-item-label').filter({ hasText: '扩展字段' })).toBeVisible();
+
+    // 点击添加按钮
+    await page.locator('.n-dynamic-input button').filter({ hasText: '添加' }).click();
+    await page.waitForTimeout(300);
+
+    // 检查键值输入框出现
+    const keyInput = page.locator('input[placeholder="键"]').first();
+    const valueInput = page.locator('input[placeholder="值"]').first();
+    await expect(keyInput).toBeVisible();
+    await expect(valueInput).toBeVisible();
+
+    // 填写值
+    await keyInput.fill('测试键');
+    await valueInput.fill('测试值');
+
+    // 验证值已设置
+    await expect(keyInput).toHaveValue('测试键');
+    await expect(valueInput).toHaveValue('测试值');
+
+    // 添加第二对 - 按钮变成图标按钮，使用最后一个按钮
+    const addBtns = page.locator('.n-dynamic-input button');
+    await addBtns.last().click();
+    await page.waitForTimeout(300);
+    const keyInputs = page.locator('input[placeholder="键"]');
+    const valueInputs = page.locator('input[placeholder="值"]');
+    await expect(keyInputs).toHaveCount(2);
+    await expect(valueInputs).toHaveCount(2);
+  });
+
+  test('EF02: 日期时间选择器', async ({ page }) => {
+    await page.goto(BASE_URL);
+    await page.waitForLoadState('networkidle');
+
+    await page.getByRole('button', { name: /记一笔/ }).click();
+    await page.waitForTimeout(1000);
+
+    await expect(page.locator('.n-card-header__main').filter({ hasText: '新增交易' })).toBeVisible();
+
+    // 检查日期时间字段存在
+    await expect(page.locator('.n-form-item-label').filter({ hasText: '日期时间' })).toBeVisible();
+
+    // 检查日期输入框存在
+    const dateInput = page.locator('input[placeholder*="日期时间"]');
+    await expect(dateInput.first()).toBeVisible();
+  });
 });
