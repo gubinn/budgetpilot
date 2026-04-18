@@ -178,7 +178,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         Map<Long, Merchant> merchantMap = loadMerchants(result.getRecords());
 
         List<TransactionVO> items = result.getRecords().stream()
-                .map(t -> toVO(t, accountMap.get(t.getAccountId()), categoryMap.get(t.getCategoryId()), merchantMap.get(t.getMerchantId())))
+                .map(t -> toVO(t, accountMap.get(t.getAccountId()), categoryMap.get(t.getCategoryId()),
+                        t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null))
                 .collect(Collectors.toList());
 
         return PageResult.of(items, result.getTotal(), dto.getPage(), dto.getSize());
