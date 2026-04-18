@@ -12,6 +12,7 @@ USE budgetpilot;
 -- --------------------------------------------
 CREATE TABLE IF NOT EXISTS t_merchant (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(100)    NOT NULL COMMENT '商户名称',
     alias           VARCHAR(200)    DEFAULT NULL COMMENT '别名（用于模糊匹配）',
     category_id     BIGINT          DEFAULT NULL COMMENT '关联分类ID',
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS t_merchant (
     is_system       TINYINT(1)      DEFAULT 0 COMMENT '系统预设商户',
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE INDEX uk_name (name),
+    UNIQUE INDEX uk_user_name (user_id, name),
     INDEX idx_category (category_id),
     INDEX idx_usage (usage_count DESC),
     INDEX idx_active (is_active)

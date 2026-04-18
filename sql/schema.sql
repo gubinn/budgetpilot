@@ -52,7 +52,7 @@ CREATE TABLE t_account (
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user (user_id),
-    INDEX idx_name (name),
+    UNIQUE INDEX uk_user_name (user_id, name),
     INDEX idx_type (type),
     INDEX idx_active_sort (is_active, sort_order)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='账户表';
@@ -223,7 +223,7 @@ CREATE TABLE t_merchant (
     is_system       TINYINT(1)      DEFAULT 0 COMMENT '系统预设商户',
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE INDEX uk_name (name),
+    UNIQUE INDEX uk_user_name (user_id, name),
     INDEX idx_category (category_id),
     INDEX idx_usage (usage_count DESC),
     INDEX idx_active (is_active)
