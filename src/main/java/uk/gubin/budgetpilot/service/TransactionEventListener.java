@@ -173,39 +173,76 @@ public class TransactionEventListener {
 
         switch (rule.getType()) {
             case 1 -> {
-                title = "\\ud83d\\udcca *预算预警*";
+                title = "📊 预算预警";
                 Long topId = getTopCategoryId(tx.getCategoryId());
                 var item = topId != null ? budgetService.getItem(topId, yearMonth) : null;
                 if (item != null && item.getAmount().compareTo(BigDecimal.ZERO) > 0) {
                     BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, BigDecimal.ROUND_HALF_UP)
                             .multiply(BigDecimal.valueOf(100)).setScale(0, BigDecimal.ROUND_HALF_UP);
-                    content = String.format("预算已消费 *%s%%*\\n本月预算：¥%s\\n已消费：¥%s\\n剩余：¥%s",
+                    content = String.format("""
+                            📊 预算预警
+
+                            • 进度: %s%%
+                            • 本月预算: ¥%s
+                            • 已消费: ¥%s
+                            • 剩余: ¥%s
+
+                            ━━━━━━━━━━━━━━
+                            _%s_
+                            """,
                             pct, item.getAmount().toPlainString(),
                             item.getSpent().toPlainString(),
-                            item.getAmount().subtract(item.getSpent()).toPlainString());
+                            item.getAmount().subtract(item.getSpent()).toPlainString(),
+                            LocalDate.now());
                 } else {
-                    content = "预算阈值预警已触发";
+                    content = "预算阈值预警已触发\n\n━━━━━━━━━━━━━\n_" + LocalDate.now() + "_";
                 }
             }
             case 2 -> {
-                title = "\\ud83d\\udcb0 *大额支出提醒*";
-                content = String.format("金额：¥%s\\n备注：%s",
+                title = "💰 大额支出提醒";
+                content = String.format("""
+                        💰 大额支出提醒
+
+                        • 金额: ¥%s
+                        • 分类: %s
+                        • 备注: %s
+
+                        ━━━━━━━━━━━━━━
+                        _%s_
+                        """,
                         tx.getAmountBase().toPlainString(),
-                        tx.getNote() != null ? tx.getNote() : "无");
+                        getCategoryName(tx.getCategoryId()),
+                        tx.getNote() != null ? tx.getNote() : "无",
+                        LocalDate.now());
             }
             case 3 -> {
-                title = "\\u26a0\\ufe0f *日消费上限*";
+                title = "⚠️ 日消费上限";
                 var spent = transactionService.getDailySpent(tx.getTransactionDate());
-                content = String.format("今日消费已超过设定上限\\n当前合计：¥%s", spent.get("totalSpent"));
+                content = String.format("""
+                        ⚠️ 日消费上限预警
+
+                        • 今日消费: ¥%s
+                        • 已超过设定的上限
+
+                        ━━━━━━━━━━━━━━
+                        _%s_
+                        """,
+                        spent.get("totalSpent"),
+                        LocalDate.now());
             }
             default -> {
-                title = "\\ud83d\\udd14 *预警提醒*";
-                content = rule.getName() + " 已触发";
+                title = "🔔 预警提醒";
+                content = rule.getName() + " 已触发\n\n━━━━━━━━━━━━━\n_" + LocalDate.now() + "_";
             }
         }
 
-        content += "\\n\\n_" + LocalDate.now() + "_";
         alertLogService.logAndNotify(rule.getId(), rule.getType(), title, content, rule.getNotifyChannel());
+    }
+
+    private String getCategoryName(Long categoryId) {
+        if (categoryId == null) return "未分类";
+        Category cat = categoryMapper.selectById(categoryId);
+        return cat != null ? cat.getName() : "未分类";
     }
 
     private Long getTopCategoryId(Long categoryId) {

@@ -8,6 +8,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -61,9 +62,9 @@ public class TelegramNotifyService {
     /**
      * 转义 MarkdownV2 特殊字符
      * MarkdownV2 需要转义: _ * [ ] ( ) ~ > # + - = | { } . !
+     * 注意: 换行符不需要转义，但需要在段落间保留
      */
     private String escapeMarkdownV2(String text) {
-        // 先对已转义的反斜杠保护，避免二次转义
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
@@ -74,6 +75,20 @@ public class TelegramNotifyService {
                 sb.append(c);
             }
         }
+        return sb.toString();
+    }
+
+    /**
+     * 格式化消息内容为美观的 Telegram 消息
+     */
+    public String formatMessage(String emoji, String title, List<String> lines) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(emoji).append(" ").append(title).append("\n\n");
+        for (String line : lines) {
+            sb.append("• ").append(line).append("\n");
+        }
+        sb.append("\n━━━━━━━━━━━━━\n");
+        sb.append("_").append(java.time.LocalDate.now()).append("_");
         return sb.toString();
     }
 
@@ -98,8 +113,19 @@ public class TelegramNotifyService {
      * 测试推送
      */
     public boolean testSend() {
-        String content = "\\ud83d\\udd27 *BudgetPilot 测试*\n\nTelegram 推送配置成功！\n\n_" +
-                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")) + "_";
+        String content = String.format("""
+                🔧 BudgetPilot 测试
+
+                Telegram 推送配置成功！
+
+                • 当前时间: %s
+                • 服务状态: 正常
+
+                ━━━━━━━━━━━━━━
+                _%s_
+                """,
+                java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
+                java.time.LocalDate.now());
         return send("BudgetPilot Test", content);
     }
 

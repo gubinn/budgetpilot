@@ -84,13 +84,25 @@ public class ScheduledTasks {
             long daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, paymentDate);
 
             if (daysUntil >= 0 && daysUntil <= advanceDays) {
-                String title = "\\ud83d\\udcb3 *信用卡还款提醒*";
-                String content = String.format("%s 将于 *%d月%d日* 到期还款\\n信用额度：\\u00a5%s\\n当前余额：\\u00a5%s\\n\\n_距还款日还有 %d 天_",
+                String title = "💳 信用卡还款提醒";
+                String content = String.format("""
+                        💳 信用卡还款提醒
+
+                        • 卡名: %s
+                        • 还款日: %d月%d日
+                        • 信用额度: ¥%s
+                        • 当前余额: ¥%s
+                        • 剩余天数: %d 天
+
+                        ━━━━━━━━━━━━━━
+                        _%s_
+                        """,
                         card.getName(),
                         paymentDate.getMonthValue(), paymentDate.getDayOfMonth(),
                         card.getCreditLimit() != null ? card.getCreditLimit().toPlainString() : "未设置",
                         card.getCurrentBalance().toPlainString(),
-                        daysUntil);
+                        daysUntil,
+                        LocalDate.now());
                 alertLogService.logAndNotify(5L, 5, title, content, "TELEGRAM");
             }
         }
@@ -111,9 +123,19 @@ public class ScheduledTasks {
                         .eq(RecurringRule::getNextExecute, upcoming));
 
         for (RecurringRule rule : upcomingRules) {
-            String title = "\\ud83d\\udccb *周期账单提醒*";
-            String content = String.format("%s 将于 *明天* 生成\\n金额：\\u00a5%s",
-                    rule.getName(), rule.getAmount().toPlainString());
+            String title = "📋 周期账单提醒";
+            String content = String.format("""
+                    📋 周期账单提醒
+
+                    • 名称: %s
+                    • 金额: ¥%s
+                    • 执行日期: 明天
+
+                    ━━━━━━━━━━━━━━
+                    _%s_
+                    """,
+                    rule.getName(), rule.getAmount().toPlainString(),
+                    LocalDate.now());
             alertLogService.logAndNotify(6L, 6, title, content, "TELEGRAM");
         }
     }
@@ -169,11 +191,23 @@ public class ScheduledTasks {
         try {
             var progress = budgetService.getProgress(currentMonth);
             if (progress.getProgressPct().compareTo(new BigDecimal("100")) >= 0) {
-                String title = "\\ud83d\\udcca *预算超支*";
-                String content = String.format("%s 月总预算已超支\\n总预算：\\u00a5%s\\n已消费：\\u00a5%s",
+                String title = "📊 预算超支";
+                String content = String.format("""
+                        📊 预算超支警告
+
+                        • 月份: %s
+                        • 总预算: ¥%s
+                        • 已消费: ¥%s
+                        • 超支: ¥%s
+
+                        ━━━━━━━━━━━━━━
+                        _%s_
+                        """,
                         currentMonth,
                         progress.getTotalBudget().toPlainString(),
-                        progress.getTotalSpent().toPlainString());
+                        progress.getTotalSpent().toPlainString(),
+                        progress.getTotalSpent().subtract(progress.getTotalBudget()).toPlainString(),
+                        LocalDate.now());
                 alertLogService.logAndNotify(1L, 1, title, content, "TELEGRAM");
             }
         } catch (Exception e) {
@@ -210,14 +244,35 @@ public class ScheduledTasks {
 
         int threshold = 50;
         if (deviation.compareTo(BigDecimal.valueOf(threshold)) > 0) {
-            String title = "\\ud83d\\udd0d *周消费异常*";
-            String content = String.format("本周消费 \\u00a5%s vs 近 4 周平均 \\u00a5%s\\n偏离 *+%s%%*（阈值 %d%%）",
-                    thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(), threshold);
+            String title = "🔍 周消费异常";
+            String content = String.format("""
+                    🔍 周消费异常警告
+
+                    • 本周消费: ¥%s
+                    • 4周平均: ¥%s
+                    • 偏离: +%s%%
+                    • 阈值: %d%%
+
+                    ━━━━━━━━━━━━━━
+                    _%s_
+                    """,
+                    thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(), threshold,
+                    LocalDate.now());
             alertLogService.logAndNotify(4L, 4, title, content, "TELEGRAM");
         } else if (deviation.abs().compareTo(BigDecimal.valueOf(threshold)) > 0 && deviation.compareTo(BigDecimal.ZERO) < 0) {
-            String title = "\\ud83d\\udcc9 *周消费偏低*";
-            String content = String.format("本周消费 \\u00a5%s vs 近 4 周平均 \\u00a5%s\\n偏离 *%s%%*",
-                    thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString());
+            String title = "📉 周消费偏低";
+            String content = String.format("""
+                    📉 周消费偏低提醒
+
+                    • 本周消费: ¥%s
+                    • 4周平均: ¥%s
+                    • 偏离: %s%%
+
+                    ━━━━━━━━━━━━━━
+                    _%s_
+                    """,
+                    thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(),
+                    LocalDate.now());
             alertLogService.logAndNotify(4L, 4, title, content, "TELEGRAM");
         }
     }
@@ -233,13 +288,25 @@ public class ScheduledTasks {
         String prevMonth = YearMonth.now().minusMonths(1).toString();
         try {
             var progress = budgetService.getProgress(prevMonth);
-            String title = "\\ud83d\\udcca *月度预算总结*";
-            String content = String.format("%s 月预算已锁定\\n总预算：\\u00a5%s\\n已消费：\\u00a5%s\\n剩余：\\u00a5%s\\n进度：*%s%%*",
+            String title = "📊 月度预算总结";
+            String content = String.format("""
+                    📊 月度预算总结
+
+                    • 月份: %s
+                    • 总预算: ¥%s
+                    • 已消费: ¥%s
+                    • 剩余: ¥%s
+                    • 进度: %s%%
+
+                    ━━━━━━━━━━━━━━
+                    _%s_
+                    """,
                     prevMonth,
                     progress.getTotalBudget().toPlainString(),
                     progress.getTotalSpent().toPlainString(),
                     progress.getRemaining().toPlainString(),
-                    progress.getProgressPct().toPlainString());
+                    progress.getProgressPct().toPlainString(),
+                    LocalDate.now());
             alertLogService.logAndNotify(7L, 7, title, content, "TELEGRAM");
         } catch (Exception e) {
             log.error("Failed to generate monthly summary", e);
@@ -254,8 +321,18 @@ public class ScheduledTasks {
         log.info("Scheduled: checking if next month budget is set");
         String nextMonth = YearMonth.now().plusMonths(1).toString();
         if (!budgetService.exists(nextMonth)) {
-            String title = "\\u26a0\\ufe0f *预算未设定*";
-            String content = nextMonth + " 月预算尚未创建\\n请及时设定";
+            String title = "⚠️ 预算未设定";
+            String content = String.format("""
+                    ⚠️ 预算未设定提醒
+
+                    • %s 月预算尚未创建
+                    • 请及时设定下月预算
+
+                    ━━━━━━━━━━━━━━
+                    _%s_
+                    """,
+                    nextMonth,
+                    LocalDate.now());
             alertLogService.logAndNotify(7L, 7, title, content, "TELEGRAM");
         }
     }
