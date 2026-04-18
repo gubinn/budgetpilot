@@ -15,6 +15,10 @@ frontend/dist/
 # Frontend test scripts
 frontend/test-*.mjs
 
+# Playwright test artifacts
+frontend/test-results/
+frontend/playwright-report/
+
 # Spring Boot static (built from frontend)
 src/main/resources/static/
 
