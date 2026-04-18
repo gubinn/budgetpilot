@@ -65,8 +65,7 @@
       </n-form-item>
 
       <n-form-item label="扩展字段">
-        <n-dynamic-input v-model:value="extFieldsList" placeholder="键值对">
-          <template #create-button-default>添加扩展字段</template>
+        <n-dynamic-input v-model:value="extFieldsList" :on-create="() => ({ key: '', value: '' })">
           <template #default="{ index }">
             <n-input v-model:value="extFieldsList[index].key" placeholder="键" style="width: 40%" />
             <n-input v-model:value="extFieldsList[index].value" placeholder="值" style="width: 55%; margin-left: 2%" />
