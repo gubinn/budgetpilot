@@ -269,12 +269,24 @@ docker compose ps mysql
 
 ### 2.8 默认管理员账户
 
-系统初始化时会自动创建默认管理员账户：
+系统初始化时会自动创建默认管理员账户，**密码为随机生成的 16 位字符串**，首次启动时会打印在启动日志中：
+
+```bash
+docker compose logs budgetpilot-api 2>&1 | grep -A 3 "初始化"
+```
+
+输出示例：
+```
+[初始化] 已创建默认管理员账号
+  用户名: admin
+  密码: xxxxxxxxxxxxxxxx
+  请首次登录后立即修改密码！
+```
 
 | 字段 | 值 |
 |------|-----|
 | 用户名 | `admin` |
-| 密码 | `admin123` |
+| 密码 | 随机生成（见日志） |
 | 角色 | `ADMIN` |
 
 **首次登录后请立即修改密码！**
@@ -293,10 +305,10 @@ docker compose ps mysql
 ### 2.10 通过 API 登录
 
 ```bash
-# 登录获取 token
+# 登录获取 token（密码请查看启动日志）
 curl -X POST http://127.0.0.1:6060/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"<实际密码>"}'
 
 # 响应示例:
 # {"code":0,"message":"ok","data":{"token":"xxx","id":1,"username":"admin","nickname":"管理员","role":"ADMIN"}}
@@ -310,7 +322,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 curl -X POST http://127.0.0.1:6060/api/v1/auth/change-password \
   -H "Content-Type: application/json" \
   -H "Authorization: $TOKEN" \
-  -d '{"oldPassword":"admin123","newPassword":"your_new_password"}'
+  -d '{"oldPassword":"<实际密码>","newPassword":"your_new_password"}'
 ```
 
 ### 2.11 程序化调用（API Key 方式）
@@ -321,7 +333,7 @@ curl -X POST http://127.0.0.1:6060/api/v1/auth/change-password \
 # 1. 先登录获取 token（仅首次设置时需要）
 curl -X POST http://127.0.0.1:6060/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"<实际密码>"}'
 
 # 2. 生成 API Key
 curl -X POST http://127.0.0.1:6060/api/v1/auth/api-key/generate \
@@ -752,10 +764,10 @@ du -sh /opt/budgetpilot/*
 ### 认证登录
 
 ```bash
-# 登录获取 token
+# 登录获取 token（密码请查看启动日志）
 curl -X POST http://127.0.0.1:6060/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"<实际密码>"}'
 
 # 生成 API Key（登录后调用）
 curl -X POST http://127.0.0.1:6060/api/v1/auth/api-key/generate \

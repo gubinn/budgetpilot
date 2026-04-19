@@ -544,7 +544,7 @@ PUT /api/v1/system/config/telegram_bot_token
 | GET | `/api/v1/users/{id}` | 获取用户详情 | - | ADMIN |
 | POST | `/api/v1/users` | 创建用户 | `UserCreateDTO` | ADMIN |
 | PATCH | `/api/v1/users/{id}` | 更新用户 | `UserUpdateDTO` | ADMIN |
-| DELETE | `/api/v1/users/{id}` | 删除用户 | - | ADMIN |
+| DELETE | `/api/v1/users/{id}` | 删除用户（级联清理关联数据） | - | ADMIN |
 | PUT | `/api/v1/users/{id}/password` | 重置密码 | `{ "newPassword": "xxx" }` | ADMIN |
 
 ##### UserCreateDTO
