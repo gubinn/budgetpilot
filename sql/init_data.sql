@@ -28,7 +28,7 @@ INSERT INTO t_category (user_id, parent_id, name, type, icon, color, is_system, 
 -- 餐饮子类
 INSERT INTO t_category (user_id, parent_id, name, type, icon, is_system, sort_order) VALUES
 (0, (SELECT id FROM (SELECT id FROM t_category WHERE parent_id=0 AND name='餐饮' AND type=1 LIMIT 1) tmp), '外卖', 1, 'takeout', 1, 1),
-(0, (SELECT id FROM (SELECT id FROM t_category WHERE parent_id=0 AND name='餐饮' AND type=1 LIMIT 1) tmp), '聚餐', 1, 'dining', 1, 2),
+(0, (SELECT id FROM (SELECT id FROM t_category WHERE parent_id=0 AND name='餐饮' AND type=1 LIMIT 1) tmp), '堂食', 1, 'dining', 1, 2),
 (0, (SELECT id FROM (SELECT id FROM t_category WHERE parent_id=0 AND name='餐饮' AND type=1 LIMIT 1) tmp), '食材', 1, 'grocery', 1, 3),
 (0, (SELECT id FROM (SELECT id FROM t_category WHERE parent_id=0 AND name='餐饮' AND type=1 LIMIT 1) tmp), '饮品', 1, 'drink', 1, 4);
 
@@ -113,11 +113,6 @@ INSERT INTO t_category (user_id, parent_id, name, type, icon, is_system, sort_or
 -- 特殊：内部转账
 INSERT INTO t_category (user_id, parent_id, name, type, icon, color, is_system, sort_order) VALUES
 (0, 0, '内部转账', 1, 'transfer', '#95A5A6', 1, 11);
-
--- 特殊：余额调整（用于账户余额手动修正时的交易记录）
-INSERT INTO t_category (id, user_id, parent_id, name, type, icon, color, is_system, sort_order) VALUES
-(58, 0, 0, '余额调整', 2, 'adjust', '#FF9800', 1, 99),  -- 收入类型(type=2)，用于余额调增
-(59, 0, 0, '余额调整', 1, 'adjust', '#FF9800', 1, 99);  -- 支出类型(type=1)，用于余额调减
 
 -- ==================== 系统配置 ====================
 
