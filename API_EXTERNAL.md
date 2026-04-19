@@ -97,11 +97,9 @@ X-Api-Key: your-api-key
 | `creditLimit` | decimal | 信用额度（仅 type=2） |
 | `billingDay` | int | 账单日（仅 type=2） |
 | `paymentDay` | int | 还款日（仅 type=2） |
-| `sortOrder` | int | 排序权重，越小越靠前 |
 | `isActive` | boolean | 是否激活 |
 | `extFields` | map | 扩展字段（自定义键值对） |
 | `createdAt` | string | 创建时间 (ISO 8601) |
-| `updatedAt` | string | 更新时间 (ISO 8601) |
 
 **响应示例:**
 
@@ -113,12 +111,10 @@ X-Api-Key: your-api-key
       "id": 1,
       "name": "招商银行储蓄卡",
       "type": 1,
-      "icon": "wallet",
       "currency": "CNY",
       "initialBalance": 0.00,
       "currentBalance": 5230.50,
       "isActive": true,
-      "sortOrder": 0,
       "extFields": {},
       "createdAt": "2026-04-19T10:00:00"
     },
@@ -153,21 +149,17 @@ X-Api-Key: your-api-key
 Content-Type: application/json
 ```
 
-**请求参数:**
-
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 |------|------|------|--------|------|------|
 | `name` | string | 是 | - | 最长 50 字符，用户内唯一 | 账户名称 |
 | `type` | int | 是 | - | `1` / `2` / `3` | 账户类型 |
 | `icon` | string | 否 | `"wallet"` | - | 图标标识 |
-| `currency` | string | 否 | `"CNY"` | 见支持币种列表 | 币种 |
+| `currency` | string | 否 | `"CNY"` | - | 币种 |
 | `initialBalance` | decimal | 否 | `0` | - | 初始余额 |
 | `creditLimit` | decimal | 否 | - | - | 信用额度（仅 type=2 有效） |
 | `billingDay` | int | 否 | - | 1-31 | 账单日（仅 type=2） |
 | `paymentDay` | int | 否 | - | 1-31 | 还款日（仅 type=2） |
-| `sortOrder` | int | 否 | `0` | - | 排序权重 |
 | `extFields` | object | 否 | `{}` | - | 扩展字段，任意键值对 |
-| `metadata` | object | 否 | `{}` | - | 元数据，任意键值对 |
 
 **请求示例:**
 
@@ -200,10 +192,8 @@ Content-Type: application/json
 | `creditLimit` | decimal | - | 信用额度 |
 | `billingDay` | int | 1-31 | 账单日 |
 | `paymentDay` | int | 1-31 | 还款日 |
-| `sortOrder` | int | - | 排序权重 |
 | `isActive` | boolean | - | 是否激活 |
 | `extFields` | object | - | 扩展字段（全量替换） |
-| `metadata` | object | - | 元数据（全量替换） |
 
 #### 1.5 删除账户
 
@@ -258,7 +248,6 @@ X-Api-Key: your-api-key
 | `type` | int | `1` = 支出，`2` = 收入，`3` = 转账 |
 | `icon` | string | 图标标识 |
 | `color` | string | 颜色（#RRGGBB） |
-| `sortOrder` | int | 排序权重 |
 | `children` | array | 子分类数组（递归结构） |
 
 **响应示例:**
@@ -273,10 +262,9 @@ X-Api-Key: your-api-key
       "type": 1,
       "icon": "restaurant",
       "color": "#e74c3c",
-      "sortOrder": 0,
       "children": [
-        { "id": 11, "name": "午餐", "type": 1, "icon": "lunch", "color": "#e74c3c", "sortOrder": 0, "children": [] },
-        { "id": 12, "name": "晚餐", "type": 1, "icon": "dinner", "color": "#e74c3c", "sortOrder": 1, "children": [] }
+        { "id": 11, "name": "午餐", "type": 1, "icon": "lunch", "color": "#e74c3c", "children": [] },
+        { "id": 12, "name": "晚餐", "type": 1, "icon": "dinner", "color": "#e74c3c", "children": [] }
       ]
     }
   ]
@@ -299,13 +287,11 @@ X-Api-Key: your-api-key
 Content-Type: application/json
 ```
 
-**请求参数:**
-
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 |------|------|------|--------|------|------|
 | `type` | int | 是 | - | `1`=支出 / `2`=收入 / `3`=转账 | 交易类型 |
 | `amount` | decimal | 是 | - | 必须 > 0 | 交易金额 |
-| `currency` | string | 否 | `"CNY"` | 见支持币种列表 | 币种 |
+| `currency` | string | 否 | `"CNY"` | - | 币种 |
 | `transactionDate` | string | 否 | 今天 | `yyyy-MM-dd` | 交易日期 |
 | `transactionTime` | string | 否 | 当前时间 | `HH:mm:ss` | 交易时间 |
 | `accountId` | long | 是 | - | 账户必须存在且激活 | 源账户 ID |
@@ -319,7 +305,6 @@ Content-Type: application/json
 | `attachmentUrls` | string[] | 否 | `[]` | - | 附件 URL 列表 |
 | `isConfirmed` | boolean | 否 | `true` | - | 是否确认。确认的交易会影响账户余额；`false` 则为待确认状态，不影响余额 |
 | `extFields` | object | 否 | `{}` | - | 扩展字段，任意键值对 |
-| `metadata` | object | 否 | `{}` | - | 元数据，任意键值对 |
 
 > **`merchantId` 与 `merchantName` 的关系**: 传入 `merchantId` 则直接使用指定商户；传入 `merchantName` 则系统会查找同名商户，找不到则自动创建（前提 `autoCreateMerchant=true`）。两者都不传则交易不关联商户。
 
@@ -444,23 +429,12 @@ Content-Type: application/json
 }
 ```
 
-```json
-{
-  "code": 30006,
-  "message": "分类不存在",
-  "data": null,
-  "timestamp": 1776564000
-}
-```
-
 #### 3.2 查询交易列表
 
 ```
 GET /api/v1/transactions?page=1&size=20&startDate=2026-04-01&endDate=2026-04-30
 X-Api-Key: your-api-key
 ```
-
-**查询参数:**
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
@@ -471,7 +445,6 @@ X-Api-Key: your-api-key
 | `endDate` | string | 否 | 结束日期 (yyyy-MM-dd) |
 | `minAmount` | decimal | 否 | 最小金额 |
 | `maxAmount` | decimal | 否 | 最大金额 |
-| `currency` | string | 否 | 币种 |
 | `keyword` | string | 否 | 备注关键字搜索 |
 | `confirmed` | boolean | 否 | 是否已确认 |
 | `page` | int | 否 | 页码，默认 `1` |
@@ -517,7 +490,6 @@ Content-Type: application/json
 | `categoryId` | long | - | 分类 ID |
 | `merchantId` | long | - | 商户 ID |
 | `merchantName` | string | 最长 50 字符 | 商户名称（自动创建/匹配） |
-| `autoCreateMerchant` | boolean | - | 是否自动创建商户 |
 | `tags` | string[] | - | 标签列表 |
 | `attachmentUrls` | string[] | - | 附件 URL 列表 |
 | `isConfirmed` | boolean | - | 是否确认 |
@@ -547,7 +519,7 @@ X-Api-Key: your-api-key
 
 **基础路径**: `/api/v1/merchants`
 
-> 创建交易时可通过 `merchantName` 自动创建商户。但如需预先管理商户（设置别名、关联分类、图标等），可使用以下接口。
+> 创建交易时可通过 `merchantName` 自动创建商户。如需预先管理商户（设置别名、关联分类、图标等），可使用以下接口。
 
 #### 4.1 创建商户
 
@@ -560,8 +532,8 @@ Content-Type: application/json
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 |------|------|------|--------|------|------|
 | `name` | string | 是 | - | 最长 100 字符，用户内唯一 | 商户名称 |
-| `alias` | string | 否 | - | 最长 200 字符 | 商户别名，用于模糊匹配（如：`SBK`、`Starbucks` 都能匹配到星巴克） |
-| `categoryId` | long | 否 | - | - | 关联分类 ID（设置后，交易选择该商户时可自动带出分类） |
+| `alias` | string | 否 | - | 最长 200 字符 | 商户别名，用于模糊匹配（如 `SBK` 和 `Starbucks` 都能匹配到星巴克） |
+| `categoryId` | long | 否 | - | - | 关联分类 ID |
 | `icon` | string | 否 | - | - | 图标标识 |
 | `color` | string | 否 | `"#3498db"` | - | 颜色（#RRGGBB） |
 | `description` | string | 否 | - | 最长 200 字符 | 商户描述 |
@@ -613,7 +585,7 @@ X-Api-Key: your-api-key
 | `usageCount` | int | 使用次数（交易关联计数） |
 | `lastUsedAt` | string | 最近使用日期 (yyyy-MM-dd) |
 | `isActive` | boolean | 是否启用 |
-| `isSystem` | boolean | 是否系统预设商户（系统预设不可删除） |
+| `isSystem` | boolean | 是否系统预设商户（不可删除） |
 | `createdAt` | string | 创建时间 |
 | `updatedAt` | string | 更新时间 |
 
@@ -629,7 +601,7 @@ X-Api-Key: your-api-key
 | `keyword` | string | 否 | 搜索关键字（名称/别名） |
 | `limit` | int | 否 | 返回条数，默认 `10` |
 
-> 返回数组，按匹配度排序。适合前端输入框自动补全。
+> 返回数组，按匹配度排序。适合输入框自动补全。
 
 #### 4.4 获取商户详情
 
@@ -670,258 +642,9 @@ X-Api-Key: your-api-key
 
 ---
 
-### 5. 周期交易（Recurring Rules）
-
-**基础路径**: `/api/v1/recurring-rules`
-
-> 周期交易用于自动定期生成交易（如每月房租、每周订阅等）。
-
-#### 5.1 创建周期规则
-
-```
-POST /api/v1/recurring-rules
-X-Api-Key: your-api-key
-Content-Type: application/json
-```
-
-| 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
-|------|------|------|--------|------|------|
-| `name` | string | 是 | - | 最长 50 字符 | 规则名称 |
-| `type` | int | 是 | - | `1`=支出 / `2`=收入 | 交易类型 |
-| `amount` | decimal | 是 | - | > 0 | 交易金额 |
-| `currency` | string | 否 | `"CNY"` | - | 币种 |
-| `accountId` | long | 是 | - | - | 账户 ID |
-| `categoryId` | long | 是 | - | - | 分类 ID |
-| `merchantId` | long | 否 | - | - | 商户 ID（仅支持已有商户，不会自动创建） |
-| `frequency` | string | 是 | - | `DAILY` / `WEEKLY` / `MONTHLY` / `YEARLY` | 执行频率 |
-| `executeDay` | int | 条件必填 | - | `1-28`（月/年）或 `1-7`（周） | 执行日。MONTHLY/YEARLY 为几号，WEEKLY 为周几（1=周一） |
-| `startDate` | string | 是 | - | yyyy-MM-dd | 开始日期 |
-| `endDate` | string | 否 | `null`=永久 | yyyy-MM-dd | 结束日期 |
-| `autoConfirm` | boolean | 否 | `false` | - | 是否自动确认生成的交易 |
-| `note` | string | 否 | - | 最长 200 字符 | 备注 |
-| `extFields` | string | 否 | - | JSON 字符串 | 扩展字段 |
-
-**请求示例:**
-
-```json
-{
-  "name": "每月房租",
-  "type": 1,
-  "amount": 3500.00,
-  "accountId": 1,
-  "categoryId": 30,
-  "frequency": "MONTHLY",
-  "executeDay": 1,
-  "startDate": "2026-05-01",
-  "autoConfirm": true,
-  "note": "每月1号自动扣房租"
-}
-```
-
-#### 5.2 周期规则列表
-
-```
-GET /api/v1/recurring-rules
-X-Api-Key: your-api-key
-```
-
-#### 5.3 获取规则详情
-
-```
-GET /api/v1/recurring-rules/{id}
-X-Api-Key: your-api-key
-```
-
-#### 5.4 更新规则
-
-```
-PUT /api/v1/recurring-rules/{id}
-X-Api-Key: your-api-key
-Content-Type: application/json
-```
-
-字段同创建，所有字段可选。
-
-#### 5.5 删除规则
-
-```
-DELETE /api/v1/recurring-rules/{id}
-X-Api-Key: your-api-key
-```
-
-#### 5.6 启用/停用规则
-
-```
-POST /api/v1/recurring-rules/{id}/toggle
-X-Api-Key: your-api-key
-```
-
-> 切换规则的激活状态。
-
-#### 5.7 手动执行规则
-
-```
-POST /api/v1/recurring-rules/{id}/execute
-X-Api-Key: your-api-key
-```
-
-> 立即执行一次规则，生成一笔交易。
-
----
-
-### 6. 预算管理
-
-**基础路径**: `/api/v1/budgets`
-
-#### 6.1 创建预算
-
-```
-POST /api/v1/budgets
-X-Api-Key: your-api-key
-Content-Type: application/json
-
-{
-  "yearMonth": "2026-04",
-  "totalAmount": 5000.00,
-  "note": "4月预算",
-  "items": [
-    { "categoryId": 10, "amount": 1500.00 },
-    { "categoryId": 20, "amount": 800.00 }
-  ]
-}
-```
-
-| 字段 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `yearMonth` | string | 是 | 预算月份 (yyyy-MM) |
-| `totalAmount` | decimal | 是 | 总预算金额 (>0) |
-| `note` | string | 否 | 备注 |
-| `items` | array | 否 | 分类预算明细 |
-| `items[].categoryId` | long | 是 | 分类 ID |
-| `items[].amount` | decimal | 是 | 该分类的预算金额 (>0) |
-
-> 同一个月只能有一个预算。
-
-#### 6.2 获取预算
-
-```
-GET /api/v1/budgets/{yearMonth}
-X-Api-Key: your-api-key
-```
-
-#### 6.3 更新预算
-
-```
-PUT /api/v1/budgets/{yearMonth}
-X-Api-Key: your-api-key
-Content-Type: application/json
-```
-
-参数同创建。
-
-#### 6.4 复制预算
-
-```
-POST /api/v1/budgets/{yearMonth}/copy-from/{sourceMonth}
-X-Api-Key: your-api-key
-```
-
-> 将 `sourceMonth` 的预算复制到 `yearMonth`。
-
-#### 6.5 获取预算进度
-
-```
-GET /api/v1/budgets/{yearMonth}/progress
-X-Api-Key: your-api-key
-```
-
-> 返回各分类的已用金额、剩余金额、使用比例等。
-
----
-
-### 7. 预警规则管理
-
-**基础路径**: `/api/v1/alert-rules`
-
-#### 7.1 创建预警规则
-
-```
-POST /api/v1/alert-rules
-X-Api-Key: your-api-key
-Content-Type: application/json
-```
-
-| 字段 | 类型 | 必填 | 默认值 | 说明 |
-|------|------|------|--------|------|
-| `name` | string | 是 | - | 规则名称 |
-| `type` | int | 是 | - | 规则类型（见[告警类型](#告警类型)） |
-| `config` | string | 是 | - | 规则配置（JSON 字符串，不同 type 字段不同） |
-| `notifyChannel` | string | 否 | `"TELEGRAM"` | 通知渠道：`TELEGRAM` / `EMAIL` / `IN_APP` |
-| `isActive` | boolean | 否 | `true` | 是否激活 |
-
-#### 7.2 规则列表
-
-```
-GET /api/v1/alert-rules
-X-Api-Key: your-api-key
-```
-
-#### 7.3 获取详情
-
-```
-GET /api/v1/alert-rules/{id}
-X-Api-Key: your-api-key
-```
-
-#### 7.4 更新规则
-
-```
-PUT /api/v1/alert-rules/{id}
-X-Api-Key: your-api-key
-Content-Type: application/json
-```
-
-#### 7.5 删除规则
-
-```
-DELETE /api/v1/alert-rules/{id}
-X-Api-Key: your-api-key
-```
-
-#### 7.6 启用/停用
-
-```
-POST /api/v1/alert-rules/{id}/toggle
-X-Api-Key: your-api-key
-```
-
----
-
-### 8. 报表
-
-**基础路径**: `/api/v1/reports`
-
-| 方法 | 路径 | 功能 | 查询参数 |
-|------|------|------|----------|
-| GET | `/reports/monthly-summary` | 月度汇总 | `month` (yyyy-MM, 必填) |
-| GET | `/reports/category-detail` | 分类明细 | `month`, `categoryId` |
-| GET | `/reports/trend` | 趋势分析 | `months` (默认12), `type` |
-| GET | `/reports/compare` | 对比分析 | `month`, `compareWith` |
-| GET | `/reports/account-summary` | 账户概况 | - |
-| GET | `/reports/daily-heatmap` | 每日热力图 | `year` (必填) |
-| GET | `/reports/budget-review` | 预算审查 | `month` (yyyy-MM, 必填) |
-| GET | `/reports/currency-distribution` | 货币分布 | `month` (yyyy-MM, 必填) |
-| GET | `/reports/merchant-distribution` | 商户消费分布 | `month` (yyyy-MM, 必填) |
-
----
-
 ## 扩展字段说明
 
-### extFields
-
-扩展字段用于存储业务自定义的键值对数据。在创建/更新交易、账户、周期规则时，可传入任意 JSON 对象。
-
-**交易扩展字段示例:**
+交易和账户支持 `extFields` 扩展字段，用于存储业务自定义的键值对。
 
 ```json
 {
@@ -937,13 +660,9 @@ X-Api-Key: your-api-key
 }
 ```
 
-- 查询/详情接口会原样返回 `extFields`
-- 全量替换：更新时传入的 `extFields` 会完全覆盖原有值
+- 查询/详情接口会原样返回
+- 更新时传入的 `extFields` 会完全覆盖原有值
 - 不传则保持原有值不变
-
-### metadata
-
-与 `extFields` 类似，用于存储元数据信息。通常由系统内部使用，外部系统可以传入自定义元数据。
 
 ---
 
@@ -971,15 +690,11 @@ X-Api-Key: your-api-key
 | `40002` | 系统分类不可删除或修改类型 | |
 | `40003` | 分类有子分类，不可删除 | |
 | `40004` | 分类下有交易记录，不可删除 | |
-| `50001` | 预算不存在 | |
-| `50002` | 预算已锁定，不可修改 | |
-| `50003` | 该月份预算已存在 | |
 | `70001` | 商户不存在 | |
 | `70002` | 商户名称已存在 | |
 | `70003` | 商户有关联交易记录，不可删除 | |
 | `70004` | 系统预设商户不可修改/删除 | |
 | `80001` | 未登录或登录已过期 | API Key 无效、已撤销或格式错误 |
-| `80002` | 无权限访问 | 需要 ADMIN 角色 |
 
 ---
 
@@ -1008,36 +723,6 @@ X-Api-Key: your-api-key
 | `1` | 支出分类 |
 | `2` | 收入分类 |
 | `3` | 转账分类 |
-
-### 周期频率
-
-| 值 | 说明 |
-|----|------|
-| `DAILY` | 每日 |
-| `WEEKLY` | 每周 |
-| `MONTHLY` | 每月 |
-| `YEARLY` | 每年 |
-
-### 告警类型
-
-| 值 | 说明 | config 字段 |
-|----|------|-------------|
-| `1` | 预算阈值预警 | `{ "threshold_pct": 80 }` |
-| `2` | 单笔大额预警 | `{ "max_amount": "1000" }` |
-| `3` | 日消费上限 | `{ "daily_limit": "500" }` |
-| `4` | 周消费异常 | 自动检测（阈值50%） |
-| `5` | 信用卡还款提醒 | `{ "advance_days": 3 }` |
-| `6` | 周期账单提醒 | `{ "advance_days": 1 }` |
-| `7` | 预算未设定提醒 | `{ "check_day": 25 }` |
-| `8` | 待确认交易提醒 | `{ "min_count": 1 }` |
-
-### 通知渠道
-
-| 值 | 说明 |
-|----|------|
-| `TELEGRAM` | Telegram 消息 |
-| `EMAIL` | 邮件 |
-| `IN_APP` | 应用内通知 |
 
 ---
 
@@ -1111,7 +796,7 @@ curl -s "https://<your-domain>/api/v1/transactions?type=1&startDate=2026-04-01&e
   -H "X-Api-Key: your-key"
 ```
 
-### 场景 5: 预设商户并关联分类
+### 场景 5: 预设商户，后续交易关联
 
 ```bash
 # 1. 创建商户，关联到"餐饮"分类
