@@ -8,7 +8,7 @@
         <n-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="分类" size="small" style="flex: 1" clearable />
       </div>
       <div class="filter-row">
-        <n-date-picker v-model:value="filters.dateRange" type="daterange" size="small" style="flex: 1" clearable />
+        <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" size="small" style="flex: 1" clearable />
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="状态" size="small" style="flex: 1" clearable />
       </div>
       <div class="filter-actions">
@@ -127,8 +127,8 @@ async function loadData() {
       confirmed: filters.value.isConfirmed
     }
     if (filters.value.dateRange?.length === 2) {
-      params.startDate = filters.value.dateRange[0].split('T')[0]
-      params.endDate = filters.value.dateRange[1].split('T')[0]
+      params.startDate = filters.value.dateRange[0]
+      params.endDate = filters.value.dateRange[1]
     }
     const res = await transactionApi.list(params)
     transactions.value = res.data.items

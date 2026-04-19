@@ -14,7 +14,7 @@
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable style="width: 100px" />
       </n-form-item>
       <n-form-item label="日期">
-        <n-date-picker v-model:value="filters.dateRange" type="daterange" clearable style="width: 240px" />
+        <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 240px" />
       </n-form-item>
       <n-form-item>
         <n-button type="primary" @click="loadData">查询</n-button>
@@ -161,8 +161,8 @@ async function loadData() {
       confirmed: filters.value.isConfirmed
     }
     if (filters.value.dateRange?.length === 2) {
-      params.startDate = filters.value.dateRange[0].split('T')[0]
-      params.endDate = filters.value.dateRange[1].split('T')[0]
+      params.startDate = filters.value.dateRange[0]
+      params.endDate = filters.value.dateRange[1]
     }
     const res = await transactionApi.list(params)
     transactions.value = res.data.items

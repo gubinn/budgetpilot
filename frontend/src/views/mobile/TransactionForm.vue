@@ -63,7 +63,7 @@
 
         <!-- 日期时间 -->
         <n-form-item label="日期时间">
-          <n-date-picker v-model:value="form.transactionDate" type="datetime" style="width: 100%" />
+          <n-date-picker v-model:formatted-value="form.transactionDate" type="datetime" format="yyyy-MM-dd HH:mm:ss" style="width: 100%" />
         </n-form-item>
 
         <!-- 备注 -->
@@ -124,7 +124,7 @@ const form = ref({
   categoryId: null,
   merchantId: null,
   merchantName: '',
-  transactionDate: dayjs().format('YYYY-MM-DDTHH:mm:ss'),
+  transactionDate: dayjs().format('YYYY-MM-DD HH:mm:ss'),
   note: '',
   tags: [],
   extFields: {}
@@ -212,9 +212,9 @@ async function handleSubmit() {
       data.categoryId = data.categoryId[data.categoryId.length - 1]
     }
     if (data.transactionDate) {
-      const dt = data.transactionDate.includes('T') ? data.transactionDate.split('T') : [data.transactionDate, null]
-      data.transactionDate = dt[0]
-      data.transactionTime = dt[1] || null
+      const parts = data.transactionDate.split(' ')
+      data.transactionDate = parts[0]
+      data.transactionTime = parts[1] || null
     }
     if (data.merchantId === 'new') {
       data.merchantId = null
@@ -270,7 +270,7 @@ onMounted(async () => {
         categoryId: t.categoryId,
         merchantId: t.merchantId,
         merchantName: t.merchantName || '',
-        transactionDate: t.transactionDate + (t.transactionTime ? 'T' + t.transactionTime : 'T00:00:00'),
+        transactionDate: t.transactionDate + (t.transactionTime ? ' ' + t.transactionTime : ' 00:00:00'),
         note: t.note,
         tags: t.tags || [],
         extFields: t.extFields || {}
