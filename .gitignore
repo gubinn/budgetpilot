@@ -31,6 +31,7 @@ logs/
 
 # Backup files
 backup/
+bakdata/backup_*.sql.gz
 *.tar.gz
 
 # Environment files
