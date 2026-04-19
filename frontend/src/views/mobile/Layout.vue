@@ -57,7 +57,7 @@ import { useAuthStore } from '@/stores/auth'
 import { NIcon, useDialog } from 'naive-ui'
 import {
   HomeOutline, ReceiptOutline, WalletOutline,
-  BarChartOutline, SettingsOutline, AddOutline,
+  BarChartOutline, FolderOutline, AddOutline,
   NotificationsOutline, PersonOutline, LogOutOutline
 } from '@vicons/ionicons5'
 
@@ -71,7 +71,7 @@ const tabs = [
   { label: '交易', key: 'Transactions', icon: ReceiptOutline },
   { label: '账户', key: 'Accounts', icon: WalletOutline },
   { label: '报表', key: 'Reports', icon: BarChartOutline },
-  { label: '设置', key: 'Settings', icon: SettingsOutline }
+  { label: '分类', key: 'Categories', icon: FolderOutline }
 ]
 
 const currentRoute = computed(() => route.name || 'Dashboard')
@@ -122,8 +122,9 @@ async function handleUserSelect(key) {
 <style scoped>
 .mobile-layout {
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f5f7fa;
-  padding-bottom: 60px;
+  padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
 }
 
 .mobile-header {
@@ -133,7 +134,7 @@ async function handleUserSelect(key) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
   background: #fff;
   border-bottom: 1px solid #eee;
 }

@@ -161,7 +161,7 @@ onMounted(() => { loadRules() })
 </script>
 
 <style scoped>
-.mobile-alert-rules { padding-bottom: 70px; }
+.mobile-alert-rules { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 
 .rule-list { display: flex; flex-direction: column; gap: 10px; }
 

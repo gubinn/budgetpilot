@@ -162,7 +162,7 @@ onMounted(loadCategories)
 </script>
 
 <style scoped>
-.mobile-categories { padding-bottom: 70px; }
+.mobile-categories { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 
 .type-tabs {
   display: flex;

@@ -241,7 +241,7 @@ onMounted(() => { loadRules(); loadOptions() })
 </script>
 
 <style scoped>
-.mobile-recurring { padding-bottom: 70px; }
+.mobile-recurring { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 
 .rule-list { display: flex; flex-direction: column; gap: 10px; }
 

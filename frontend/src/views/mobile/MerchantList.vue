@@ -199,7 +199,7 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.mobile-merchants { padding-bottom: 70px; }
+.mobile-merchants { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 
 .search-bar { margin-bottom: 12px; }
 

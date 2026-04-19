@@ -173,7 +173,7 @@ onMounted(loadUsers)
 </script>
 
 <style scoped>
-.mobile-users { padding-bottom: 70px; }
+.mobile-users { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
 
 .user-list { display: flex; flex-direction: column; gap: 10px; }
 

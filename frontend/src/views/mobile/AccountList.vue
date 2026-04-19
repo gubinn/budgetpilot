@@ -314,7 +314,7 @@ onMounted(loadData)
 
 <style scoped>
 .mobile-accounts {
-  padding-bottom: 70px;
+  padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
 }
 
 .account-list { display: flex; flex-direction: column; gap: 10px; }

@@ -171,7 +171,7 @@ onMounted(async () => {
 
 <style scoped>
 .mobile-transactions {
-  padding-bottom: 70px;
+  padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
 }
 
 /* 筛选栏 */

@@ -1,0 +1,17 @@
+{
+  "name": "BudgetPilot",
+  "short_name": "BudgetPilot",
+  "description": "个人预算管理系统",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f7fa",
+  "theme_color": "#2c3e50",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/budgetpilot-logo.png",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}
