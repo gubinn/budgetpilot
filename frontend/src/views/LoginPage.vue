@@ -57,9 +57,14 @@ async function handleLogin() {
       message.error(res.message || '登录失败')
     }
   } catch (e) {
-    // validate() 失败会 reject，但不用提示
-    if (e?.message || e?.length) return
-    message.error('登录失败，请检查网络连接')
+    // validate() 失败会 reject (array of errors)，不需要额外提示
+    if (Array.isArray(e) && e.length > 0) return
+    // API 错误（如密码错误）展示后端返回的 message
+    if (e?.message) {
+      message.error(e.message)
+    } else {
+      message.error('登录失败，请检查网络连接')
+    }
   } finally {
     loading.value = false
   }
