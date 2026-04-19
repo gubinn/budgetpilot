@@ -6,7 +6,7 @@ BudgetPilot 是一个个人预算管理系统，替代 Actual Budget，部署于
 
 ### 技术栈
 - **后端**: Spring Boot 3.3 + Java 21 + MyBatis-Plus + MySQL 8.0 + Redis 7
-- **前端**: Vue 3 + Vite + Naive UI + ECharts + PWA
+- **前端**: Vue 3 + Vite + Naive UI + ECharts + PWA（桌面端 + 移动端双端适配）
 - **通知**: Telegram Bot API
 - **部署**: Docker Compose + Nginx 反向代理
 
