@@ -113,7 +113,7 @@
   "categoryId": "分类ID (必填)",
   "merchantId": "商户ID (支出交易可选)",
   "merchantName": "商户名称 (用于自动创建商户)",
-  "autoCreateMerchant": "是否自动创建商户 (默认 false)",
+  "autoCreateMerchant": "是否自动创建商户 (默认 true)",
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认 (默认 true)",
@@ -180,7 +180,7 @@
 | POST | `/api/v1/categories` | 创建分类 | `CategoryCreateDTO` |
 | GET | `/api/v1/categories/tree` | 获取分类树 | `type` (query, 可选) |
 | GET | `/api/v1/categories/{id}` | 获取分类详情 | - |
-| PUT | `/api/v1/categories/{id}` | 更新分类 | `CategoryCreateDTO` |
+| PUT | `/api/v1/categories/{id}` | 更新分类 | `CategoryUpdateDTO` |
 | DELETE | `/api/v1/categories/{id}` | 删除分类 | - |
 
 #### CategoryCreateDTO
@@ -193,6 +193,19 @@
   "icon": "图标",
   "color": "颜色",
   "sortOrder": "排序 (默认 0)"
+}
+```
+
+#### CategoryUpdateDTO
+
+```json
+{
+  "parentId": "父分类ID",
+  "name": "分类名称 (最长 30)",
+  "type": "分类类型 (1-3)",
+  "icon": "图标",
+  "color": "颜色",
+  "sortOrder": "排序"
 }
 ```
 
@@ -254,7 +267,7 @@
 | GET | `/api/v1/merchants/{id}` | 商户详情 | - |
 | PUT | `/api/v1/merchants/{id}` | 更新商户 | `MerchantUpdateDTO` |
 | DELETE | `/api/v1/merchants/{id}` | 删除商户 | - |
-| GET | `/api/v1/merchants/search?keyword=xxx` | 模糊搜索商户 | `keyword` (query) |
+| GET | `/api/v1/merchants/search` | 模糊搜索商户 | `keyword` (可选), `limit` (默认 10) |
 
 #### MerchantCreateDTO
 
@@ -316,7 +329,7 @@
 
 ---
 
-### 6. 系统管理 (SystemController)
+### 7. 系统管理 (SystemController)
 
 **基础路径**: `/api/v1/system`
 
@@ -541,11 +554,10 @@ PUT /api/v1/system/config/telegram_bot_token
 | 方法 | 路径 | 功能 | 请求体 | 权限 |
 |------|------|------|--------|------|
 | GET | `/api/v1/users` | 获取用户列表 | - | ADMIN |
-| GET | `/api/v1/users/{id}` | 获取用户详情 | - | ADMIN |
 | POST | `/api/v1/users` | 创建用户 | `UserCreateDTO` | ADMIN |
 | PATCH | `/api/v1/users/{id}` | 更新用户 | `UserUpdateDTO` | ADMIN |
 | DELETE | `/api/v1/users/{id}` | 删除用户（级联清理关联数据） | - | ADMIN |
-| PUT | `/api/v1/users/{id}/password` | 重置密码 | `{ "newPassword": "xxx" }` | ADMIN |
+| PUT | `/api/v1/users/{id}/password` | 重置密码 | `{ "password": "xxx" }` | ADMIN |
 
 ##### UserCreateDTO
 
@@ -575,7 +587,6 @@ PUT /api/v1/system/config/telegram_bot_token
 | 方法 | 路径 | 功能 | 参数 |
 |------|------|------|------|
 | GET | `/api/v1/users/config` | 获取当前用户所有配置 | - |
-| GET | `/api/v1/users/config/{key}` | 获取单个配置 | - |
 | PUT | `/api/v1/users/config/{key}` | 设置配置 | `{ "value": "xxx" }` |
 
 ---
@@ -681,6 +692,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 80001 | 未登录或登录已过期 |
 | 80002 | 无权限访问（需要 ADMIN 角色） |
 | 80003 | 用户名已存在 |
+| 80101 | 用户不存在 |
 
 ---
 
