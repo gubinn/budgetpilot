@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import axios from 'axios'
+import { authApi } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -11,20 +11,16 @@ export const useAuthStore = defineStore('auth', () => {
   const nickname = computed(() => user.value?.nickname || user.value?.username || '')
 
   async function login(username, password) {
-    const res = await axios.post('/api/v1/auth/login', { username, password })
-    if (res.data.code === 0) {
-      token.value = res.data.data.token
-      user.value = res.data.data
-      localStorage.setItem('token', token.value)
-    }
-    return res.data
+    const res = await authApi.login({ username, password })
+    token.value = res.data.token
+    user.value = res.data
+    localStorage.setItem('token', token.value)
+    return res
   }
 
   async function logout() {
     try {
-      await axios.post('/api/v1/auth/logout', null, {
-        headers: { Authorization: token.value }
-      })
+      await authApi.logout()
     } finally {
       token.value = ''
       user.value = null
@@ -35,12 +31,8 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchUser() {
     if (!token.value) return
     try {
-      const res = await axios.get('/api/v1/auth/info', {
-        headers: { Authorization: token.value }
-      })
-      if (res.data.code === 0) {
-        user.value = res.data.data
-      }
+      const res = await authApi.info()
+      user.value = res.data
     } catch {
       token.value = ''
       user.value = null
@@ -49,10 +41,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function changePassword(oldPassword, newPassword) {
-    const res = await axios.post('/api/v1/auth/change-password', { oldPassword, newPassword }, {
-      headers: { Authorization: token.value }
-    })
-    return res.data
+    const res = await authApi.changePassword({ oldPassword, newPassword })
+    return res
   }
 
   return { user, token, isLoggedIn, isAdmin, nickname, login, logout, fetchUser, changePassword }

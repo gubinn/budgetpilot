@@ -86,3 +86,12 @@ export const userApi = {
   getMyConfig: () => api.get('/users/config'),
   setMyConfig: (key, value) => api.put(`/users/config/${key}`, { value })
 }
+
+export const authApi = {
+  login: (data) => api.post('/auth/login', data),
+  logout: () => api.post('/auth/logout'),
+  info: () => api.get('/auth/info'),
+  changePassword: (data) => api.post('/auth/change-password', data),
+  getApiKey: () => api.get('/auth/api-key'),
+  generateApiKey: () => api.post('/auth/api-key/generate')
+}

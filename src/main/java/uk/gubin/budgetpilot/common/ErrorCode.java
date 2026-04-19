@@ -58,6 +58,9 @@ public enum ErrorCode {
     AUTH_NOT_LOGGED_IN(80001, "未登录或登录已过期"),
     AUTH_NO_PERMISSION(80002, "无权限访问"),
 
+    // 用户 80101-80199
+    USER_NOT_FOUND(80101, "用户不存在"),
+
     ;
 
     private final int code;

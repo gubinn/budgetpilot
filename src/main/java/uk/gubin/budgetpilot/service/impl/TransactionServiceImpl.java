@@ -231,7 +231,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             throw new BizException(ErrorCode.TRANSACTION_NOT_FOUND);
         }
         Account account = accountMapper.selectById(entity.getAccountId());
-        Category category = categoryMapper.selectById(entity.getCategoryId());
+        Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
         return toVO(entity, account, category, merchant);
     }
@@ -284,27 +284,27 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getTargetAccountId() != null) entity.setTargetAccountId(dto.getTargetAccountId());
         if (dto.getCategoryId() != null) entity.setCategoryId(dto.getCategoryId());
         if (dto.getTags() != null) {
-            try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception ignored) {}
+            try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception e) { log.warn("Failed to serialize tags", e); }
         }
         if (dto.getAttachmentUrls() != null) {
-            try { entity.setAttachmentUrls(objectMapper.writeValueAsString(dto.getAttachmentUrls())); } catch (Exception ignored) {}
+            try { entity.setAttachmentUrls(objectMapper.writeValueAsString(dto.getAttachmentUrls())); } catch (Exception e) { log.warn("Failed to serialize attachmentUrls", e); }
         }
         if (dto.getIsConfirmed() != null) entity.setIsConfirmed(dto.getIsConfirmed());
         if (dto.getExtFields() != null) {
-            try { entity.setExtFields(objectMapper.writeValueAsString(dto.getExtFields())); } catch (Exception ignored) {}
+            try { entity.setExtFields(objectMapper.writeValueAsString(dto.getExtFields())); } catch (Exception e) { log.warn("Failed to serialize extFields", e); }
         }
         if (dto.getMetadata() != null) {
-            try { entity.setMetadata(objectMapper.writeValueAsString(dto.getMetadata())); } catch (Exception ignored) {}
+            try { entity.setMetadata(objectMapper.writeValueAsString(dto.getMetadata())); } catch (Exception e) { log.warn("Failed to serialize metadata", e); }
         }
 
         // 重新计算本位币金额
         Account account = accountMapper.selectById(entity.getAccountId());
-        Category category = categoryMapper.selectById(entity.getCategoryId());
+        Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         calculateBaseAmount(entity, account);
 
         // 余额校验（与 create 保持一致）
         if (Boolean.TRUE.equals(entity.getIsConfirmed()) && (entity.getType() == 1 || entity.getType() == 3)) {
-            if (account != null && account.getType() != null && account.getType() != 2) {
+            if (account != null && account.getType() != null && account.getType() != 3) {
                 if (account.getCurrentBalance() != null &&
                     account.getCurrentBalance().compareTo(entity.getAmount()) < 0) {
                     throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
@@ -387,8 +387,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         registerCacheClearSync(entity.getTransactionDate());
 
         Account account = accountMapper.selectById(entity.getAccountId());
-        Category category = categoryMapper.selectById(entity.getCategoryId());
+        Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
+
         return toVO(entity, account, category, merchant);
     }
 
@@ -448,16 +449,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         entity.setIsConfirmed(dto.getIsConfirmed());
 
         if (dto.getTags() != null) {
-            try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception ignored) {}
+            try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception e) { log.warn("Failed to serialize tags", e); }
         }
         if (dto.getAttachmentUrls() != null) {
-            try { entity.setAttachmentUrls(objectMapper.writeValueAsString(dto.getAttachmentUrls())); } catch (Exception ignored) {}
+            try { entity.setAttachmentUrls(objectMapper.writeValueAsString(dto.getAttachmentUrls())); } catch (Exception e) { log.warn("Failed to serialize attachmentUrls", e); }
         }
         if (dto.getExtFields() != null) {
-            try { entity.setExtFields(objectMapper.writeValueAsString(dto.getExtFields())); } catch (Exception ignored) {}
+            try { entity.setExtFields(objectMapper.writeValueAsString(dto.getExtFields())); } catch (Exception e) { log.warn("Failed to serialize extFields", e); }
         }
         if (dto.getMetadata() != null) {
-            try { entity.setMetadata(objectMapper.writeValueAsString(dto.getMetadata())); } catch (Exception ignored) {}
+            try { entity.setMetadata(objectMapper.writeValueAsString(dto.getMetadata())); } catch (Exception e) { log.warn("Failed to serialize metadata", e); }
         }
         if (dto.getIsRecurring() != null) entity.setIsRecurring(dto.getIsRecurring());
         if (dto.getRecurringId() != null) entity.setRecurringId(dto.getRecurringId());
@@ -514,7 +515,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
     private Map<Long, Category> loadCategories(List<Transaction> transactions) {
         List<Long> ids = transactions.stream()
-                .map(Transaction::getCategoryId).distinct().toList();
+                .map(Transaction::getCategoryId)
+                .filter(id -> id != null)
+                .distinct().toList();
         if (ids.isEmpty()) return Map.of();
         return categoryMapper.selectBatchIds(ids).stream()
                 .collect(Collectors.toMap(Category::getId, c -> c));
@@ -649,16 +652,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
 
         if (entity.getTags() != null) {
-            try { vo.setTags(objectMapper.readValue(entity.getTags(), new TypeReference<>() {})); } catch (Exception ignored) {}
+            try { vo.setTags(objectMapper.readValue(entity.getTags(), new TypeReference<>() {})); } catch (Exception e) { log.warn("Failed to deserialize tags", e); }
         }
         if (entity.getAttachmentUrls() != null) {
-            try { vo.setAttachmentUrls(objectMapper.readValue(entity.getAttachmentUrls(), new TypeReference<>() {})); } catch (Exception ignored) {}
+            try { vo.setAttachmentUrls(objectMapper.readValue(entity.getAttachmentUrls(), new TypeReference<>() {})); } catch (Exception e) { log.warn("Failed to deserialize attachmentUrls", e); }
         }
         if (entity.getExtFields() != null) {
-            try { vo.setExtFields(objectMapper.readValue(entity.getExtFields(), new TypeReference<>() {})); } catch (Exception ignored) {}
+            try { vo.setExtFields(objectMapper.readValue(entity.getExtFields(), new TypeReference<>() {})); } catch (Exception e) { log.warn("Failed to deserialize extFields", e); }
         }
         if (entity.getMetadata() != null) {
-            try { vo.setMetadata(objectMapper.readValue(entity.getMetadata(), new TypeReference<>() {})); } catch (Exception ignored) {}
+            try { vo.setMetadata(objectMapper.readValue(entity.getMetadata(), new TypeReference<>() {})); } catch (Exception e) { log.warn("Failed to deserialize metadata", e); }
         }
 
         return vo;

@@ -1,5 +1,6 @@
 package uk.gubin.budgetpilot.component;
 
+import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -13,12 +14,14 @@ import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.ConfigMapper;
 import uk.gubin.budgetpilot.mapper.UserMapper;
 
+import java.security.SecureRandom;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@InterceptorIgnore(tenantLine = "true")
 public class DataInitializer {
 
     private final UserMapper userMapper;
@@ -30,7 +33,8 @@ public class DataInitializer {
         long count = userMapper.selectCount(null);
         if (count == 0) {
             BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
-            String encoded = encoder.encode("admin123");
+            String randomPassword = generateRandomPassword();
+            String encoded = encoder.encode(randomPassword);
 
             User admin = new User();
             admin.setUsername("admin");
@@ -44,9 +48,9 @@ public class DataInitializer {
                     "==========================================\n" +
                     "  [初始化] 已创建默认管理员账号\n" +
                     "  用户名: admin\n" +
-                    "  密  码: admin123\n" +
-                    "  请首次登录后修改密码！\n" +
-                    "==========================================");
+                    "  密  码: {}\n" +
+                    "  请首次登录后立即修改密码！\n" +
+                    "==========================================", randomPassword);
         }
 
         // 初始化系统预置分类（如果不存在）
@@ -56,15 +60,29 @@ public class DataInitializer {
         initSystemConfig();
     }
 
+    private String generateRandomPassword() {
+        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$";
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(16);
+        for (int i = 0; i < 16; i++) {
+            sb.append(chars.charAt(random.nextInt(chars.length())));
+        }
+        return sb.toString();
+    }
+
     /**
-     * 初始化系统预置分类（is_system=true, user_id=0）
      * 新用户创建时会复制这些分类到自己的租户下
      */
     private void initSystemCategories() {
+        // 通过检查已知系统分类名称是否存在来判断是否已初始化
+        // 不依赖 is_system 字段计数（旧数据可能 is_system 为 false）
         long existing = categoryMapper.selectCount(
                 new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category>()
-                        .eq(uk.gubin.budgetpilot.entity.Category::getIsSystem, true));
-        if (existing > 0) {
+                        .eq(uk.gubin.budgetpilot.entity.Category::getUserId, 0L)
+                        .eq(uk.gubin.budgetpilot.entity.Category::getParentId, 0L)
+                        .in(uk.gubin.budgetpilot.entity.Category::getIcon,
+                                "food", "transport", "salary", "adjust"));
+        if (existing >= 4) {
             log.info("System categories already exist (count={}), skipping init", existing);
             return;
         }

@@ -99,13 +99,9 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
-import { systemApi } from '@/api'
-import { useAuthStore } from '@/stores/auth'
-import dayjs from 'dayjs'
-import axios from 'axios'
+import { systemApi, authApi } from '@/api'
 
 const message = useMessage()
-const auth = useAuthStore()
 const config = ref({
   telegram_bot_token: '',
   telegram_chat_id: '',
@@ -126,7 +122,7 @@ async function loadConfig() {
     config.value.exchange_rate_api_key = res.data.exchange_rate_api_key || ''
     const csv = res.data.supported_currencies || 'CNY,USD,EUR,GBP,JPY,HKD,SGD,THB,KRW'
     supportedCurrencies.value = csv.split(',').map(s => s.trim()).filter(Boolean)
-  } catch (e) {}
+  } catch (e) { console.error('Failed to load config', e) }
 }
 
 async function saveConfig(key, value) {
@@ -156,21 +152,21 @@ async function loadRates() {
   try {
     const res = await systemApi.rates()
     rates.value = res.data || []
-  } catch (e) {}
+  } catch (e) { console.error('Failed to load rates', e) }
 }
 
 async function loadAlerts() {
   try {
     const res = await systemApi.alerts()
     alerts.value = res.data || []
-  } catch (e) {}
+  } catch (e) { console.error('Failed to load alerts', e) }
 }
 
 async function markRead(id) {
   try {
     await systemApi.markAlertRead(id)
     loadAlerts()
-  } catch (e) {}
+  } catch (e) { console.error('Failed to mark alert as read', e) }
 }
 
 const apiKeyMasked = computed(() => {
@@ -181,24 +177,16 @@ const apiKeyMasked = computed(() => {
 
 async function loadApiKey() {
   try {
-    const res = await axios.get('/api/v1/auth/api-key', {
-      headers: { Authorization: auth.token }
-    })
-    if (res.data.code === 0) {
-      apiKey.value = res.data.data
-    }
-  } catch (e) {}
+    const res = await authApi.getApiKey()
+    apiKey.value = res.data
+  } catch (e) { console.error('Failed to load API key', e) }
 }
 
 async function regenerateApiKey() {
   try {
-    const res = await axios.post('/api/v1/auth/api-key/generate', null, {
-      headers: { Authorization: auth.token }
-    })
-    if (res.data.code === 0) {
-      apiKey.value = res.data.data
-      message.success('API Key 已重新生成')
-    }
+    const res = await authApi.generateApiKey()
+    apiKey.value = res.data
+    message.success('API Key 已重新生成')
   } catch (e) { message.error('生成失败') }
 }
 

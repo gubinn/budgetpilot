@@ -40,7 +40,7 @@ public class UserController {
     @DeleteMapping("/{id}")
     @SaCheckRole("ADMIN")
     public uk.gubin.budgetpilot.common.Result<Void> delete(@PathVariable Long id) {
-        userService.removeById(id);
+        userService.delete(id);
         return uk.gubin.budgetpilot.common.Result.ok();
     }
 

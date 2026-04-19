@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.ChangePasswordDTO;
@@ -40,6 +41,13 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final UserConfigMapper userConfigMapper;
     private final CategoryMapper categoryMapper;
     private final AlertRuleMapper alertRuleMapper;
+    private final uk.gubin.budgetpilot.mapper.BudgetMapper budgetMapper;
+    private final uk.gubin.budgetpilot.mapper.BudgetItemMapper budgetItemMapper;
+    private final uk.gubin.budgetpilot.mapper.TransactionMapper transactionMapper;
+    private final uk.gubin.budgetpilot.mapper.AccountMapper accountMapper;
+    private final uk.gubin.budgetpilot.mapper.MerchantMapper merchantMapper;
+    private final uk.gubin.budgetpilot.mapper.RecurringRuleMapper recurringRuleMapper;
+    private final uk.gubin.budgetpilot.mapper.AlertLogMapper alertLogMapper;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
@@ -217,6 +225,62 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         }
 
         log.info("Copied {} default alert rules for user {}", defaultRules.length, userId);
+    }
+
+    /**
+     * 删除用户（级联清理关联数据）
+     */
+    @Transactional
+    public void delete(Long id) {
+        User user = baseMapper.selectById(id);
+        if (user == null) {
+            throw new BizException(ErrorCode.USER_NOT_FOUND);
+        }
+
+        log.info("Deleting user {} (id={}), cleaning up associated data", user.getUsername(), id);
+
+        // 清理预警日志
+        alertLogMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.AlertLog>()
+                .eq(uk.gubin.budgetpilot.entity.AlertLog::getUserId, id));
+
+        // 清理预警规则
+        alertRuleMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.AlertRule>()
+                .eq(uk.gubin.budgetpilot.entity.AlertRule::getUserId, id));
+
+        // 清理周期规则
+        recurringRuleMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.RecurringRule>()
+                .eq(uk.gubin.budgetpilot.entity.RecurringRule::getUserId, id));
+
+        // 清理预算项和预算
+        budgetItemMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.BudgetItem>()
+                .eq(uk.gubin.budgetpilot.entity.BudgetItem::getUserId, id));
+        budgetMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Budget>()
+                .eq(uk.gubin.budgetpilot.entity.Budget::getUserId, id));
+
+        // 清理交易
+        transactionMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Transaction>()
+                .eq(uk.gubin.budgetpilot.entity.Transaction::getUserId, id));
+
+        // 清理商户
+        merchantMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Merchant>()
+                .eq(uk.gubin.budgetpilot.entity.Merchant::getUserId, id));
+
+        // 清理账户
+        accountMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Account>()
+                .eq(uk.gubin.budgetpilot.entity.Account::getUserId, id));
+
+        // 清理分类
+        categoryMapper.delete(new LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category>()
+                .eq(uk.gubin.budgetpilot.entity.Category::getUserId, id));
+
+        // 清理用户配置
+        userConfigMapper.delete(new LambdaQueryWrapper<UserConfig>()
+                .eq(UserConfig::getUserId, id));
+
+        // 最后删除用户
+        baseMapper.deleteById(id);
+
+        log.info("User {} (id={}) deleted successfully", user.getUsername(), id);
     }
 
     /**
