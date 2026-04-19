@@ -3,7 +3,7 @@
     <!-- 顶部 Header -->
     <header class="mobile-header">
       <div class="header-left">
-        <h2 class="logo">BudgetPilot</h2>
+        <img src="/budgetpilot-logo.png" alt="BudgetPilot" class="logo" />
       </div>
       <div class="header-right">
         <n-badge :value="alertCount" :show="alertCount > 0">
@@ -139,10 +139,7 @@ async function handleUserSelect(key) {
 }
 
 .logo {
-  font-size: 18px;
-  font-weight: 700;
-  color: #2c3e50;
-  margin: 0;
+  height: 22px;
 }
 
 .header-right {

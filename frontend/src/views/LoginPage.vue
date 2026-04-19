@@ -1,6 +1,8 @@
 <template>
   <div class="login-page">
-    <n-card title="BudgetPilot 登录" class="login-card" :bordered="false">
+    <div class="login-wrapper">
+      <img src="/budgetpilot-logo.png" alt="BudgetPilot" class="login-logo" />
+      <n-card class="login-card" :bordered="false">
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="top" size="large">
         <n-form-item label="用户名" path="username">
           <n-input v-model:value="form.username" placeholder="请输入用户名" @keyup.enter="handleLogin">
@@ -17,6 +19,7 @@
         </n-button>
       </n-form>
     </n-card>
+    </div>
   </div>
 </template>
 
@@ -78,6 +81,15 @@ async function handleLogin() {
   align-items: center;
   justify-content: center;
   background: #f5f7fa;
+}
+.login-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.login-logo {
+  height: 80px;
+  margin-bottom: 24px;
 }
 .login-card {
   width: 400px;

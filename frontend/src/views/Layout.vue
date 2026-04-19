@@ -13,7 +13,7 @@
       class="sider-wrapper"
     >
       <div class="logo">
-        <h2 v-if="!collapsed">BudgetPilot</h2>
+        <img src="/budgetpilot-logo.png" alt="BudgetPilot" class="logo-img" v-if="!collapsed" />
       </div>
       <n-menu
         :collapsed="collapsed"
@@ -159,14 +159,13 @@ async function handleUserSelect(key) {
 
 <style scoped>
 .logo {
-  padding: 16px;
-  text-align: center;
+  padding: 12px 16px;
   border-bottom: 1px solid #eee;
 }
-.logo h2 {
-  color: #2c3e50;
-  font-size: 18px;
-  font-weight: 700;
+.logo-img {
+  width: 140px;
+  display: block;
+  margin: 0 auto;
 }
 .add-btn {
   box-shadow: 0 2px 8px rgba(44, 62, 80, 0.2);
