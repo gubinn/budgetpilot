@@ -8,7 +8,7 @@ BudgetPilot 是一个个人预算管理系统，替代 Actual Budget，部署于
 - **后端**: Spring Boot 3.3 + Java 21 + MyBatis-Plus + MySQL 8.0 + Redis 7
 - **前端**: Vue 3 + Vite + Naive UI + ECharts + PWA（桌面端 + 移动端双端适配）
 - **通知**: Telegram Bot API
-- **部署**: Docker Compose + Nginx 反向代理
+- **部署**: Docker Compose + Nginx 反向代理（也支持裸机部署，见「二点五」）
 
 ### 端口规划
 | 服务 | 端口 | 说明 |
@@ -150,7 +150,7 @@ cd /opt/budgetpilot
 
 # 确认关键文件存在
 ls -la docker-compose.yml Dockerfile pom.xml nginx.conf nginx-docker.conf
-ls -la sql/schema.sql sql/init_data.sql
+ls -la sql/01_schema.sql sql/02_init_data.sql
 ls -la src/main/resources/application.yml
 ls -la frontend/package.json frontend/vite.config.js
 ```
@@ -223,7 +223,7 @@ ls /opt/budgetpilot/web/index.html
 cd /opt/budgetpilot
 
 # 确认 SQL 初始化文件位置（Docker 首次启动时会自动执行）
-ls -la sql/schema.sql sql/init_data.sql
+ls -la sql/01_schema.sql sql/02_init_data.sql
 
 # 启动所有服务（首次会自动构建 Docker 镜像）
 docker compose up -d
@@ -261,6 +261,282 @@ docker compose exec redis redis-cli ping
 # 5. 检查 MySQL 健康状态
 docker compose ps mysql
 # STATUS 列应显示 "healthy"
+```
+
+---
+
+## 二点五、无 Docker 部署（裸机部署）
+
+如果你不想使用 Docker，可以直接在宿主机上部署所有服务。
+
+### 2.5.1 安装基础设施
+
+**Ubuntu/Debian：**
+
+```bash
+sudo apt update
+sudo apt install -y mysql-server-8.0 redis-server nginx openjdk-21-jdk maven nodejs npm
+```
+
+**CentOS/Rocky：**
+
+```bash
+sudo dnf install -y mysql-server redis nginx java-21-openjdk-devel maven nodejs
+```
+
+**验证安装：**
+
+```bash
+java -version       # 21.x
+mysql --version     # 8.0.x
+redis-cli ping      # PONG
+nginx -v            # 1.x
+```
+
+### 2.5.2 配置 MySQL
+
+```bash
+# 启动 MySQL
+sudo systemctl start mysql   # Ubuntu/Debian
+# 或
+sudo systemctl start mysqld  # CentOS/Rocky
+
+# 设置 root 密码并创建数据库用户
+sudo mysql -uroot << 'EOF'
+CREATE DATABASE IF NOT EXISTS budgetpilot DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'budgetpilot'@'127.0.0.1' IDENTIFIED BY 'your_db_password';
+GRANT ALL PRIVILEGES ON budgetpilot.* TO 'budgetpilot'@'127.0.0.1';
+FLUSH PRIVILEGES;
+EOF
+
+# 执行建表脚本
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/01_schema.sql
+
+# 验证表已创建
+mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW TABLES;"
+```
+
+### 2.5.3 配置 Redis
+
+```bash
+# 启动 Redis
+sudo systemctl start redis
+
+# 验证
+redis-cli ping
+```
+
+如果 Redis 设置了密码，需要在后续启动后端时通过环境变量传入。
+
+### 2.5.4 构建后端 JAR
+
+```bash
+cd /opt/budgetpilot
+
+# Maven 构建（跳过测试）
+mvn clean package -DskipTests
+
+# 确认 JAR 文件
+ls -la target/budgetpilot-*.jar
+```
+
+### 2.5.5 构建前端
+
+```bash
+cd /opt/budgetpilot/frontend
+
+npm install
+npm run build
+
+sudo mkdir -p /opt/budgetpilot/web
+sudo cp -r dist/* /opt/budgetpilot/web/
+```
+
+### 2.5.6 启动后端
+
+**方式一：systemd 管理（推荐）**
+
+```bash
+sudo tee /etc/systemd/system/budgetpilot.service << 'EOF'
+[Unit]
+Description=BudgetPilot API
+After=mysql.service redis.service
+Wants=mysql.service redis.service
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=/opt/budgetpilot
+Environment="DB_HOST=127.0.0.1"
+Environment="DB_PORT=3306"
+Environment="DB_USER=budgetpilot"
+Environment="DB_PASS=your_db_password"
+Environment="REDIS_HOST=127.0.0.1"
+Environment="REDIS_PORT=6379"
+Environment="REDIS_PASS="
+ExecStart=/usr/bin/java -jar target/budgetpilot-*.jar
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 重新加载 systemd 并启动
+sudo systemctl daemon-reload
+sudo systemctl enable budgetpilot
+sudo systemctl start budgetpilot
+
+# 查看状态和日志
+sudo systemctl status budgetpilot
+sudo journalctl -u budgetpilot -f
+```
+
+**方式二：nohup 后台运行（临时）**
+
+```bash
+cd /opt/budgetpilot
+
+nohup java -jar target/budgetpilot-*.jar \
+  --spring.datasource.url=jdbc:mysql://127.0.0.1:3306/budgetpilot \
+  --spring.datasource.username=budgetpilot \
+  --spring.datasource.password=your_db_password \
+  --spring.data.redis.host=127.0.0.1 \
+  --spring.data.redis.port=6379 \
+  > budgetpilot.log 2>&1 &
+
+# 查看日志
+tail -f budgetpilot.log
+```
+
+**启动后自动执行：**
+- `DataInitializer` 会检测 `t_user` 是否为空，为空则创建 admin 账号（密码 `admin123`）
+- 同时初始化系统分类和配置
+
+**查看 admin 密码：**
+
+```bash
+# 如果 DataInitializer 创建了随机密码，日志会打印
+journalctl -u budgetpilot | grep "初始化"
+# 或直接查看日志文件
+tail -f budgetpilot.log | grep "初始化"
+```
+
+### 2.5.7 配置 Nginx
+
+```bash
+sudo tee /etc/nginx/conf.d/budgetpilot.conf << 'EOF'
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    # 前端静态文件
+    location / {
+        root /opt/budgetpilot/web;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # 代理后端 API
+    location /api/ {
+        proxy_pass http://127.0.0.1:6060;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOF
+
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 2.5.8 验证部署
+
+```bash
+# 1. 测试 API
+curl http://127.0.0.1:6060/api/v1/accounts
+# 成功: {"code":0,"message":"ok","data":[]}
+
+# 2. 测试数据库
+mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW TABLES;"
+
+# 3. 测试 Redis
+redis-cli ping
+
+# 4. 测试 Nginx 代理
+curl http://localhost/api/v1/accounts
+```
+
+### 2.5.9 日常运维（裸机）
+
+**启停服务：**
+
+```bash
+# systemd 方式
+sudo systemctl start|stop|restart budgetpilot
+
+# nohup 方式
+pkill -f budgetpilot                    # 停止
+# 然后重新执行 nohup java -jar ...      # 启动
+```
+
+**查看日志：**
+
+```bash
+# systemd 方式
+sudo journalctl -u budgetpilot -f
+
+# nohup 方式
+tail -f /opt/budgetpilot/budgetpilot.log
+
+# MySQL 日志
+sudo tail -f /var/log/mysql/error.log
+
+# Redis 日志
+sudo tail -f /var/log/redis/redis-server.log
+
+# Nginx 日志
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
+```
+
+**数据库备份：**
+
+```bash
+DATE=$(date +%Y%m%d_%H%M%S)
+mkdir -p /opt/budgetpilot/backup
+mysqldump -ubudgetpilot -pyour_db_password budgetpilot \
+  --single-transaction --routines \
+  > /opt/budgetpilot/backup/budgetpilot_${DATE}.sql
+gzip /opt/budgetpilot/backup/budgetpilot_${DATE}.sql
+
+# 定时备份（crontab）
+crontab -e
+# 添加: 0 3 * * * mysqldump -ubudgetpilot -pyour_db_password budgetpilot --single-transaction --routines > /opt/budgetpilot/backup/budgetpilot_$(date +\%Y\%m\%d_\%H\%M\%S).sql && gzip /opt/budgetpilot/backup/budgetpilot_$(date +\%Y\%m\%d_\%H\%M\%S).sql && find /opt/budgetpilot/backup -name "*.sql.gz" -mtime +30 -delete
+```
+
+**更新部署：**
+
+```bash
+cd /opt/budgetpilot
+
+# 1. 拉取新代码
+git pull
+
+# 2. 重新构建后端
+mvn clean package -DskipTests
+
+# 3. 重新构建前端
+cd frontend && npm install && npm run build
+sudo rm -rf /opt/budgetpilot/web/*
+sudo cp -r dist/* /opt/budgetpilot/web/
+cd ..
+
+# 4. 重启后端
+sudo systemctl restart budgetpilot   # systemd 方式
+# 或
+pkill -f budgetpilot && nohup java -jar target/budgetpilot-*.jar ... &   # nohup 方式
+
+# 5. 验证
+curl http://127.0.0.1:6060/api/v1/accounts
 ```
 
 ---
@@ -508,11 +784,13 @@ curl -k https://localhost/api/v1/accounts
 **方式二：通过 SQL 直接写入**
 
 ```bash
+# Docker 方式
 cd /opt/budgetpilot
 source .env
-
-# 进入数据库
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+
+# 裸机方式
+mysql -ubudgetpilot -pyour_db_password budgetpilot
 
 # 执行 SQL（替换实际值）
 UPDATE t_config SET config_value = '<YOUR_BOT_TOKEN>' WHERE config_key = 'telegram_bot_token';
@@ -522,15 +800,20 @@ UPDATE t_config SET config_value = '<YOUR_CHAT_ID>' WHERE config_key = 'telegram
 exit
 ```
 
-**方式三：通过环境变量（重启后生效）**
+**方式二：通过环境变量（重启后生效）**
 
 ```bash
-# 编辑 .env 文件
+# 编辑 .env 文件（Docker 部署）
 nano /opt/budgetpilot/.env
-
 # 填入值后重启
 cd /opt/budgetpilot
 docker compose restart budgetpilot-api
+
+# 或直接修改 systemd 环境变量文件（裸机部署）
+sudo nano /etc/systemd/system/budgetpilot.service
+# 添加/修改 Environment 行后重启
+sudo systemctl daemon-reload
+sudo systemctl restart budgetpilot
 ```
 
 > **配置优先级**：数据库 `t_config` > `application.yml` 环境变量。推荐通过方式一或方式二修改，实时生效无需重启。
@@ -557,10 +840,13 @@ curl -X POST http://127.0.0.1:6060/api/v1/system/telegram/test
 ### 5.2 配置到系统
 
 ```bash
+# Docker 方式
 cd /opt/budgetpilot
 source .env
-
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+
+# 裸机方式
+mysql -ubudgetpilot -pyour_db_password budgetpilot
 
 UPDATE t_config SET config_value = '<YOUR_API_KEY>' WHERE config_key = 'exchange_rate_api_key';
 exit
@@ -578,6 +864,8 @@ curl -X POST http://127.0.0.1:6060/api/v1/system/rates/refresh
 
 ### 6.1 查看日志
 
+**Docker 方式：**
+
 ```bash
 cd /opt/budgetpilot
 
@@ -589,15 +877,29 @@ docker compose logs -f budgetpilot-api
 
 # 只看最近 100 行
 docker compose logs --tail=100 budgetpilot-api
+```
 
-# 查看 MySQL 日志
-docker compose logs mysql
+**裸机方式：**
 
-# 查看 Redis 日志
-docker compose logs redis
+```bash
+# API 日志
+sudo journalctl -u budgetpilot -f          # systemd
+tail -f /opt/budgetpilot/budgetpilot.log   # nohup
+
+# MySQL 日志
+sudo tail -f /var/log/mysql/error.log
+
+# Redis 日志
+sudo tail -f /var/log/redis/redis-server.log
+
+# Nginx 日志
+sudo tail -f /var/log/nginx/access.log
+sudo tail -f /var/log/nginx/error.log
 ```
 
 ### 6.2 重启服务
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
@@ -609,14 +911,32 @@ docker compose restart budgetpilot-api
 docker compose restart
 ```
 
+**裸机方式：**
+
+```bash
+# systemd
+sudo systemctl restart budgetpilot
+
+# nohup
+pkill -f budgetpilot
+cd /opt/budgetpilot
+nohup java -jar target/budgetpilot-*.jar \
+  --spring.datasource.url=jdbc:mysql://127.0.0.1:3306/budgetpilot \
+  --spring.datasource.username=budgetpilot \
+  --spring.datasource.password=your_db_password \
+  --spring.data.redis.host=127.0.0.1 \
+  > budgetpilot.log 2>&1 &
+```
+
 ### 6.3 更新部署
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
 
 # 1. 拉取最新代码
 git pull
-# 或上传新代码
 
 # 2. 重新构建后端 JAR
 mvn clean package -DskipTests
@@ -636,7 +956,35 @@ docker compose ps
 curl http://127.0.0.1:6060/api/v1/accounts
 ```
 
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot
+
+# 1. 拉取最新代码
+git pull
+
+# 2. 重新构建后端 JAR
+mvn clean package -DskipTests
+
+# 3. 重新构建前端
+cd frontend
+npm install
+npm run build
+sudo rm -rf /opt/budgetpilot/web/*
+sudo cp -r dist/* /opt/budgetpilot/web/
+cd ..
+
+# 4. 重启后端
+sudo systemctl restart budgetpilot
+
+# 5. 验证
+curl http://127.0.0.1:6060/api/v1/accounts
+```
+
 ### 6.4 仅更新后端（不改前端时）
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
@@ -648,7 +996,21 @@ mvn clean package -DskipTests
 docker compose up -d --build budgetpilot-api
 ```
 
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot
+
+# 重新构建
+mvn clean package -DskipTests
+
+# 重启
+sudo systemctl restart budgetpilot
+```
+
 ### 6.5 仅更新前端（不改后端时）
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot/frontend
@@ -671,9 +1033,34 @@ docker compose up -d budgetpilot-api
 sudo nginx -s reload
 ```
 
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot/frontend
+
+npm install
+npm run build
+
+# 更新 Nginx web 目录
+sudo rm -rf /opt/budgetpilot/web/assets/*
+sudo cp -r dist/* /opt/budgetpilot/web/
+
+# 更新 Spring Boot 静态目录并重新构建 JAR
+rm -rf /opt/budgetpilot/src/main/resources/static/assets/*
+cp -r dist/* /opt/budgetpilot/src/main/resources/static/
+cd /opt/budgetpilot
+mvn package -DskipTests -q
+sudo systemctl restart budgetpilot
+
+# 刷新 Nginx 缓存
+sudo nginx -s reload
+```
+
 > **注意**：Spring Boot 的静态文件打包在 JAR 中，仅复制文件到 `src/main/resources/static/` 不会生效，必须重新构建 JAR 并重启容器。Nginx 代理的前端只需更新 `/opt/budgetpilot/web/` 目录。
 
 ### 6.6 数据库备份
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
@@ -695,29 +1082,50 @@ gzip backup/budgetpilot_${DATE}.sql
 ls -lh backup/budgetpilot_${DATE}.sql.gz
 ```
 
-**定时备份（crontab）**：
+**裸机方式：**
+
+```bash
+mkdir -p /opt/budgetpilot/backup
+
+DATE=$(date +%Y%m%d_%H%M%S)
+mysqldump -ubudgetpilot -pyour_db_password budgetpilot \
+  --single-transaction --routines \
+  > /opt/budgetpilot/backup/budgetpilot_${DATE}.sql
+
+gzip /opt/budgetpilot/backup/budgetpilot_${DATE}.sql
+ls -lh /opt/budgetpilot/backup/budgetpilot_${DATE}.sql.gz
+```
+
+**定时备份（crontab）：**
 
 ```bash
 crontab -e
 
-# 添加：每天凌晨 3 点自动备份
+# Docker 方式：
 0 3 * * * cd /opt/budgetpilot && source .env && DATE=$(date +\%Y\%m\%d_\%H\%M\%S) && docker compose exec mysql mysqldump -ubudgetpilot -p${DB_PASS} budgetpilot --single-transaction --routines > backup/budgetpilot_\${DATE}.sql && gzip backup/budgetpilot_\${DATE}.sql && find backup/ -name "*.sql.gz" -mtime +30 -delete
+
+# 裸机方式：
+0 3 * * * DATE=$(date +\%Y\%m\%d_\%H\%M\%S) && mysqldump -ubudgetpilot -pyour_db_password budgetpilot --single-transaction --routines > /opt/budgetpilot/backup/budgetpilot_\${DATE}.sql && gzip /opt/budgetpilot/backup/budgetpilot_\${DATE}.sql && find /opt/budgetpilot/backup -name "*.sql.gz" -mtime +30 -delete
 ```
 
-**恢复备份**：
+**恢复备份：**
 
 ```bash
 cd /opt/budgetpilot
 source .env
 
-# 解压
+# Docker 方式
 gunzip backup/budgetpilot_20260415_030000.sql.gz
-
-# 恢复
 docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < backup/budgetpilot_20260415_030000.sql
+
+# 裸机方式
+gunzip /opt/budgetpilot/backup/budgetpilot_20260415_030000.sql.gz
+mysql -ubudgetpilot -pyour_db_password budgetpilot < /opt/budgetpilot/backup/budgetpilot_20260415_030000.sql
 ```
 
 ### 6.7 数据库直连
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
@@ -725,17 +1133,28 @@ source .env
 
 # 进入 MySQL 交互式命令行
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+```
 
-# 常用查询
+**裸机方式：**
+
+```bash
+mysql -ubudgetpilot -pyour_db_password budgetpilot
+```
+
+**常用查询（两种环境通用）：**
+
+```sql
 SELECT COUNT(*) FROM t_transaction;
 SELECT * FROM t_account WHERE is_active = 1;
 SELECT * FROM t_config;
 
-# 退出
+-- 退出
 exit
 ```
 
 ### 6.8 清理空间
+
+**Docker 方式：**
 
 ```bash
 # 清理 Docker 悬空镜像
@@ -743,7 +1162,22 @@ docker image prune -f
 
 # 清理所有未使用的 Docker 资源（镜像、容器、网络、卷）
 docker system prune -a
+```
 
+**裸机方式：**
+
+```bash
+# 清理 systemd journal 日志（保留最近 100MB）
+sudo journalctl --vacuum-size=100M
+
+# 清理旧的构建产物
+rm -rf /opt/budgetpilot/target/
+rm -rf /opt/budgetpilot/frontend/node_modules/
+```
+
+**通用：**
+
+```bash
 # 清理 30 天前的备份
 find /opt/budgetpilot/backup -name "*.sql.gz" -mtime +30 -delete
 
@@ -877,19 +1311,28 @@ curl -X POST http://127.0.0.1:6060/api/v1/system/rates/refresh
 
 ### API 无法启动
 
+**Docker 方式：**
+
 ```bash
-# 查看详细错误
 docker compose logs budgetpilot-api 2>&1 | tail -50
 ```
 
-**常见问题**：
+**裸机方式：**
+
+```bash
+sudo journalctl -u budgetpilot --no-pager | tail -50   # systemd
+tail -50 /opt/budgetpilot/budgetpilot.log               # nohup
+```
+
+**常见问题（两种环境通用）：**
 
 | 问题 | 排查方法 | 解决方案 |
 |------|---------|---------|
-| 数据库连接失败 | `docker compose ps mysql` 检查是否 healthy | 等待 MySQL 健康检查通过后再启动 API |
+| 数据库连接失败 | `mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SELECT 1;"` | 确认 MySQL 运行中，密码正确 |
 | 端口 6060 被占用 | `ss -tlnp \| grep 6060` | 停止占用端口的进程或更换端口 |
-| 内存不足 | `free -h` | 减少容器内存限制或升级服务器 |
+| 内存不足 | `free -h` | 减少 JVM 堆内存或升级服务器 |
 | JAR 文件缺失 | `ls target/budgetpilot-*.jar` | 重新执行 `mvn clean package` |
+| Redis 连接失败 | `redis-cli ping` | 确认 Redis 运行中，端口正确 |
 
 ### 端口占用检查
 
@@ -906,21 +1349,34 @@ lsof -i :6060
 
 ### 数据库未初始化
 
+**Docker 方式：**
+
 ```bash
 cd /opt/budgetpilot
 source .env
 
-# 手动执行初始化脚本（仅 schema.sql 需要手动执行，init_data.sql 由 DataInitializer 兜底）
-docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < sql/schema.sql
+# 手动执行初始化脚本（仅 01_schema.sql 需要手动执行，02_init_data.sql 由 DataInitializer 兜底）
+docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot < sql/01_schema.sql
 
 # 系统预置分类和默认管理员会在 API 启动时由 DataInitializer 自动创建
 # 如需手动重新初始化分类，可清空数据后重启 API：
 # DELETE FROM t_category WHERE is_system = true;  # 然后重启 API
 ```
 
+**裸机方式：**
+
+```bash
+mysql -ubudgetpilot -pyour_db_password budgetpilot < /opt/budgetpilot/sql/01_schema.sql
+
+# 重启后端
+sudo systemctl restart budgetpilot
+```
+
 ### 用户体系迁移（旧版本升级）
 
 如果从没有用户体系的旧版本升级，需要执行迁移脚本：
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
@@ -932,7 +1388,7 @@ docker compose exec mysql mysqldump -ubudgetpilot -p${DB_PASS} budgetpilot \
   --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
 
 # 2. 执行迁移脚本
-cat sql/user_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+cat sql/migrations/user_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
 
 # 3. 验证
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SELECT id, username, role FROM t_user;"
@@ -941,11 +1397,33 @@ docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SELEC
 docker compose restart budgetpilot-api
 ```
 
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot
+
+# 1. 先备份数据库
+DATE=$(date +%Y%m%d_%H%M%S)
+mysqldump -ubudgetpilot -pyour_db_password budgetpilot \
+  --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
+
+# 2. 执行迁移脚本
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/migrations/user_migration.sql
+
+# 3. 验证
+mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SELECT id, username, role FROM t_user;"
+
+# 4. 重启 API
+sudo systemctl restart budgetpilot
+```
+
 > 迁移后所有现有数据归属于默认 admin 用户（user_id = 1），数据隔离机制自动生效。
 
 ### 商户/账户租户隔离迁移
 
 如果升级前已有商户和账户数据，需要执行租户唯一约束迁移脚本：
+
+**Docker 方式：**
 
 ```bash
 cd /opt/budgetpilot
@@ -957,30 +1435,66 @@ docker compose exec mysql mysqldump -ubudgetpilot -p${DB_PASS} budgetpilot \
   --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
 
 # 2. 执行迁移脚本
-cat sql/tenant_unique_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+cat sql/migrations/tenant_unique_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
 
 # 3. 验证（确认 t_merchant 和 t_account 有 uk_user_name 联合唯一索引）
 docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SHOW INDEX FROM t_merchant WHERE Key_name='uk_user_name'; SHOW INDEX FROM t_account WHERE Key_name='uk_user_name';"
 ```
 
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot
+
+# 1. 先备份数据库
+DATE=$(date +%Y%m%d_%H%M%S)
+mysqldump -ubudgetpilot -pyour_db_password budgetpilot \
+  --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
+
+# 2. 执行迁移脚本
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/migrations/tenant_unique_migration.sql
+
+# 3. 验证
+mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW INDEX FROM t_merchant WHERE Key_name='uk_user_name'; SHOW INDEX FROM t_account WHERE Key_name='uk_user_name';"
+
+# 4. 重启
+sudo systemctl restart budgetpilot
+```
+
 > 迁移后所有现有数据归属于默认 admin 用户（user_id = 1），数据隔离机制自动生效。
 
-### MySQL 健康检查一直失败
+### MySQL 异常
+
+**Docker 方式：**
 
 ```bash
 # 查看 MySQL 日志
 docker compose logs mysql
 
-# 常见问题：
-# 1. 初始化 SQL 有语法错误 → 检查 sql/schema.sql
-# 2. 磁盘空间不足 → df -h
-# 3. 内存不足 → free -h
-
 # 手动进入 MySQL 检查
 docker compose exec mysql mysql -uroot -p${DB_ROOT_PASS} -e "SELECT 1;"
 ```
 
+**裸机方式：**
+
+```bash
+# 查看 MySQL 状态
+sudo systemctl status mysql       # Ubuntu
+sudo systemctl status mysqld      # CentOS
+sudo tail -f /var/log/mysql/error.log
+
+# 手动进入 MySQL 检查
+mysql -uroot -pyour_root_password -e "SELECT 1;"
+```
+
+**常见问题（两种环境通用）：**
+- 初始化 SQL 有语法错误 → 检查 sql/01_schema.sql
+- 磁盘空间不足 → `df -h`
+- 内存不足 → `free -h`
+
 ### Redis 连接失败
+
+**Docker 方式：**
 
 ```bash
 # 测试 Redis 连通性
@@ -988,9 +1502,22 @@ docker compose exec redis redis-cli ping
 
 # 查看 Redis 日志
 docker compose logs redis
+```
 
-# 检查配置中的 Redis 地址是否正确
-docker compose exec budgetpilot-api cat /app/application.yml
+**裸机方式：**
+
+```bash
+# 测试 Redis 连通性
+redis-cli ping
+
+# 查看 Redis 状态
+sudo systemctl status redis
+sudo tail -f /var/log/redis/redis-server.log
+```
+
+**检查后端配置中的 Redis 地址是否正确：**
+```bash
+cat src/main/resources/application.yml | grep redis
 ```
 
 ### 前端 404 / 白屏
@@ -1026,7 +1553,9 @@ curl -v https://api.telegram.org/
 # - HTTPS_PROXY=http://proxy:port
 ```
 
-### 容器启动后自动退出
+### 容器/进程启动后自动退出
+
+**Docker 方式：**
 
 ```bash
 # 查看退出原因
@@ -1034,12 +1563,22 @@ docker compose ps -a
 
 # 查看完整日志
 docker compose logs budgetpilot-api
-
-# 常见原因：
-# 1. Java OOM → 增加 mem_limit
-# 2. 数据库连接超时 → 检查 MySQL 是否先启动
-# 3. 配置错误 → 检查 .env 文件
 ```
+
+**裸机方式：**
+
+```bash
+# 查看 systemd 状态
+sudo systemctl status budgetpilot
+
+# 查看日志
+sudo journalctl -u budgetpilot --no-pager | tail -100
+```
+
+**常见原因（两种环境通用）：**
+- Java OOM → 增加 JVM 堆内存（添加 `-Xmx512m` 参数）
+- 数据库连接超时 → 确认 MySQL/Redis 已启动
+- 配置错误 → 检查 `.env` 文件或 systemd Environment
 
 ---
 
@@ -1087,6 +1626,8 @@ npm run build
 
 ## 十、完整部署流程总结
 
+### 方式 A：Docker Compose 部署（推荐）
+
 如果你是第一次部署，按以下步骤操作：
 
 ```bash
@@ -1125,6 +1666,64 @@ docker compose ps
 curl http://127.0.0.1:6060/api/v1/accounts
 
 # ===== 第 8 步（可选）：配置 Nginx =====
+sudo cp nginx.conf /etc/nginx/conf.d/budgetpilot.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### 方式 B：裸机部署（无 Docker）
+
+```bash
+# ===== 第 1 步：安装依赖 =====
+sudo apt update && sudo apt install -y mysql-server-8.0 redis-server nginx openjdk-21-jdk maven nodejs npm
+
+# ===== 第 2 步：配置 MySQL =====
+sudo systemctl start mysql
+sudo mysql -uroot -e "CREATE DATABASE IF NOT EXISTS budgetpilot DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER IF NOT EXISTS 'budgetpilot'@'127.0.0.1' IDENTIFIED BY 'your_db_password'; GRANT ALL PRIVILEGES ON budgetpilot.* TO 'budgetpilot'@'127.0.0.1'; FLUSH PRIVILEGES;"
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/01_schema.sql
+
+# ===== 第 3 步：启动 Redis =====
+sudo systemctl start redis
+
+# ===== 第 4 步：上传代码 =====
+cd /opt/budgetpilot
+
+# ===== 第 5 步：构建后端 =====
+mvn clean package -DskipTests
+
+# ===== 第 6 步：构建前端 =====
+cd frontend && npm install && npm run build
+sudo cp -r dist/* /opt/budgetpilot/web/
+cd ..
+
+# ===== 第 7 步：启动后端（systemd） =====
+sudo tee /etc/systemd/system/budgetpilot.service << 'EOF'
+[Unit]
+Description=BudgetPilot API
+After=mysql.service redis.service
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=/opt/budgetpilot
+Environment="DB_HOST=127.0.0.1"
+Environment="DB_PORT=3306"
+Environment="DB_USER=budgetpilot"
+Environment="DB_PASS=your_db_password"
+Environment="REDIS_HOST=127.0.0.1"
+Environment="REDIS_PORT=6379"
+ExecStart=/usr/bin/java -jar target/budgetpilot-*.jar
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+sudo systemctl daemon-reload && sudo systemctl start budgetpilot
+
+# ===== 第 8 步：验证 =====
+sudo systemctl status budgetpilot
+curl http://127.0.0.1:6060/api/v1/accounts
+
+# ===== 第 9 步（可选）：配置 Nginx =====
 sudo cp nginx.conf /etc/nginx/conf.d/budgetpilot.conf
 sudo nginx -t && sudo systemctl reload nginx
 ```

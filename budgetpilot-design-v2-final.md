@@ -188,8 +188,9 @@ budgetpilot/
 │   ├── application.yml
 │   └── mapper/*.xml
 ├── sql/
-│   ├── schema.sql
-│   └── init_data.sql
+│   ├── 01_schema.sql
+│   ├── 02_init_data.sql
+│   └── migrations/
 ├── pom.xml
 ├── Dockerfile
 └── docker-compose.yml
@@ -2363,10 +2364,11 @@ Phase 5（持续）—— 打磨
 
 ```
 sql/
-├── schema.sql              # 12 张表建表语句（含用户表 + user_id）
-├── init_data.sql           # 预设分类 + 默认预警规则 + 系统配置
-├── user_migration.sql      # 旧版本升级：创建用户体系 + 为业务表添加 user_id
-├── merchant_migration.sql  # 商户表迁移脚本
+├── 01_schema.sql           # 12 张表建表语句（含用户表 + user_id）
+├── 02_init_data.sql        # 预设分类 + 默认预警规则 + 系统配置
+├── migrations/
+│   ├── user_migration.sql  # 旧版本升级：创建用户体系 + 为业务表添加 user_id
+│   ├── merchant_migration.sql  # 商户表迁移脚本
 └── upgrade/                # 版本升级脚本（预留）
 ```
 
