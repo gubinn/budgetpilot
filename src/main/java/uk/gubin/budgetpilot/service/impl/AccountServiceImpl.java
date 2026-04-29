@@ -16,8 +16,10 @@ import uk.gubin.budgetpilot.dto.AccountUpdateDTO;
 import uk.gubin.budgetpilot.entity.Account;
 import uk.gubin.budgetpilot.entity.Transaction;
 import uk.gubin.budgetpilot.mapper.AccountMapper;
+import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 import uk.gubin.budgetpilot.service.AccountService;
+import uk.gubin.budgetpilot.service.CurrencyRateService;
 import uk.gubin.budgetpilot.vo.AccountVO;
 
 import java.math.BigDecimal;
@@ -35,6 +37,8 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
 
     private final ObjectMapper objectMapper;
     private final TransactionMapper transactionMapper;
+    private final CategoryMapper categoryMapper;
+    private final CurrencyRateService currencyRateService;
     private final StringRedisTemplate redisTemplate;
 
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
@@ -240,8 +244,8 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         transaction.setCurrency(account.getCurrency());
         transaction.setAmountBase(diff.abs()); // 基础货币金额
         transaction.setAccountId(accountId);
-        // 分类：58=余额调整(收入), 59=余额调整(支出)
-        transaction.setCategoryId(diff.compareTo(BigDecimal.ZERO) > 0 ? 58L : 59L);
+        // 分类：按名称和类型动态查找（58=余额调整收入, 59=余额调整支出）
+        transaction.setCategoryId(getBalanceAdjustCategoryId(diff.compareTo(BigDecimal.ZERO) > 0 ? 2 : 1));
         transaction.setTransactionDate(java.time.LocalDate.now());
         transaction.setTransactionTime(java.time.LocalTime.now());
         transaction.setNote("余额调整: " + reason);
@@ -267,11 +271,16 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         List<Account> accounts = list(query);
 
         BigDecimal total = BigDecimal.ZERO;
+        LocalDate today = LocalDate.now();
         for (Account account : accounts) {
             if (account.getCurrentBalance() != null) {
-                // 只统计 CNY 账户，其他币种需要汇率换算
                 if ("CNY".equals(account.getCurrency())) {
                     total = total.add(account.getCurrentBalance());
+                } else {
+                    BigDecimal rate = currencyRateService.getRate(account.getCurrency(), today);
+                    if (rate != null && rate.compareTo(BigDecimal.ZERO) > 0) {
+                        total = total.add(account.getCurrentBalance().multiply(rate).setScale(2, java.math.RoundingMode.HALF_UP));
+                    }
                 }
             }
         }
@@ -301,6 +310,22 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /**
+     * 动态查找“余额调整”分类 ID（按名称+类型查询 user_id=0 的系统分类）
+     */
+    private Long getBalanceAdjustCategoryId(int type) {
+        LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category> query = new LambdaQueryWrapper<>();
+        query.eq(uk.gubin.budgetpilot.entity.Category::getName, "余额调整")
+                .eq(uk.gubin.budgetpilot.entity.Category::getType, type)
+                .eq(uk.gubin.budgetpilot.entity.Category::getUserId, 0L)
+                .last("LIMIT 1");
+        uk.gubin.budgetpilot.entity.Category cat = categoryMapper.selectOne(query);
+        if (cat == null) {
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "余额调整分类未找到，请先初始化系统分类");
+        }
+        return cat.getId();
     }
 
     private boolean existsByName(String name, Long excludeId) {

@@ -57,9 +57,10 @@
 </template>
 
 <script setup>
-import { ref, computed, h, onMounted } from 'vue'
+import { ref, computed, h, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { systemApi } from '@/api'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
   BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline,
@@ -73,10 +74,34 @@ const auth = useAuthStore()
 const dialog = useDialog()
 const collapsed = ref(false)
 
+const alertCount = ref(0)
+const alertRefreshTimer = ref(null)
+
+async function refreshAlertCount() {
+  if (auth.isAdmin) {
+    alertCount.value = 0
+    return
+  }
+  try {
+    const res = await systemApi.alerts()
+    alertCount.value = res.data?.length || 0
+  } catch {
+    alertCount.value = 0
+  }
+}
+
 // 移动端默认收起侧边栏
 onMounted(() => {
   if (window.innerWidth < 768) {
     collapsed.value = true
+  }
+  refreshAlertCount()
+  alertRefreshTimer.value = setInterval(refreshAlertCount, 60000)
+})
+
+onBeforeUnmount(() => {
+  if (alertRefreshTimer.value) {
+    clearInterval(alertRefreshTimer.value)
   }
 })
 
@@ -105,7 +130,6 @@ const menuOptions = computed(() => {
 })
 
 const currentRoute = computed(() => route.name || 'Dashboard')
-const alertCount = ref(0)
 
 const pageTitle = computed(() => {
   const map = {

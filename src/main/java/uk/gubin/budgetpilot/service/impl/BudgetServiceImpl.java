@@ -27,7 +27,10 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -43,6 +46,17 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
     public Budget create(BudgetCreateDTO dto) {
         if (exists(dto.getYearMonth())) {
             throw new BizException(ErrorCode.BUDGET_MONTH_DUPLICATE);
+        }
+
+        // 校验：总预算应等于明细之和
+        if (dto.getItems() != null && !dto.getItems().isEmpty()) {
+            BigDecimal itemsSum = dto.getItems().stream()
+                    .map(BudgetCreateDTO.BudgetItemDTO::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            if (itemsSum.compareTo(dto.getTotalAmount()) != 0) {
+                throw new BizException(ErrorCode.PARAM_ERROR,
+                        "预算总额(" + dto.getTotalAmount() + ")与分类明细之和(" + itemsSum + ")不匹配");
+            }
         }
 
         Budget budget = new Budget();
@@ -153,6 +167,18 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             throw new BizException(ErrorCode.BUDGET_LOCKED);
         }
 
+        // 校验：如果传入了明细，总预算应等于明细之和
+        if (dto.getItems() != null && !dto.getItems().isEmpty()) {
+            BigDecimal itemsSum = dto.getItems().stream()
+                    .map(BudgetUpdateDTO.BudgetItemDTO::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal compareTotal = dto.getTotalAmount() != null ? dto.getTotalAmount() : budget.getTotalAmount();
+            if (itemsSum.compareTo(compareTotal) != 0) {
+                throw new BizException(ErrorCode.PARAM_ERROR,
+                        "预算总额与分类明细之和不匹配");
+            }
+        }
+
         if (dto.getTotalAmount() != null) {
             budget.setTotalAmount(dto.getTotalAmount());
         }
@@ -161,24 +187,16 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         }
         baseMapper.updateById(budget);
 
-        // 更新明细
-        if (dto.getItems() != null && !dto.getItems().isEmpty()) {
+        // 更新明细：先删除旧的，再插入新的
+        if (dto.getItems() != null) {
+            budgetItemMapper.delete(new LambdaQueryWrapper<BudgetItem>().eq(BudgetItem::getBudgetId, budget.getId()));
             for (BudgetUpdateDTO.BudgetItemDTO itemDTO : dto.getItems()) {
-                LambdaQueryWrapper<BudgetItem> query = new LambdaQueryWrapper<>();
-                query.eq(BudgetItem::getBudgetId, budget.getId())
-                        .eq(BudgetItem::getCategoryId, itemDTO.getCategoryId());
-                BudgetItem item = budgetItemMapper.selectOne(query);
-                if (item == null) {
-                    item = new BudgetItem();
-                    item.setBudgetId(budget.getId());
-                    item.setCategoryId(itemDTO.getCategoryId());
-                    item.setAmount(itemDTO.getAmount());
-                    item.setSpent(BigDecimal.ZERO);
-                    budgetItemMapper.insert(item);
-                } else {
-                    item.setAmount(itemDTO.getAmount());
-                    budgetItemMapper.updateById(item);
-                }
+                BudgetItem item = new BudgetItem();
+                item.setBudgetId(budget.getId());
+                item.setCategoryId(itemDTO.getCategoryId());
+                item.setAmount(itemDTO.getAmount());
+                item.setSpent(BigDecimal.ZERO);
+                budgetItemMapper.insert(item);
             }
         }
 
@@ -269,7 +287,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         }
     }
 
-    private Budget getBudgetByMonth(String yearMonth) {
+    Budget getBudgetByMonth(String yearMonth) {
         LambdaQueryWrapper<Budget> query = new LambdaQueryWrapper<>();
         query.eq(Budget::getYearMonth, yearMonth);
         return baseMapper.selectOne(query);
@@ -284,36 +302,52 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.atEndOfMonth();
 
+        // 批量加载分类，避免 N+1
+        List<Long> catIds = items.stream().map(BudgetItem::getCategoryId).distinct().toList();
+        Map<Long, Category> catMap = catIds.isEmpty() ? Map.of()
+                : categoryMapper.selectBatchIds(catIds).stream().collect(Collectors.toMap(Category::getId, c -> c));
+
+        // 收集所有需要查询的分类 ID（含子分类），一次性查所有交易
+        List<Long> allCatIds = new ArrayList<>(catIds);
+        for (Long catId : catIds) {
+            allCatIds.addAll(getChildCategoryIds(catId));
+        }
+
+        LambdaQueryWrapper<Transaction> spentQuery = new LambdaQueryWrapper<>();
+        spentQuery.eq(Transaction::getType, 1)
+                .eq(Transaction::getIsConfirmed, true)
+                .in(Transaction::getCategoryId, allCatIds)
+                .ge(Transaction::getTransactionDate, start)
+                .le(Transaction::getTransactionDate, end);
+        List<Transaction> allTxs = transactionMapper.selectList(spentQuery);
+        Map<Long, BigDecimal> catSpentMap = allTxs.stream()
+                .collect(Collectors.groupingBy(Transaction::getCategoryId,
+                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmountBase, BigDecimal::add)));
+
+        // 计算每个分类的已消费（含子分类）
+        Map<Long, BigDecimal> spentByBudgetCat = new HashMap<>();
+        for (Long catId : catIds) {
+            BigDecimal total = catSpentMap.getOrDefault(catId, BigDecimal.ZERO);
+            for (Long childId : getChildCategoryIds(catId)) {
+                total = total.add(catSpentMap.getOrDefault(childId, BigDecimal.ZERO));
+            }
+            spentByBudgetCat.put(catId, total);
+        }
+
         List<BudgetProgressVO.ItemProgress> result = new ArrayList<>();
         for (BudgetItem item : items) {
             BudgetProgressVO.ItemProgress ip = new BudgetProgressVO.ItemProgress();
             ip.setCategoryId(item.getCategoryId());
             ip.setBudget(item.getAmount());
 
-            // 获取一级分类及其子分类
-            List<Long> catIds = new ArrayList<>();
-            catIds.add(item.getCategoryId());
-            catIds.addAll(getChildCategoryIds(item.getCategoryId()));
-
-            // 聚合已消费
-            LambdaQueryWrapper<Transaction> spentQuery = new LambdaQueryWrapper<>();
-            spentQuery.eq(Transaction::getType, 1)
-                    .eq(Transaction::getIsConfirmed, true)
-                    .in(Transaction::getCategoryId, catIds)
-                    .ge(Transaction::getTransactionDate, start)
-                    .le(Transaction::getTransactionDate, end);
-            List<Transaction> txs = transactionMapper.selectList(spentQuery);
-            BigDecimal spent = txs.stream()
-                    .map(Transaction::getAmountBase)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
+            BigDecimal spent = spentByBudgetCat.getOrDefault(item.getCategoryId(), BigDecimal.ZERO);
             ip.setSpent(spent);
             ip.setRemaining(item.getAmount().subtract(spent));
             ip.setProgressPct(spent.divide(item.getAmount(), 4, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
 
-            // 计算状态
-            Category cat = categoryMapper.selectById(item.getCategoryId());
+            // 从 Map 中获取分类信息
+            Category cat = catMap.get(item.getCategoryId());
             if (cat != null) {
                 ip.setCategoryName(cat.getName());
                 ip.setCategoryIcon(cat.getIcon());

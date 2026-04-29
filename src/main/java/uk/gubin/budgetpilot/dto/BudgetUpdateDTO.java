@@ -1,5 +1,6 @@
 package uk.gubin.budgetpilot.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -15,6 +16,7 @@ public class BudgetUpdateDTO {
     @Size(max = 200, message = "备注不能超过200个字符")
     private String note;
 
+    @Valid
     private List<BudgetItemDTO> items;
 
     @Data

@@ -78,6 +78,12 @@ public class ReportServiceImpl implements ReportService {
                         Collectors.reducing(BigDecimal.ZERO, Transaction::getAmountBase, BigDecimal::add)));
 
         List<ReportVO.MonthlySummary.CategoryShareItem> shares = new ArrayList<>();
+
+        // 批量加载分类，避免 N+1
+        List<Long> catIds = categoryAmounts.keySet().stream().distinct().toList();
+        Map<Long, Category> catMap = catIds.isEmpty() ? Map.of()
+                : categoryMapper.selectBatchIds(catIds).stream().collect(Collectors.toMap(Category::getId, c -> c));
+
         for (Map.Entry<Long, BigDecimal> entry : categoryAmounts.entrySet()) {
             ReportVO.MonthlySummary.CategoryShareItem item = new ReportVO.MonthlySummary.CategoryShareItem();
             item.setCategoryId(entry.getKey());
@@ -88,7 +94,7 @@ public class ReportServiceImpl implements ReportService {
                 item.setPercentage(entry.getValue().divide(totalExpense, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
             }
 
-            Category cat = categoryMapper.selectById(entry.getKey());
+            Category cat = catMap.get(entry.getKey());
             if (cat != null) {
                 item.setCategoryName(cat.getName());
                 item.setCategoryColor(cat.getColor());
@@ -120,6 +126,12 @@ public class ReportServiceImpl implements ReportService {
                 .orderByDesc(Transaction::getTransactionDate);
 
         List<Transaction> txs = transactionMapper.selectList(query);
+
+        // 批量加载账户，避免 N+1
+        List<Long> accIds = txs.stream().map(Transaction::getAccountId).distinct().toList();
+        Map<Long, Account> accMap = accIds.isEmpty() ? Map.of()
+                : accountMapper.selectBatchIds(accIds).stream().collect(Collectors.toMap(Account::getId, a -> a));
+
         List<ReportVO.CategoryDetailItem> items = new ArrayList<>();
         for (Transaction tx : txs) {
             ReportVO.CategoryDetailItem item = new ReportVO.CategoryDetailItem();
@@ -130,7 +142,7 @@ public class ReportServiceImpl implements ReportService {
             item.setAmountBase(tx.getAmountBase());
             item.setTransactionDate(tx.getTransactionDate().toString());
             item.setNote(tx.getNote());
-            Account acc = accountMapper.selectById(tx.getAccountId());
+            Account acc = accMap.get(tx.getAccountId());
             if (acc != null) item.setAccountName(acc.getName());
             if (tx.getTags() != null) {
                 try { item.setTags(objectMapper.readValue(tx.getTags(), new TypeReference<>() {})); } catch (Exception ignored) {}

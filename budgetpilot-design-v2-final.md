@@ -188,8 +188,9 @@ budgetpilot/
 │   ├── application.yml
 │   └── mapper/*.xml
 ├── sql/
-│   ├── schema.sql
-│   └── init_data.sql
+│   ├── 01_schema.sql
+│   ├── 02_init_data.sql
+│   └── migrations/
 ├── pom.xml
 ├── Dockerfile
 └── docker-compose.yml
@@ -1655,6 +1656,12 @@ public CategoryVO update(Long id, CategoryCreateDTO dto) {
 - 余额调整直接创建交易记录（不经过 TransactionService），需单独处理缓存清除
 - 当前月份缓存时间缩短为 1 小时（原设计 5 分钟过短，5 小时过长）
 
+**Redis 依赖说明**（2026-04-30 更新）：
+- Redis 是**增强型依赖**（optional），不是硬依赖
+- Sa-Token session 已从 Redis 改为内存模式（移除 `sa-token-redis-jackson` 依赖），登录不再依赖 Redis
+- Redis 连接超时设为 500ms，不可用时自动跳过：登录限流、报表缓存、预警去重、商户搜索去重
+- Redis 不可用时核心功能（登录、查询、交易、报表）正常工作，恢复后自动恢复
+
 ### 4.5 预警模块
 
 #### 4.5.1 预警引擎架构
@@ -2098,7 +2105,7 @@ router.beforeEach(async (to, from, next) => {
 {
   "auth": {
     "mode": "用户名/密码登录（Sa-Token）+ API Key 双鉴权",
-    "session": "Sa-Token，Redis 存储",
+    "session": "Sa-Token，内存存储（默认模式，不再依赖 Redis）",
     "password": "BCrypt 加密（spring-security-crypto）",
     "api_key": "32 字节随机 base64url，存 t_user.api_key",
     "data_isolation": "MyBatis-Plus TenantLineInnerInterceptor（SQL 级 WHERE user_id）",
@@ -2363,10 +2370,11 @@ Phase 5（持续）—— 打磨
 
 ```
 sql/
-├── schema.sql              # 12 张表建表语句（含用户表 + user_id）
-├── init_data.sql           # 预设分类 + 默认预警规则 + 系统配置
-├── user_migration.sql      # 旧版本升级：创建用户体系 + 为业务表添加 user_id
-├── merchant_migration.sql  # 商户表迁移脚本
+├── 01_schema.sql           # 12 张表建表语句（含用户表 + user_id）
+├── 02_init_data.sql        # 预设分类 + 默认预警规则 + 系统配置
+├── migrations/
+│   ├── user_migration.sql  # 旧版本升级：创建用户体系 + 为业务表添加 user_id
+│   ├── merchant_migration.sql  # 商户表迁移脚本
 └── upgrade/                # 版本升级脚本（预留）
 ```
 
@@ -2381,6 +2389,28 @@ sql/
     <hutool.version>5.8.32</hutool.version>
     <jackson.version>跟随 Spring Boot</jackson.version>
 </properties>
+```
+
+> **2026-04-30 更新**：移除 `sa-token-redis-jackson` 依赖，Sa-Token session 改为内存模式。Redis 连接超时设为 500ms。详见「4.4.3 缓存策略」中的 Redis 依赖说明。
+
+## 附录 C：分类初始化与去重机制（2026-04-30 新增）
+
+### 分类初始化流程
+
+系统预置分类存储在 `t_category` 表中 `user_id=0` 且 `is_system=true`。新建用户时，`UserService.copyDefaultCategories()` 会自动复制这些分类到新用户的 `user_id` 下，确保每个用户拥有自己的分类副本。
+
+### 去重机制
+
+`DataInitializer.initSystemCategories()` 可能因多次启动产生重复记录（同一 `name+type` 多条）。为防止新用户复制时产生重复分类，`CategoryMapper.selectSystemDefaults()` 查询时使用 `GROUP BY name, type` 去重，确保每种分类只返回一条：
+
+```sql
+SELECT c.* FROM t_category c
+INNER JOIN (
+  SELECT name, type, MIN(id) AS min_id
+  FROM t_category WHERE is_system = true AND is_active = true
+  GROUP BY name, type
+) d ON c.name = d.name AND c.type = d.type AND c.id = d.min_id
+ORDER BY c.sort_order
 ```
 
 ## 附录 C：扩展字段快速参考

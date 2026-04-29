@@ -55,10 +55,10 @@ public class AlertLogService extends ServiceImpl<AlertLogMapper, AlertLog> {
      * 标记已读
      */
     public void markRead(Long id) {
-        AlertLog log = baseMapper.selectById(id);
-        if (log != null) {
-            log.setIsRead(true);
-            baseMapper.updateById(log);
+        AlertLog alertLog = baseMapper.selectById(id);
+        if (alertLog != null) {
+            alertLog.setIsRead(true);
+            baseMapper.updateById(alertLog);
         }
     }
 }

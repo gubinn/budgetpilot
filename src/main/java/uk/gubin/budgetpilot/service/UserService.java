@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,44 +49,102 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final uk.gubin.budgetpilot.mapper.MerchantMapper merchantMapper;
     private final uk.gubin.budgetpilot.mapper.RecurringRuleMapper recurringRuleMapper;
     private final uk.gubin.budgetpilot.mapper.AlertLogMapper alertLogMapper;
+    private final StringRedisTemplate redisTemplate;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
      * 用户登录
      */
     public LoginVO login(LoginDTO dto) {
-        LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
-        query.eq(User::getUsername, dto.getUsername());
-        User user = baseMapper.selectOne(query);
+        String username = dto.getUsername();
 
-        if (user == null) {
-            throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
+        // 登录限流：同一用户名连续失败 5 次后锁定 15 分钟
+        // Redis 不可用时跳过限流（优雅降级）
+        try {
+            String failKey = "login_fail:" + username;
+            String lockKey = "login_lock:" + username;
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
+                throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS, "登录失败次数过多，请 15 分钟后再试");
+            }
+
+            LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
+            query.eq(User::getUsername, username);
+            User user = baseMapper.selectOne(query);
+
+            if (user == null) {
+                recordLoginFail(failKey);
+                throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
+            }
+
+            if (!user.getIsActive()) {
+                throw new BizException(ErrorCode.AUTH_USER_DISABLED);
+            }
+
+            if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+                recordLoginFail(failKey);
+                throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
+            }
+
+            // 登录成功，清除失败计数和锁定
+            try {
+                redisTemplate.delete(failKey);
+                redisTemplate.delete(lockKey);
+            } catch (Exception ignored) {}
+
+            // Sa-Token 登录
+            StpUtil.login(user.getId());
+            // 将角色存入 Token Session
+            StpUtil.getTokenSession().set("role", user.getRole());
+
+            // 更新最后登录时间
+            user.setLastLogin(LocalDateTime.now());
+            baseMapper.updateById(user);
+
+            LoginVO vo = new LoginVO();
+            vo.setToken(StpUtil.getTokenValue());
+            vo.setId(user.getId());
+            vo.setUsername(user.getUsername());
+            vo.setNickname(user.getNickname());
+            vo.setRole(user.getRole());
+            return vo;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            // Redis 不可用（连接超时、超时异常等），跳过登录限流，降级为不限流登录
+            log.warn("Redis 不可用，跳过登录限流: {}", e.getClass().getSimpleName());
+            LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
+            query.eq(User::getUsername, username);
+            User user = baseMapper.selectOne(query);
+            if (user == null || !user.getIsActive()) {
+                throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
+            }
+            if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+                throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
+            }
+            StpUtil.login(user.getId());
+            StpUtil.getTokenSession().set("role", user.getRole());
+            user.setLastLogin(LocalDateTime.now());
+            baseMapper.updateById(user);
+            LoginVO vo = new LoginVO();
+            vo.setToken(StpUtil.getTokenValue());
+            vo.setId(user.getId());
+            vo.setUsername(user.getUsername());
+            vo.setNickname(user.getNickname());
+            vo.setRole(user.getRole());
+            return vo;
         }
+    }
 
-        if (!user.getIsActive()) {
-            throw new BizException(ErrorCode.AUTH_USER_DISABLED);
+    private void recordLoginFail(String failKey) {
+        Long count = redisTemplate.opsForValue().increment(failKey);
+        if (count != null && count >= 5) {
+            // 达到阈值，设置锁定 15 分钟
+            redisTemplate.opsForValue().set(failKey.replace("login_fail:", "login_lock:"), "1", 15, java.util.concurrent.TimeUnit.MINUTES);
+            redisTemplate.delete(failKey);
+        } else {
+            // 设置过期时间 15 分钟（首次创建时设置，后续 increment 不改变 TTL）
+            redisTemplate.expire(failKey, 15, java.util.concurrent.TimeUnit.MINUTES);
         }
-
-        if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-            throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
-        }
-
-        // Sa-Token 登录
-        StpUtil.login(user.getId());
-        // 将角色存入 Token Session
-        StpUtil.getTokenSession().set("role", user.getRole());
-
-        // 更新最后登录时间
-        user.setLastLogin(LocalDateTime.now());
-        baseMapper.updateById(user);
-
-        LoginVO vo = new LoginVO();
-        vo.setToken(StpUtil.getTokenValue());
-        vo.setId(user.getId());
-        vo.setUsername(user.getUsername());
-        vo.setNickname(user.getNickname());
-        vo.setRole(user.getRole());
-        return vo;
     }
 
     /**
@@ -121,7 +180,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
         baseMapper.updateById(user);
 
-        // 重新登录保持会话
+        // 使其他会话失效（防止并发 session 在改密后仍可用）
+        StpUtil.kickout(userId);
+        // 重新登录保持当前会话
         StpUtil.login(userId);
     }
 

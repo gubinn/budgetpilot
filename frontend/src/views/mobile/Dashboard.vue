@@ -72,7 +72,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { reportApi, budgetApi, transactionApi, accountApi } from '@/api'
@@ -89,6 +89,8 @@ const hasCategoryData = ref(false)
 const hasMerchantData = ref(false)
 const pieChartRef = ref(null)
 const merchantPieRef = ref(null)
+const pieChart = ref(null)
+const merchantPieChart = ref(null)
 
 onMounted(async () => {
   const month = dayjs().format('YYYY-MM')
@@ -116,8 +118,8 @@ onMounted(async () => {
       if (pieChartRef.value && s.categoryShares?.length) {
         hasCategoryData.value = true
         await new Promise(r => setTimeout(r, 100))
-        const chart = echarts.init(pieChartRef.value)
-        chart.setOption({
+        pieChart.value = echarts.init(pieChartRef.value)
+        pieChart.value.setOption({
           tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
           series: [{
             type: 'pie',
@@ -160,8 +162,8 @@ onMounted(async () => {
       hasMerchantData.value = true
       await new Promise(r => setTimeout(r, 100))
       if (merchantPieRef.value) {
-        const chart = echarts.init(merchantPieRef.value)
-        chart.setOption({
+        merchantPieChart.value = echarts.init(merchantPieRef.value)
+        merchantPieChart.value.setOption({
           tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
           series: [{
             type: 'pie',
@@ -178,6 +180,11 @@ onMounted(async () => {
   } catch (e) {
     message.error('加载首页数据失败')
   }
+})
+
+onBeforeUnmount(() => {
+  pieChart.value?.dispose()
+  merchantPieChart.value?.dispose()
 })
 
 function getProgressStatus(status) {

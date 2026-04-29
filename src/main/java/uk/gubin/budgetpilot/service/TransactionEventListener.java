@@ -16,6 +16,7 @@ import uk.gubin.budgetpilot.event.TransactionEvent;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -67,8 +68,8 @@ public class TransactionEventListener {
             budgetService.updateItemSpent(topCategoryId, yearMonth, tx.getAmountBase());
         }
 
-        // 2. 检查预警规则
-        checkAlerts(tx, yearMonth);
+        // 2. 检查预警规则（使用显式 userId 避免异步线程租户上下文丢失）
+        checkAlerts(event.getUserId(), tx, yearMonth);
     }
 
     /**
@@ -89,8 +90,8 @@ public class TransactionEventListener {
         }
     }
 
-    private void checkAlerts(Transaction tx, String yearMonth) {
-        List<AlertRule> rules = alertRuleService.getActiveRules();
+    private void checkAlerts(Long userId, Transaction tx, String yearMonth) {
+        List<AlertRule> rules = alertRuleService.getActiveRulesByUserId(userId);
 
         for (AlertRule rule : rules) {
             try {
@@ -120,7 +121,7 @@ public class TransactionEventListener {
             var item = budgetService.getItem(topCategoryId, yearMonth);
             if (item == null || item.getAmount().compareTo(BigDecimal.ZERO) == 0) return false;
 
-            BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, BigDecimal.ROUND_HALF_UP)
+            BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100));
             return pct.compareTo(BigDecimal.valueOf(threshold)) >= 0;
         } catch (Exception e) {

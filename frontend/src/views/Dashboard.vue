@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, h } from 'vue'
+import { ref, onMounted, onBeforeUnmount, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { reportApi, budgetApi, transactionApi, accountApi } from '@/api'
@@ -89,6 +89,8 @@ const budgetProgress = ref([])
 const recentTransactions = ref([])
 const pieChartRef = ref(null)
 const merchantPieRef = ref(null)
+const pieChart = ref(null)
+const merchantPieChart = ref(null)
 
 const columns = [
   { title: '日期', key: 'date', width: 110 },
@@ -132,8 +134,8 @@ onMounted(async () => {
 
       // 饼图
       if (pieChartRef.value && s.categoryShares?.length) {
-        const chart = echarts.init(pieChartRef.value)
-        chart.setOption({
+        pieChart.value = echarts.init(pieChartRef.value)
+        pieChart.value.setOption({
           tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
           series: [{
             type: 'pie',
@@ -173,8 +175,8 @@ onMounted(async () => {
     // 商户饼图
     if (merchantRes.status === 'fulfilled' && merchantRes.value.data?.merchantShares?.length) {
       if (merchantPieRef.value) {
-        const merchantChart = echarts.init(merchantPieRef.value)
-        merchantChart.setOption({
+        merchantPieChart.value = echarts.init(merchantPieRef.value)
+        merchantPieChart.value.setOption({
           tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
           legend: { bottom: 0, type: 'scroll' },
           series: [{
@@ -197,6 +199,11 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+})
+
+onBeforeUnmount(() => {
+  pieChart.value?.dispose()
+  merchantPieChart.value?.dispose()
 })
 
 function getProgressStatus(status) {

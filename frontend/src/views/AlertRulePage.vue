@@ -20,7 +20,7 @@
 
     <!-- 创建/编辑弹窗 -->
     <n-modal v-model:show="showCreateModal" preset="card" title="新增预警规则" style="width: 500px">
-      <n-form ref="formRef" :model="formData" :rules="rules" label-placement="left" label-width="100">
+      <n-form ref="formRef" :model="formData" :rules="formRules" label-placement="left" label-width="100">
         <n-form-item label="规则名称" path="name">
           <n-input v-model:value="formData.name" placeholder="请输入规则名称" />
         </n-form-item>
@@ -88,6 +88,12 @@ const formData = ref({
   checkDay: 25,
   minCount: 1
 })
+
+const formRules = {
+  name: { required: true, message: '请输入规则名称', trigger: 'blur' },
+  type: { type: 'number', required: true, message: '请选择规则类型', trigger: 'change' },
+  notifyChannel: { required: true, message: '请选择通知渠道', trigger: 'change' }
+}
 
 const typeOptions = [
   { label: '预算阈值预警', value: 1 },

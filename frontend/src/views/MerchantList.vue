@@ -165,7 +165,7 @@ async function loadData() {
   loading.value = true
   try {
     const [mRes, cRes] = await Promise.all([
-      merchantApi.list({ size: 100 }),
+      merchantApi.list({ size: 1000 }),
       categoryApi.tree(1)  // 仅支出分类
     ])
     merchants.value = mRes.data || []

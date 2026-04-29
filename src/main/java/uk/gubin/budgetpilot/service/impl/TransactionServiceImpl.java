@@ -63,15 +63,6 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     @Override
     @Transactional
     public TransactionVO create(TransactionCreateDTO dto) {
-        // 幂等校验：防止短时间重复提交
-        String idempotentKey = "txn:duplicate:" + cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong()
-                + ":" + dto.getType() + ":" + dto.getAmount() + ":" + dto.getAccountId()
-                + ":" + dto.getCategoryId() + ":" + dto.getTransactionDate() + ":" + dto.getNote();
-        String keyHash = cn.dev33.satoken.secure.SaSecureUtil.md5(idempotentKey);
-        if (Boolean.FALSE.equals(redisTemplate.opsForValue().setIfAbsent("idempotency:" + keyHash, "1", 3, java.util.concurrent.TimeUnit.SECONDS))) {
-            log.warn("Duplicate transaction submission detected: {}", keyHash);
-            throw new BizException(ErrorCode.DUPLICATE_NAME, "交易");
-        }
         // 校验账户
         Account account = accountMapper.selectById(dto.getAccountId());
         if (account == null) {
@@ -141,23 +132,33 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 只有确认的交易才更新账户余额
         if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
-            // 余额校验：仅对支出和转账类型，且仅对非信用卡账户（type=3 信用卡允许透支）
-            if (entity.getType() == 1 || entity.getType() == 3) {
-                Integer accountType = account.getType();
-                if (accountType == null || accountType != 3) {
-                    BigDecimal balance = account.getCurrentBalance();
-                    if (balance != null && balance.compareTo(entity.getAmount()) < 0) {
-                        throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+            BigDecimal adjustAmount = entity.getAmount();
+            boolean needsBalanceCheck = (entity.getType() == 1 || entity.getType() == 3)
+                    && account.getType() != null && account.getType() != 3; // 非信用卡需检查余额
+
+            switch (entity.getType()) {
+                case 1 -> { // 支出：原子扣减
+                    if (needsBalanceCheck) {
+                        int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), adjustAmount);
+                        if (rows == 0) {
+                            throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                        }
+                    } else {
+                        accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate());
                     }
                 }
-            }
-
-            BigDecimal adjustAmount = entity.getAmount();
-            switch (entity.getType()) {
-                case 1 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate()); // 支出
                 case 2 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount);           // 收入
                 case 3 -> {                                                                            // 转账
-                    accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate());
+                    // 源账户原子扣减
+                    if (needsBalanceCheck) {
+                        int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), adjustAmount);
+                        if (rows == 0) {
+                            throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                        }
+                    } else {
+                        accountMapper.adjustBalance(entity.getAccountId(), adjustAmount.negate());
+                    }
+                    // 目标账户增加（不需要余额检查）
                     accountMapper.adjustBalance(entity.getTargetAccountId(), adjustAmount);
                 }
             }
@@ -185,8 +186,13 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getAccountId() != null) query.eq(Transaction::getAccountId, dto.getAccountId());
         if (dto.getCategoryId() != null) {
             // 包含子分类
-            query.and(q -> q.eq(Transaction::getCategoryId, dto.getCategoryId())
-                    .or().in(Transaction::getCategoryId, getChildCategoryIds(dto.getCategoryId())));
+            List<Long> childIds = getChildCategoryIds(dto.getCategoryId());
+            if (childIds.isEmpty()) {
+                query.eq(Transaction::getCategoryId, dto.getCategoryId());
+            } else {
+                query.and(q -> q.eq(Transaction::getCategoryId, dto.getCategoryId())
+                        .or().in(Transaction::getCategoryId, childIds));
+            }
         }
         if (dto.getStartDate() != null) query.ge(Transaction::getTransactionDate, dto.getStartDate());
         if (dto.getEndDate() != null) query.le(Transaction::getTransactionDate, dto.getEndDate());
@@ -217,7 +223,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         Map<Long, Merchant> merchantMap = loadMerchants(result.getRecords());
 
         List<TransactionVO> items = result.getRecords().stream()
-                .map(t -> toVO(t, accountMap.get(t.getAccountId()), categoryMap.get(t.getCategoryId()),
+                .map(t -> toVO(t,
+                        accountMap.get(t.getAccountId()),
+                        t.getCategoryId() != null ? categoryMap.get(t.getCategoryId()) : null,
                         t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null))
                 .collect(Collectors.toList());
 
@@ -247,9 +255,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 记录旧的交易日期和分类，用于跨月预算调整
         LocalDate oldDate = entity.getTransactionDate();
         Long oldCategoryId = entity.getCategoryId();
+        boolean wasConfirmed = Boolean.TRUE.equals(entity.getIsConfirmed());
 
-        // 回滚旧余额
-        rollbackBalance(entity);
+        // 只有已确认的交易才需要回滚余额
+        if (wasConfirmed) {
+            rollbackBalance(entity);
+        }
 
         // 商户处理逻辑（与 create 保持一致）
         Merchant merchant = null;
@@ -302,20 +313,39 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         calculateBaseAmount(entity, account);
 
-        // 余额校验（与 create 保持一致）
-        if (Boolean.TRUE.equals(entity.getIsConfirmed()) && (entity.getType() == 1 || entity.getType() == 3)) {
-            if (account != null && account.getType() != null && account.getType() != 3) {
-                if (account.getCurrentBalance() != null &&
-                    account.getCurrentBalance().compareTo(entity.getAmount()) < 0) {
-                    throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+        // 只有确认的交易才应用余额变动
+        boolean nowConfirmed = Boolean.TRUE.equals(entity.getIsConfirmed());
+        if (nowConfirmed) {
+            boolean needsBalanceCheck = (entity.getType() == 1 || entity.getType() == 3)
+                    && account != null && account.getType() != null && account.getType() != 3;
+
+            switch (entity.getType()) {
+                case 1 -> { // 支出
+                    if (needsBalanceCheck) {
+                        int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), entity.getAmount());
+                        if (rows == 0) {
+                            throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                        }
+                    } else {
+                        accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
+                    }
+                }
+                case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
+                case 3 -> { // 转账
+                    if (needsBalanceCheck) {
+                        int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), entity.getAmount());
+                        if (rows == 0) {
+                            throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                        }
+                    } else {
+                        accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
+                    }
+                    accountMapper.adjustBalance(entity.getTargetAccountId(), entity.getAmount());
                 }
             }
         }
 
         baseMapper.updateById(entity);
-
-        // 重新应用余额
-        applyBalance(entity);
 
         // 更新商户使用统计
         if (entity.getMerchantId() != null && Boolean.TRUE.equals(entity.getIsConfirmed())) {
@@ -374,11 +404,39 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             throw new BizException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED);
         }
 
+        // 余额校验：确认前检查账户余额是否充足（信用卡账户允许透支）
+        Account account = accountMapper.selectById(entity.getAccountId());
+        boolean needsBalanceCheck = (entity.getType() == 1 || entity.getType() == 3)
+                && account != null && account.getType() != null && account.getType() != 3;
+
         entity.setIsConfirmed(true);
         baseMapper.updateById(entity);
 
-        // 应用余额
-        applyBalance(entity);
+        // 原子应用余额
+        switch (entity.getType()) {
+            case 1 -> { // 支出
+                if (needsBalanceCheck) {
+                    int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), entity.getAmount());
+                    if (rows == 0) {
+                        throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                    }
+                } else {
+                    accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
+                }
+            }
+            case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
+            case 3 -> { // 转账
+                if (needsBalanceCheck) {
+                    int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), entity.getAmount());
+                    if (rows == 0) {
+                        throw new BizException(ErrorCode.ACCOUNT_BALANCE_NOT_ENOUGH);
+                    }
+                } else {
+                    accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
+                }
+                accountMapper.adjustBalance(entity.getTargetAccountId(), entity.getAmount());
+            }
+        }
 
         // 发布事件以清除缓存和更新预算
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.CREATE));
@@ -386,7 +444,6 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 事务提交后同步清除报表缓存
         registerCacheClearSync(entity.getTransactionDate());
 
-        Account account = accountMapper.selectById(entity.getAccountId());
         Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;
 

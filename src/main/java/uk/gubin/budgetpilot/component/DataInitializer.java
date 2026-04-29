@@ -21,7 +21,6 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@InterceptorIgnore(tenantLine = "true")
 public class DataInitializer {
 
     private final UserMapper userMapper;
@@ -73,6 +72,7 @@ public class DataInitializer {
     /**
      * 新用户创建时会复制这些分类到自己的租户下
      */
+    @InterceptorIgnore(tenantLine = "true")
     private void initSystemCategories() {
         // 通过检查已知系统分类名称是否存在来判断是否已初始化
         // 不依赖 is_system 字段计数（旧数据可能 is_system 为 false）

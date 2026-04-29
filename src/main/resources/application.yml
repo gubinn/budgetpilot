@@ -15,6 +15,10 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASS:}
       database: 0
+      timeout: 500ms
+      lettuce:
+        pool:
+          enabled: false
   jackson:
     date-format: yyyy-MM-dd HH:mm:ss
     time-zone: Asia/Shanghai

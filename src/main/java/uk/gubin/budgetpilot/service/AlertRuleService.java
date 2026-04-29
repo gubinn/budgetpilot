@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.AlertRuleCreateDTO;
 import uk.gubin.budgetpilot.dto.AlertRuleUpdateDTO;
 import uk.gubin.budgetpilot.entity.AlertRule;
@@ -21,6 +23,10 @@ public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
         LambdaQueryWrapper<AlertRule> query = new LambdaQueryWrapper<>();
         query.eq(AlertRule::getIsActive, true);
         return baseMapper.selectList(query);
+    }
+
+    public List<AlertRule> getActiveRulesByUserId(Long userId) {
+        return baseMapper.selectActiveByUserId(userId);
     }
 
     public List<AlertRule> getActiveRulesByType(Integer type) {
@@ -44,7 +50,7 @@ public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
     public AlertRule update(Long id, AlertRuleUpdateDTO dto) {
         AlertRule rule = baseMapper.selectById(id);
         if (rule == null) {
-            throw new IllegalArgumentException("Alert rule not found: " + id);
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "预警规则不存在");
         }
         if (dto.getName() != null) rule.setName(dto.getName());
         if (dto.getType() != null) rule.setType(dto.getType());
@@ -59,7 +65,7 @@ public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
     public AlertRule toggleActive(Long id) {
         AlertRule rule = baseMapper.selectById(id);
         if (rule == null) {
-            throw new IllegalArgumentException("Alert rule not found: " + id);
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "预警规则不存在");
         }
         rule.setIsActive(!rule.getIsActive());
         baseMapper.updateById(rule);

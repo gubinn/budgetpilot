@@ -14,6 +14,7 @@ import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
@@ -59,7 +60,11 @@ public class ScheduledTasks {
         for (RecurringRule rule : rules) {
             try {
                 recurringRuleService.generateTransaction(rule);
-                recurringRuleService.updateNextExecute(rule);
+                // 重新读取最新数据，避免使用过期对象更新
+                RecurringRule latestRule = recurringRuleService.getById(rule.getId());
+                if (latestRule != null) {
+                    recurringRuleService.updateNextExecute(latestRule);
+                }
                 log.info("Generated transaction from recurring rule: {}", rule.getName());
             } catch (Exception e) {
                 log.error("Failed to process recurring rule {}", rule.getId(), e);
@@ -163,14 +168,14 @@ public class ScheduledTasks {
 
             List<Transaction> txs = transactionMapper.selectList(txQuery);
             BigDecimal income = txs.stream().filter(t -> t.getType() == 2)
-                    .map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal expense = txs.stream().filter(t -> t.getType() == 1)
-                    .map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal transferOut = txs.stream().filter(t -> t.getType() == 3)
-                    .map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal transferIn = txs.stream()
                     .filter(t -> t.getType() == 3 && account.getId().equals(t.getTargetAccountId()))
-                    .map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
+                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
 
             BigDecimal calibrated = account.getInitialBalance()
                     .add(income).subtract(expense)
@@ -236,14 +241,14 @@ public class ScheduledTasks {
             LocalDate we = ws.with(java.time.DayOfWeek.SUNDAY);
             avgExpense = avgExpense.add(getWeekExpense(ws, we));
         }
-        avgExpense = avgExpense.divide(BigDecimal.valueOf(4), 2, BigDecimal.ROUND_HALF_UP);
+        avgExpense = avgExpense.divide(BigDecimal.valueOf(4), 2, RoundingMode.HALF_UP);
 
         if (avgExpense.compareTo(BigDecimal.ZERO) == 0) return;
 
         BigDecimal deviation = thisWeek.subtract(avgExpense)
-                .divide(avgExpense, 4, BigDecimal.ROUND_HALF_UP)
+                .divide(avgExpense, 4, RoundingMode.HALF_UP)
                 .multiply(BigDecimal.valueOf(100))
-                .setScale(1, BigDecimal.ROUND_HALF_UP);
+                .setScale(1, RoundingMode.HALF_UP);
 
         int threshold = 50;
         if (deviation.compareTo(BigDecimal.valueOf(threshold)) > 0) {

@@ -1,7 +1,9 @@
 package uk.gubin.budgetpilot.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.Result;
@@ -103,6 +105,7 @@ public class SystemController {
         return success ? Result.ok("Telegram 推送成功") : Result.fail(10003, "Telegram 推送失败");
     }
 
+    @SaCheckRole("ADMIN")
     @DeleteMapping("/test-data")
     public Result<Map<String, Integer>> clearTestData() {
         // 清空所有测试数据（保留系统分类）
@@ -114,8 +117,9 @@ public class SystemController {
         int budgets = budgetMapper.delete(new LambdaQueryWrapper<>());
         int budgetItems = budgetItemMapper.delete(new LambdaQueryWrapper<>());
 
-        // 清除Redis缓存
-        redisTemplate.getConnectionFactory().getConnection().flushDb();
+        // 清除 Redis 缓存（仅删除应用相关 key，不 flushDb）
+        deleteRedisKeys("report:*");
+        deleteRedisKeys("idempotency:*");
 
         return Result.ok(Map.of(
             "transactions", transactions,
@@ -126,6 +130,16 @@ public class SystemController {
             "budgets", budgets,
             "budgetItems", budgetItems
         ));
+    }
+
+    private void deleteRedisKeys(String pattern) {
+        var cursor = redisTemplate.scan(ScanOptions.scanOptions()
+                .match(pattern)
+                .count(100)
+                .build());
+        while (cursor.hasNext()) {
+            redisTemplate.delete(cursor.next());
+        }
     }
 
     @PostMapping("/check-unconfirmed")

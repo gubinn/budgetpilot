@@ -205,6 +205,11 @@ async function handleMerchantSearch(keyword) {
 }
 
 async function handleSubmit() {
+  try {
+    await formRef.value?.validate()
+  } catch {
+    return
+  }
   submitting.value = true
   try {
     const data = { ...form.value }

@@ -11,11 +11,18 @@ export default defineConfig({
   },
   reporter: 'list',
   use: {
-    baseURL: 'https://localhost:6061',
+    baseURL: 'http://127.0.0.1:6060',
     headless: true,
-    ignoreHTTPSErrors: true,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
     viewport: { width: 1280, height: 720 },
   },
+  projects: [
+    {
+      name: 'chrome',
+      use: {
+        channel: 'chrome',
+      },
+    },
+  ],
 });

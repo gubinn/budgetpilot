@@ -20,6 +20,7 @@ public class TelegramNotifyService {
     private final StringRedisTemplate redisTemplate;
     private final ConfigService configService;
     private final ObjectMapper objectMapper;
+    private final RestTemplate restTemplate;
 
     @Value("${budgetpilot.telegram.bot-token:}")
     private String defaultBotToken;
@@ -43,7 +44,6 @@ public class TelegramNotifyService {
         }
 
         try {
-            RestTemplate restTemplate = new RestTemplate();
             String url = String.format(API_URL, token);
             String escapedContent = escapeMarkdownV2(content);
             Map<String, Object> body = Map.of(

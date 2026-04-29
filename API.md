@@ -36,6 +36,7 @@
 | PATCH | `/api/v1/accounts/{id}` | 更新账户 | `AccountUpdateDTO` |
 | DELETE | `/api/v1/accounts/{id}` | 删除账户 | - |
 | POST | `/api/v1/accounts/{id}/adjust-balance` | 调整账户余额 | `BalanceAdjustDTO` |
+| GET | `/api/v1/accounts/total-assets` | 获取总资产（CNY 汇率折算） | - |
 
 #### AccountCreateDTO
 
@@ -663,6 +664,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 10005 | 用户名或密码错误 |
 | 10006 | 用户已停用 |
 | 10007 | 旧密码不正确 |
+| 10008 | 登录失败次数过多，请稍后再试 |
 | 20001 | 账户不存在 |
 | 20002 | 账户已停用 |
 | 20003 | 账户余额不足 |
@@ -702,9 +704,11 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 
 | 值 | 说明 |
 |----|------|
-| 1 | 借记账户 (DEBIT) |
-| 2 | 信用卡 (CREDIT) |
-| 3 | 电子钱包 (E_WALLET) |
+| 1 | 现金 (CASH) |
+| 2 | 储蓄卡 (DEBIT) |
+| 3 | 信用卡 (CREDIT) |
+| 4 | 电子钱包 (E_WALLET) |
+| 5 | 投资账户 (INVESTMENT) |
 
 ### 交易类型 (TransactionType)
 
@@ -778,4 +782,4 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 
 ---
 
-*文档生成时间: 2026-04-18*
+*文档最后更新: 2026-04-30*

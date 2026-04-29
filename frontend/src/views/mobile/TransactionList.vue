@@ -5,7 +5,7 @@
       <div class="filter-row">
         <n-select v-model:value="filters.type" :options="typeOptions" placeholder="类型" size="small" style="flex: 1" clearable />
         <n-select v-model:value="filters.accountId" :options="accountOptions" placeholder="账户" size="small" style="flex: 1" clearable />
-        <n-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="分类" size="small" style="flex: 1" clearable />
+        <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="分类" size="small" style="flex: 1" clearable key-field="value" label-field="label" children-field="children" />
       </div>
       <div class="filter-row">
         <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" size="small" style="flex: 1" clearable />
@@ -65,6 +65,7 @@ import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
 import { AddOutline } from '@vicons/ionicons5'
+import dayjs from 'dayjs'
 
 const router = useRouter()
 const message = useMessage()
@@ -127,8 +128,8 @@ async function loadData() {
       confirmed: filters.value.isConfirmed
     }
     if (filters.value.dateRange?.length === 2) {
-      params.startDate = filters.value.dateRange[0]
-      params.endDate = filters.value.dateRange[1]
+      params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
+      params.endDate = dayjs(filters.value.dateRange[1]).format('YYYY-MM-DD')
     }
     const res = await transactionApi.list(params)
     transactions.value = res.data.items
@@ -153,15 +154,12 @@ onMounted(async () => {
     ])
     accountOptions.value = accRes.data.map(a => ({ label: a.name, value: a.id }))
 
-    const allCats = []
-    function flatten(list) {
-      list.forEach(c => {
-        allCats.push({ label: c.name, value: c.id })
-        if (c.children?.length) flatten(c.children)
-      })
+    function toTreeOption(c) {
+      const opt = { label: c.name, value: c.id }
+      if (c.children?.length) opt.children = c.children.map(toTreeOption)
+      return opt
     }
-    flatten(catRes.data)
-    categoryOptions.value = allCats
+    categoryOptions.value = catRes.data.flatMap(c => toTreeOption(c))
   } catch (e) {
     message.error('初始化失败: ' + e.message)
   }

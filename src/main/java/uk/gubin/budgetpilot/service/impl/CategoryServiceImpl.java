@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
 
     private final TransactionMapper transactionMapper;
+    private final CategoryMapper categoryMapper;
     private final StringRedisTemplate redisTemplate;
 
     /**

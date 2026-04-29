@@ -202,9 +202,9 @@ public class MerchantServiceImpl extends ServiceImpl<MerchantMapper, Merchant> i
         query.orderByDesc(Merchant::getUsageCount)
                 .orderByDesc(Merchant::getLastUsedAt);
 
-        if (limit != null && limit > 0) {
-            query.last("LIMIT " + limit);
-        }
+        // 默认限制 10 条，避免加载全表
+        int safeLimit = (limit == null || limit <= 0) ? 10 : limit;
+        query.last("LIMIT " + safeLimit);
 
         List<Merchant> merchants = baseMapper.selectList(query);
         return merchants.stream().map(this::toVO).collect(Collectors.toList());
@@ -236,12 +236,21 @@ public class MerchantServiceImpl extends ServiceImpl<MerchantMapper, Merchant> i
             return toVO(aliasMatches.get(0));
         }
 
-        // 3. 自动创建新商户
+        // 3. 自动创建新商户（并发时可能撞唯一约束，捕获后重新查询返回已创建的商户）
         if (autoCreate) {
-            MerchantCreateDTO dto = new MerchantCreateDTO();
-            dto.setName(trimmedName);
-            dto.setCategoryId(categoryId);
-            return create(dto);
+            try {
+                MerchantCreateDTO dto = new MerchantCreateDTO();
+                dto.setName(trimmedName);
+                dto.setCategoryId(categoryId);
+                return create(dto);
+            } catch (org.springframework.dao.DuplicateKeyException e) {
+                // 并发创建，其他线程已创建成功，重新查询返回
+                Merchant retry = baseMapper.selectOne(exactQuery);
+                if (retry != null) {
+                    return toVO(retry);
+                }
+                throw e;
+            }
         }
 
         return null;

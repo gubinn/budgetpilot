@@ -79,7 +79,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { reportApi } from '@/api'
 import * as echarts from 'echarts'
@@ -93,6 +93,8 @@ const compareData = ref(null)
 const hasPieData = ref(false)
 const hasMerchantData = ref(false)
 const hasCurrencyData = ref(false)
+
+watch([selectedMonth, trendMonths], loadAll)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -215,14 +217,24 @@ function formatNum(n) {
   return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
+function handleResize() {
+  trendChart?.resize()
+  pieChart?.resize()
+  merchantChart?.resize()
+  currencyChart?.resize()
+}
+
 onMounted(() => {
   loadAll()
-  window.addEventListener('resize', () => {
-    trendChart?.resize()
-    pieChart?.resize()
-    merchantChart?.resize()
-    currencyChart?.resize()
-  })
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  trendChart?.dispose()
+  pieChart?.dispose()
+  merchantChart?.dispose()
+  currencyChart?.dispose()
 })
 </script>
 

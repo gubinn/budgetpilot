@@ -6,6 +6,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.RecurringRuleCreateDTO;
 import uk.gubin.budgetpilot.dto.RecurringRuleUpdateDTO;
 import uk.gubin.budgetpilot.dto.TransactionCreateDTO;
@@ -56,8 +58,7 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         Category category = categoryMapper.selectById(rule.getCategoryId());
         Account account = accountMapper.selectById(rule.getAccountId());
         if (category == null || account == null) {
-            throw new IllegalArgumentException(
-                    String.format("Recurring rule %s references missing category or account", rule.getId()));
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "周期规则引用的账户或分类不存在");
         }
 
         // 通过 TransactionService.create() 创建，确保余额、预算、预警全部正确处理
@@ -113,7 +114,7 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
     public RecurringRule update(Long id, RecurringRuleUpdateDTO dto) {
         RecurringRule rule = baseMapper.selectById(id);
         if (rule == null) {
-            throw new IllegalArgumentException("Recurring rule not found: " + id);
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "周期规则不存在");
         }
         if (dto.getName() != null) rule.setName(dto.getName());
         if (dto.getType() != null) rule.setType(dto.getType());
@@ -140,7 +141,7 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
     public RecurringRule toggleActive(Long id) {
         RecurringRule rule = baseMapper.selectById(id);
         if (rule == null) {
-            throw new IllegalArgumentException("Recurring rule not found: " + id);
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "周期规则不存在");
         }
         rule.setIsActive(!rule.getIsActive());
         baseMapper.updateById(rule);
