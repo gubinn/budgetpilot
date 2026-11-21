@@ -27,7 +27,7 @@
 
     <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 16px">
       <n-gi>
-        <n-card title="预算进度" hoverable>
+        <n-card class="home-panel" title="预算进度" hoverable>
           <n-tabs v-model:value="budgetTab" type="segment" size="small">
             <n-tab-pane name="monthly" :tab="monthlyTabLabel">
               <template v-if="monthlyBudget">
@@ -123,7 +123,7 @@
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card title="分类占比" hoverable>
+        <n-card class="home-panel" title="分类占比" hoverable>
           <template #header-extra>
             <n-radio-group v-model:value="pieMode" size="small">
               <n-radio-button value="excludingFixed">不含固定支出</n-radio-button>
@@ -135,7 +135,7 @@
         </n-card>
       </n-gi>
       <n-gi>
-        <n-card title="商户消费" hoverable>
+        <n-card class="home-panel" title="商户消费" hoverable>
           <template #header-extra>
             <n-radio-group v-model:value="merchantPieMode" size="small">
               <n-radio-button value="excludingFixed">不含固定支出</n-radio-button>
@@ -467,8 +467,10 @@ function formatNum(n) {
 .bo-pct { font-size: 18px; font-weight: 750; }
 .bo-pct.green { color: #10b981; }
 .bo-pct.red { color: #ef4444; }
-.budget-list { max-height: 300px; overflow-y: auto; }
-.budget-item { margin-bottom: 18px; }
+.home-panel { height: 100%; }
+/* 与右侧两个 300px 高的图表卡片对齐：页签 + 总览 + 进度条之外，列表固定高度并内部滚动 */
+.budget-list { height: 180px; overflow-y: auto; padding-right: 4px; }
+.budget-item { margin-bottom: 14px; }
 .budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; }
 .badge.exceeded { background: #ef4444; }
