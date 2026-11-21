@@ -224,7 +224,11 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getReviewStatus() != null && !dto.getReviewStatus().isBlank()) {
             query.eq(Transaction::getReviewStatus, dto.getReviewStatus().trim().toUpperCase());
         }
-        if (dto.getAccountId() != null) query.eq(Transaction::getAccountId, dto.getAccountId());
+        if (dto.getAccountId() != null) {
+            // 账户筛选要包含“转入”交易：目标账户也是该账户
+            query.and(q -> q.eq(Transaction::getAccountId, dto.getAccountId())
+                    .or().eq(Transaction::getTargetAccountId, dto.getAccountId()));
+        }
         if (dto.getCategoryId() != null) {
             // 包含子分类
             List<Long> childIds = getChildCategoryIds(dto.getCategoryId());

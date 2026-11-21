@@ -31,7 +31,7 @@
           </div>
           <div class="tx-meta">
             <span>{{ tx.transactionDate }}</span>
-            <span v-if="tx.accountName">{{ tx.accountName }}</span>
+            <span v-if="tx.accountName">{{ tx.type === 3 && tx.targetAccountName ? tx.accountName + ' → ' + tx.targetAccountName : tx.accountName }}</span>
             <span v-if="tx.merchantName">{{ tx.merchantName }}</span>
           </div>
           <div class="tx-tags">

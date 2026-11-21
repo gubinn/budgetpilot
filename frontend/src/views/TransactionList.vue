@@ -203,8 +203,10 @@ const columns = [
     render: (row) => row.transactionDate
   },
   {
-    title: '账户', key: 'accountName', width: 120,
-    render: (row) => row.accountName || '-'
+    title: '账户', key: 'accountName', width: 200,
+    render: (row) => row.type === 3 && row.targetAccountName
+      ? `${row.accountName || '-'} → ${row.targetAccountName}`
+      : row.accountName || '-'
   },
   {
     title: '一级分类', key: 'parentCategoryName', width: 110,

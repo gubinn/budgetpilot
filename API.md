@@ -139,7 +139,7 @@
 |------|------|------|
 | `type` | int | 交易类型 (1-支出 2-收入 3-转账 4-退款) |
 | `reviewStatus` | string | PENDING-待人工复核 / REVIEWED-已复核 |
-| `accountId` | long | 账户ID |
+| `accountId` | long | 账户ID（同时匹配转出账户 `account_id` 和转入账户 `target_account_id`） |
 | `categoryId` | long | 分类ID |
 | `startDate` | string | 开始日期 (yyyy-MM-dd) |
 | `endDate` | string | 结束日期 (yyyy-MM-dd) |
