@@ -108,7 +108,7 @@
 ```json
 {
   "type": "交易类型 (必填, 1-支出 2-收入 3-转账 4-退款)",
-  "amount": "金额 (必填, >0)",
+  "amount": "金额 (必填；非转账 >0；转账可为 0，用于购汇等自转账记录)",
   "externalId": "外部幂等ID (可选，同一用户下唯一，重复请求返回已有交易)",
   "currency": "币种 (默认 CNY)",
   "transactionDate": "交易日期",
@@ -132,6 +132,8 @@
 ```
 
 > `isConfirmed` 是账务入账确认：`false` 时不影响账户余额。`reviewStatus` 是人工语义复核：`PENDING` 时余额已记，但不计入收支报表、预算和预警。两者互不影响。
+
+> 转账（`type=3`）允许 `amount=0` 且 `accountId=targetAccountId`，用于购汇等“同一账户内部换算”的记录；不会改变任何账户余额。其他交易类型金额必须大于 0。
 
 #### TransactionQueryDTO (Query Parameters)
 

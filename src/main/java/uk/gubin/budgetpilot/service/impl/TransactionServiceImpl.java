@@ -99,9 +99,15 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             if (dto.getTargetAccountId() == null) {
                 throw new BizException(ErrorCode.TRANSACTION_TARGET_ACCOUNT_REQUIRED);
             }
-            if (dto.getAccountId().equals(dto.getTargetAccountId())) {
+            // 0 元自转账用于购汇等内部换算记录：不对余额产生任何影响
+            if (dto.getAccountId().equals(dto.getTargetAccountId())
+                    && dto.getAmount().compareTo(BigDecimal.ZERO) > 0) {
                 throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
             }
+        }
+        // 支出/收入/退款必须大于 0；转账允许 0（自转账记录）
+        if (dto.getType() != 3 && dto.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "非转账交易金额必须大于0");
         }
 
         // 校验分类（转账不需要分类）

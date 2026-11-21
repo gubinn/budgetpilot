@@ -218,7 +218,12 @@ const columns = [
   },
   {
     title: '对手方', key: 'targetAccountName', width: 160,
-    render: (row) => row.type === 3 && row.targetAccountName ? row.targetAccountName : '-'
+    render: (row) => {
+      if (row.type !== 3 || !row.targetAccountName) return '-'
+      return row.targetAccountId != null && row.targetAccountId === row.accountId
+        ? '自己'
+        : row.targetAccountName
+    }
   },
   {
     title: '一级分类', key: 'parentCategoryName', width: 110,

@@ -1,9 +1,9 @@
 package uk.gubin.budgetpilot.dto;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -21,7 +21,7 @@ public class TransactionCreateDTO {
     private Integer type;
 
     @NotNull(message = "金额不能为空")
-    @Positive(message = "金额必须大于0")
+    @DecimalMin(value = "0", message = "金额不能为负数")
     private BigDecimal amount;
 
     /** 外部系统幂等 ID：同一用户下相同值只创建一次，重复请求直接返回已有交易 */

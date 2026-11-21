@@ -33,7 +33,7 @@
             <n-tag size="tiny" :type="typeTagType(tx.type)" :bordered="false">{{ typeLabel(tx.type) }}</n-tag>
             <span>{{ tx.transactionDate }}</span>
             <span v-if="tx.accountName">{{ tx.accountName }}</span>
-            <span v-if="tx.type === 3 && tx.targetAccountName">对手方：{{ tx.targetAccountName }}</span>
+            <span v-if="tx.type === 3 && tx.targetAccountName">对手方：{{ tx.targetAccountId === tx.accountId ? '自己' : tx.targetAccountName }}</span>
             <span v-if="tx.merchantName">{{ tx.merchantName }}</span>
           </div>
           <div class="tx-tags">
