@@ -159,7 +159,7 @@ public class DataInitializer {
         adjIncome.setId(58L);
         adjIncome.setUserId(0L);
         adjIncome.setParentId(0L);
-        adjIncome.setName("余额调整");
+        adjIncome.setName("余额调整收入");
         adjIncome.setType(2);
         adjIncome.setIcon("adjust");
         adjIncome.setColor("#FF9800");
@@ -172,7 +172,7 @@ public class DataInitializer {
         adjExpense.setId(59L);
         adjExpense.setUserId(0L);
         adjExpense.setParentId(0L);
-        adjExpense.setName("余额调整");
+        adjExpense.setName("余额调整支出");
         adjExpense.setType(1);
         adjExpense.setIcon("adjust");
         adjExpense.setColor("#FF9800");

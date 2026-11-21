@@ -317,9 +317,9 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
      * 动态查找“余额调整”分类 ID（按名称+类型查询 user_id=0 的系统分类）
      */
     private Long getBalanceAdjustCategoryId(int type) {
-        // 优先使用当前用户自己的“余额调整”分类（租户拦截器会自动加 user_id）
+        // 用 icon=adjust + 类型查找；收入/支出两个分类名称不同，避免同名混淆
         LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category> query = new LambdaQueryWrapper<>();
-        query.eq(uk.gubin.budgetpilot.entity.Category::getName, "余额调整")
+        query.eq(uk.gubin.budgetpilot.entity.Category::getIcon, "adjust")
                 .eq(uk.gubin.budgetpilot.entity.Category::getType, type)
                 .last("LIMIT 1");
         uk.gubin.budgetpilot.entity.Category cat = categoryMapper.selectOne(query);
