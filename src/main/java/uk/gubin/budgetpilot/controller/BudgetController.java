@@ -44,8 +44,7 @@ public class BudgetController {
     }
 
     @GetMapping("/{yearMonth}/progress")
-    public Result<BudgetProgressVO> getProgress(@PathVariable String yearMonth,
-                                                @RequestParam(defaultValue = "false") boolean fallback) {
-        return Result.ok(budgetService.getProgress(yearMonth, fallback));
+    public Result<BudgetProgressVO> getProgress(@PathVariable String yearMonth) {
+        return Result.ok(budgetService.getProgress(yearMonth));
     }
 }

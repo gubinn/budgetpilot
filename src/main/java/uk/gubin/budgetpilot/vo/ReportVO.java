@@ -27,6 +27,8 @@ public class ReportVO {
     private List<CurrencyItem> currencyDistribution;
     /** 商户消费占比 */
     private List<MerchantShareItem> merchantShares;
+    /** 商户消费占比（剔除固定支出分类） */
+    private List<MerchantShareItem> merchantSharesExcludingFixed;
 
     @Data
     public static class MonthlySummary {

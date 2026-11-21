@@ -35,7 +35,7 @@ export const budgetApi = {
   create: (data) => api.post('/budgets', data),
   update: (yearMonth, data) => api.put(`/budgets/${yearMonth}`, data),
   copy: (yearMonth, sourceMonth) => api.post(`/budgets/${yearMonth}/copy-from/${sourceMonth}`),
-  progress: (yearMonth, fallback = false) => api.get(`/budgets/${yearMonth}/progress`, { params: { fallback } }),
+  progress: (yearMonth) => api.get(`/budgets/${yearMonth}/progress`),
   fixedSummary: (month) => api.get('/budgets/fixed-summary', { params: { month } })
 }
 

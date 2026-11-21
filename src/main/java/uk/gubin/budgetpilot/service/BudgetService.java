@@ -14,11 +14,6 @@ import java.util.List;
 public interface BudgetService extends IService<Budget> {
     Budget create(BudgetCreateDTO dto);
     BudgetProgressVO getProgress(String yearMonth);
-
-    /**
-     * @param fallback 当月没有预算时，是否回退到最近一期预算（优先往前找，其次往后找）
-     */
-    BudgetProgressVO getProgress(String yearMonth, boolean fallback);
     Budget update(String yearMonth, BudgetUpdateDTO dto);
     Budget copyBudget(String yearMonth, String sourceMonth);
     BudgetItem getItem(Long categoryId, String yearMonth);

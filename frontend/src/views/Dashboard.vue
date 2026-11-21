@@ -71,9 +71,6 @@
                     </div>
                   </div>
                 </div>
-                <div v-if="monthlyFallback" class="budget-hint">
-                  本月（{{ currentMonth }}）未设置预算，显示最近一期 {{ monthlyBudget.yearMonth }} 的预算
-                </div>
               </template>
               <n-empty v-else description="本月未设置预算" />
             </n-tab-pane>
@@ -139,7 +136,14 @@
       </n-gi>
       <n-gi>
         <n-card title="商户消费" hoverable>
-          <div ref="merchantPieRef" style="width: 100%; height: 300px"></div>
+          <template #header-extra>
+            <n-radio-group v-model:value="merchantPieMode" size="small">
+              <n-radio-button value="excludingFixed">不含固定支出</n-radio-button>
+              <n-radio-button value="all">全部支出</n-radio-button>
+            </n-radio-group>
+          </template>
+          <div v-if="merchantPieData.length" ref="merchantPieRef" style="width: 100%; height: 300px"></div>
+          <n-empty v-else description="本月无商户消费数据" style="height: 300px; justify-content: center" />
         </n-card>
       </n-gi>
     </n-grid>
@@ -186,7 +190,6 @@ const currentYear = dayjs().year()
 const monthLabel = (ym) => `${Number(ym.slice(5))}月`
 const monthlyTabLabel = computed(() => `月度 · ${monthLabel(monthlyBudget.value?.yearMonth || currentMonth)}`)
 const annualTabLabel = computed(() => `年度 · ${annualBudget.value?.year || currentYear}`)
-const monthlyFallback = computed(() => !!monthlyBudget.value && monthlyBudget.value.yearMonth !== currentMonth)
 
 const pieMode = ref('excludingFixed')
 const categorySharesAll = ref([])
@@ -198,6 +201,18 @@ const pieChartData = computed(() =>
 watch(pieMode, async () => {
   await nextTick()
   renderPieChart()
+})
+
+const merchantPieMode = ref('excludingFixed')
+const merchantSharesAll = ref([])
+const merchantSharesExcludingFixed = ref([])
+const merchantPieData = computed(() =>
+  merchantPieMode.value === 'excludingFixed' ? merchantSharesExcludingFixed.value : merchantSharesAll.value
+)
+
+watch(merchantPieMode, async () => {
+  await nextTick()
+  renderMerchantPieChart()
 })
 
 const columns = [
@@ -225,7 +240,7 @@ onMounted(async () => {
   try {
     const [summaryRes, budgetRes, txRes, assetsRes, merchantRes, annualRes] = await Promise.allSettled([
       reportApi.monthlySummary(month),
-      budgetApi.progress(month, true),
+      budgetApi.progress(month),
       transactionApi.list({ page: 1, size: 10, sort: 'transaction_date,desc' }),
       accountApi.totalAssets(),
       reportApi.merchantDistribution(month),
@@ -275,26 +290,11 @@ onMounted(async () => {
     }
 
     // 商户饼图
-    if (merchantRes.status === 'fulfilled' && merchantRes.value.data?.merchantShares?.length) {
-      if (merchantPieRef.value) {
-        merchantPieChart.value = echarts.init(merchantPieRef.value)
-        merchantPieChart.value.setOption({
-          tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-          legend: { bottom: 0, type: 'scroll' },
-          series: [{
-            type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
-            itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
-            label: { show: true, formatter: '{b}\n{d}%' },
-            data: merchantRes.value.data.merchantShares.map(m => ({
-              name: m.merchantName,
-              value: Number(m.amount),
-              itemStyle: { color: m.merchantColor || '#3498db' }
-            }))
-          }]
-        })
-      }
+    if (merchantRes.status === 'fulfilled' && merchantRes.value.data) {
+      merchantSharesAll.value = merchantRes.value.data.merchantShares || []
+      merchantSharesExcludingFixed.value = merchantRes.value.data.merchantSharesExcludingFixed || []
+      await nextTick()
+      renderMerchantPieChart()
     }
   } catch (e) {
     message.error('加载首页数据失败')
@@ -334,6 +334,35 @@ function renderPieChart() {
     }]
   }, true)
   pieChart.value.resize()
+}
+
+function renderMerchantPieChart() {
+  if (!merchantPieRef.value || !merchantPieData.value.length) return
+  if (merchantPieChart.value && merchantPieChart.value.getDom() !== merchantPieRef.value) {
+    merchantPieChart.value.dispose()
+    merchantPieChart.value = null
+  }
+  if (!merchantPieChart.value) {
+    merchantPieChart.value = echarts.init(merchantPieRef.value)
+  }
+  merchantPieChart.value.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    legend: { bottom: 0, type: 'scroll' },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['50%', '44%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { show: true, formatter: '{b}\n{d}%' },
+      data: merchantPieData.value.map(m => ({
+        name: m.merchantName,
+        value: Number(m.amount),
+        itemStyle: { color: m.merchantColor || '#3498db' }
+      }))
+    }]
+  }, true)
+  merchantPieChart.value.resize()
 }
 
 function getProgressStatus(status) {
@@ -440,7 +469,6 @@ function formatNum(n) {
 .bo-pct.red { color: #ef4444; }
 .budget-list { max-height: 300px; overflow-y: auto; }
 .budget-item { margin-bottom: 18px; }
-.budget-hint { margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: #f8fafc; color: var(--bp-muted); font-size: 11px; }
 .budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; }
 .badge.exceeded { background: #ef4444; }

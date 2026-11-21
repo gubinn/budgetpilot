@@ -451,19 +451,34 @@ public class ReportServiceImpl implements ReportService {
                 .filter(tx -> isReportableExpense(tx, catMap))
                 .toList();
 
-        // 按商户聚合
+        vo.setMerchantShares(buildMerchantShares(txs));
+
+        // 商户消费占比（剔除固定支出）：按交易分类的 budgetType 过滤
+        List<Transaction> nonFixedTxs = txs.stream()
+                .filter(tx -> {
+                    Category cat = catMap.get(tx.getCategoryId());
+                    return cat == null || !"FIXED".equals(cat.getBudgetType());
+                })
+                .toList();
+        vo.setMerchantSharesExcludingFixed(buildMerchantShares(nonFixedTxs));
+
+        return vo;
+    }
+
+    /** 按商户聚合消费金额（退款冲减），按金额取前 10。 */
+    private List<ReportVO.MerchantShareItem> buildMerchantShares(List<Transaction> txs) {
         Map<Long, List<Transaction>> byMerchant = txs.stream()
                 .filter(t -> t.getMerchantId() != null)
                 .collect(Collectors.groupingBy(Transaction::getMerchantId));
 
-        BigDecimal grandTotal = netExpense(txs);
+        BigDecimal grandTotal = sumNetExpense(txs);
         List<ReportVO.MerchantShareItem> items = new ArrayList<>();
 
         for (Map.Entry<Long, List<Transaction>> entry : byMerchant.entrySet()) {
             ReportVO.MerchantShareItem item = new ReportVO.MerchantShareItem();
             item.setMerchantId(entry.getKey());
 
-            BigDecimal merchantTotal = netExpense(entry.getValue());
+            BigDecimal merchantTotal = sumNetExpense(entry.getValue());
             item.setAmount(merchantTotal);
             item.setTransactionCount(entry.getValue().size());
 
@@ -492,11 +507,8 @@ public class ReportServiceImpl implements ReportService {
             items.add(item);
         }
 
-        // 按金额排序，取前 10 个
         items.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
-        vo.setMerchantShares(items.stream().limit(10).collect(Collectors.toList()));
-
-        return vo;
+        return items.stream().limit(10).collect(Collectors.toList());
     }
 
     // ==================== Helper Methods ====================

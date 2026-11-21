@@ -266,12 +266,10 @@
 | GET | `/api/v1/budgets/{yearMonth}` | 获取预算 | - |
 | PUT | `/api/v1/budgets/{yearMonth}` | 更新预算 | `BudgetUpdateDTO` |
 | POST | `/api/v1/budgets/{yearMonth}/copy-from/{sourceMonth}` | 复制预算 | - |
-| GET | `/api/v1/budgets/{yearMonth}/progress` | 获取预算进度 | `fallback` (可选, 默认 false) |
+| GET | `/api/v1/budgets/{yearMonth}/progress` | 获取预算进度 | - |
 | GET | `/api/v1/budgets/fixed-summary` | 固定支出实际发生额 | `month` (query) |
 
 月度预算只接受 `budgetType=DAILY` 的分类；固定/专项分类会被拒绝。年度预算只接受 `budgetType=SPECIAL`。
-
-`progress?fallback=true` 用于首页等场景：当月没有预算时，回退到最近一期预算（优先取不晚于目标月份的最近一期，否则取之后最早的一期），响应中的 `yearMonth` 为实际使用的月份。
 
 #### BudgetCreateDTO
 
@@ -488,6 +486,8 @@
 
 - `categoryShares`：全部可统计支出。
 - `categorySharesExcludingFixed`：剔除 `budgetType=FIXED` 的分类（房租、房贷、保险等）后的支出占比，百分比以剔除后的总额为分母。
+
+`merchant-distribution` 同样返回两套数据：`merchantShares` 和 `merchantSharesExcludingFixed`，后者剔除固定支出分类后重新计算商户占比。
 
 ---
 
