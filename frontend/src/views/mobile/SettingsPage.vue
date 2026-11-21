@@ -12,6 +12,18 @@
       <div class="config-hint">信用卡还款、周期账单、预算超支等系统定时提醒统一使用该渠道；单条预警规则在「预警规则」页单独设置。</div>
     </div>
 
+    <!-- 我的默认通知渠道 -->
+    <div class="section-card">
+      <h3 class="section-title">默认通知渠道</h3>
+      <n-form label-placement="top" label-width="auto">
+        <n-form-item label="渠道">
+          <n-select v-model:value="myConfig.notify_channel" :options="myNotifyChannelOptions" placeholder="请选择默认渠道" />
+        </n-form-item>
+        <n-button type="primary" size="small" @click="saveMyNotifyChannel">保存</n-button>
+      </n-form>
+      <div class="config-hint">公网登录验证码按该渠道发送；选择「两者都发」时需要同时配置 Telegram 和 WhatsApp。</div>
+    </div>
+
     <!-- 我的 Telegram -->
     <div class="section-card">
       <h3 class="section-title">我的 Telegram 通知</h3>
@@ -161,11 +173,17 @@ const notifyChannelOptions = [
   { label: '仅应用内', value: 'APP' }
 ]
 const myConfig = ref({
+  notify_channel: '',
   telegram_bot_token: '',
   telegram_chat_id: '',
   whatsapp_api_key: '',
   whatsapp_to: ''
 })
+const myNotifyChannelOptions = [
+  { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' }
+]
 const supportedCurrencies = ref([])
 const rates = ref([])
 const alerts = ref([])
@@ -219,11 +237,19 @@ async function saveNotifyChannel() {
 async function loadMyNotify() {
   try {
     const res = await userApi.getMyConfig()
+    myConfig.value.notify_channel = res.data.notify_channel || ''
     myConfig.value.telegram_bot_token = res.data.telegram_bot_token || ''
     myConfig.value.telegram_chat_id = res.data.telegram_chat_id || ''
     myConfig.value.whatsapp_api_key = res.data.whatsapp_api_key || ''
     myConfig.value.whatsapp_to = res.data.whatsapp_to || ''
   } catch (e) { console.error('Failed to load my notify config', e) }
+}
+
+async function saveMyNotifyChannel() {
+  try {
+    await userApi.setMyConfig('notify_channel', myConfig.value.notify_channel || '')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
 }
 
 async function saveMyTelegram() {

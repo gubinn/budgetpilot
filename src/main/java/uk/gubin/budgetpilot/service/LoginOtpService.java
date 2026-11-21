@@ -157,7 +157,9 @@ public class LoginOtpService {
 
     /**
      * 只读取该用户自己的配置，不回退到系统全局配置。
-     * Telegram 与 WhatsApp 只要有一个配置完整就可用；都未配置则不能公网登录。
+     *
+     * <p>用户可以在「默认通知渠道」里选择 TELEGRAM / WHATSAPP / BOTH；
+     * 未选择时按已配置完整的渠道自动推断。</p>
      */
     private ChannelTarget resolveTarget(Long userId) {
         String telegramBotToken = userConfig(userId, "telegram_bot_token");
@@ -165,6 +167,7 @@ public class LoginOtpService {
         String whatsappApiKey = userConfig(userId, "whatsapp_api_key");
         String whatsappTo = userConfig(userId, "whatsapp_to");
         String whatsappBaseUrl = userConfig(userId, "whatsapp_base_url");
+        String configuredChannel = userConfig(userId, "notify_channel");
 
         boolean telegramReady = !isBlank(telegramBotToken) && !isBlank(telegramChatId);
         boolean whatsappReady = !isBlank(whatsappApiKey) && !isBlank(whatsappTo);
@@ -172,16 +175,43 @@ public class LoginOtpService {
         if (!telegramReady && !whatsappReady) {
             throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
         }
-        if (telegramReady && whatsappReady) {
-            return new ChannelTarget("BOTH", "Telegram + WhatsApp",
-                    telegramBotToken, telegramChatId, whatsappApiKey, whatsappBaseUrl, whatsappTo);
+
+        String channel = configuredChannel == null ? "" : configuredChannel.trim().toUpperCase();
+        if (channel.isEmpty()) {
+            if (telegramReady && whatsappReady) {
+                channel = "BOTH";
+            } else {
+                channel = telegramReady ? "TELEGRAM" : "WHATSAPP";
+            }
         }
-        if (telegramReady) {
-            return new ChannelTarget("TELEGRAM", "Telegram",
-                    telegramBotToken, telegramChatId, null, null, null);
-        }
-        return new ChannelTarget("WHATSAPP", "WhatsApp",
-                null, null, whatsappApiKey, whatsappBaseUrl, whatsappTo);
+
+        return switch (channel) {
+            case "TELEGRAM" -> {
+                if (!telegramReady) {
+                    throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL,
+                            "已选择 Telegram，但 Telegram Bot Token 或 Chat ID 未配置完整");
+                }
+                yield new ChannelTarget("TELEGRAM", "Telegram",
+                        telegramBotToken, telegramChatId, null, null, null);
+            }
+            case "WHATSAPP" -> {
+                if (!whatsappReady) {
+                    throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL,
+                            "已选择 WhatsApp，但 WhatsApp API Key 或接收者未配置完整");
+                }
+                yield new ChannelTarget("WHATSAPP", "WhatsApp",
+                        null, null, whatsappApiKey, whatsappBaseUrl, whatsappTo);
+            }
+            case "BOTH" -> {
+                if (!telegramReady || !whatsappReady) {
+                    throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL,
+                            "已选择「两者都发」，需要同时配置 Telegram 和 WhatsApp");
+                }
+                yield new ChannelTarget("BOTH", "Telegram + WhatsApp",
+                        telegramBotToken, telegramChatId, whatsappApiKey, whatsappBaseUrl, whatsappTo);
+            }
+            default -> throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
+        };
     }
 
     private boolean send(ChannelTarget target, String code, String clientIp) {

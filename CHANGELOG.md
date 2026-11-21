@@ -4,8 +4,9 @@
 
 - 公网登录验证码改为**只使用当前用户自己的配置**（`t_user_config`：`telegram_bot_token` / `telegram_chat_id` / `whatsapp_api_key` / `whatsapp_to` / `whatsapp_base_url`），不再回退到系统全局配置。
 - 用户未完整配置 Telegram 或 WhatsApp 时，公网登录返回 `80113`，收不到验证码。
-- 设置页所有用户可见「我的 Telegram 通知」「我的 WhatsApp 通知」；原全局卡片改名为「系统 Telegram / 系统 WhatsApp（定时提醒）」，仅 ADMIN 可见，只用于定时任务。
-- 为 gubin（user_id=2）迁移原有全局 WhatsApp 配置到个人配置，保持其原有公网登录能力。
+- 设置页所有用户可见「默认通知渠道」选择（Telegram / WhatsApp / 两者都发）和「我的 Telegram 通知」「我的 WhatsApp 通知」卡片；未选择默认渠道时按已配置完整的渠道自动推断。
+- 原全局卡片改名为「系统 Telegram / 系统 WhatsApp（定时提醒）」，仅 ADMIN 可见，只用于定时任务。
+- 为 gubin（user_id=2）迁移原有全局 WhatsApp 配置到个人配置，并将默认渠道设为 `WHATSAPP`，保持其原有公网登录能力。
 - 上一版“未配置回退全局”的行为已移除。
 
 ---

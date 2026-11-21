@@ -830,15 +830,19 @@ PUT /api/v1/system/config/notify_channel
 
 | key | 说明 |
 |-----|------|
+| `notify_channel` | 默认发送渠道：`TELEGRAM` / `WHATSAPP` / `BOTH`；未设置时按已配置完整的渠道自动推断 |
 | `telegram_bot_token` | 该用户自己的 Telegram Bot Token |
 | `telegram_chat_id` | 该用户自己的 Telegram Chat ID |
 | `whatsapp_api_key` | 该用户自己的 WhatsApp Agent API Key |
 | `whatsapp_to` | 该用户自己的 WhatsApp 接收者（`user:<id>`） |
 | `whatsapp_base_url` | 可选，默认 `https://api.whatsapp.com/agent/v1` |
 
-Telegram 需要 `telegram_bot_token` + `telegram_chat_id` 同时配置；WhatsApp 需要 `whatsapp_api_key` + `whatsapp_to` 同时配置。至少完整配置一组才能公网登录，否则返回 `80113`。两组都完整时同时发送。Agent Platform 只能发给创建者本人，家人建议用 Telegram。
+Telegram 需要 `telegram_bot_token` + `telegram_chat_id` 同时配置；WhatsApp 需要 `whatsapp_api_key` + `whatsapp_to` 同时配置。所选渠道必须配置完整（`BOTH` 需要两组都完整），否则返回 `80113`；一组都没配置也无法公网登录。Agent Platform 只能发给创建者本人，家人建议用 Telegram。
 
 ```json
+PUT /api/v1/users/config/notify_channel
+{ "value": "WHATSAPP" }
+
 PUT /api/v1/users/config/telegram_bot_token
 { "value": "123456:ABC-xxx" }
 

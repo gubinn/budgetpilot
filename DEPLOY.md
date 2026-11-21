@@ -914,16 +914,18 @@ BUDGETPILOT_INGRESS_TRUSTED_PROXIES=100.64.1.2,fd7a:115c:a1e0::1
 
 #### 配置每个用户的接收渠道
 
-每个用户登录后进入 **设置 → 我的 Telegram 通知 / 我的 WhatsApp 通知**，填写自己的凭证：
+每个用户登录后进入 **设置 → 默认通知渠道 / 我的 Telegram 通知 / 我的 WhatsApp 通知**：
 
+- 默认通知渠道：`Telegram` / `WhatsApp` / `两者都发`；
 - Telegram：`Bot Token` + `Chat ID`；
 - WhatsApp：`Agent API Key` + 接收者 `user:<id>`。
 
 规则：
 
 - 公网登录验证码**只使用当前用户自己的配置**，不回退到系统全局配置。
-- Telegram 与 WhatsApp 至少完整配置一组；都未配置时公网登录返回 `80113`，收不到验证码。
-- 两组都完整时会给两个渠道都发送，任一成功即可。
+- 按「默认通知渠道」发送：选 Telegram 就要求 Telegram 配置完整，选 WhatsApp 就要求 WhatsApp 配置完整，选「两者都发」要求两组都完整。
+- 未选择默认渠道时，按已配置完整的渠道自动推断（两组都完整则都发）。
+- 都没有完整配置时公网登录返回 `80113`，收不到验证码。
 - 新用户必须先在内网（Tailscale / 局域网）登录后配置，或由 ADMIN 直接写入 `t_user_config`，否则不能公网登录。
 
 > 设置页中的「系统 Telegram / 系统 WhatsApp（定时提醒）」是 **ADMIN 专用**，只用于信用卡还款、周期账单、预算超支等系统定时提醒，不影响用户公网登录验证码。
