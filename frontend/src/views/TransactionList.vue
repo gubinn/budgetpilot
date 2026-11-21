@@ -1,32 +1,36 @@
 <template>
   <n-card>
-    <n-form inline :model="filters" style="margin-bottom: 16px">
-      <n-form-item label="类型">
-        <n-select v-model:value="filters.type" :options="typeOptions" clearable style="width: 100px" />
-      </n-form-item>
-      <n-form-item label="账户">
-        <n-select v-model:value="filters.accountId" :options="accountOptions" clearable style="width: 120px" />
-      </n-form-item>
-      <n-form-item label="分类">
-        <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="选择分类" clearable style="width: 140px" key-field="value" label-field="label" children-field="children" />
-      </n-form-item>
-      <n-form-item label="标签">
-        <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="选择标签" style="width: 180px" />
-      </n-form-item>
-      <n-form-item label="入账状态">
-        <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable style="width: 100px" />
-      </n-form-item>
-      <n-form-item label="复核状态">
-        <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable style="width: 100px" />
-      </n-form-item>
-      <n-form-item label="日期">
-        <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 240px" />
-      </n-form-item>
-      <n-form-item>
-        <n-button type="primary" @click="applyFilters">查询</n-button>
-        <n-button @click="resetFilters" style="margin-left: 8px">重置</n-button>
-      </n-form-item>
-    </n-form>
+    <div class="filter-bar">
+      <n-form :model="filters" label-placement="left" :show-feedback="false" class="filter-form">
+        <div class="filter-grid">
+          <n-form-item label="类型" :label-width="72" class="filter-field">
+            <n-select v-model:value="filters.type" :options="typeOptions" clearable :consistent-menu-width="false" />
+          </n-form-item>
+          <n-form-item label="账户" :label-width="72" class="filter-field">
+            <n-select v-model:value="filters.accountId" :options="accountOptions" clearable :consistent-menu-width="false" />
+          </n-form-item>
+          <n-form-item label="分类" :label-width="72" class="filter-field">
+            <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="选择分类" clearable :consistent-menu-width="false" key-field="value" label-field="label" children-field="children" />
+          </n-form-item>
+          <n-form-item label="标签" :label-width="72" class="filter-field">
+            <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="选择标签" :consistent-menu-width="false" />
+          </n-form-item>
+          <n-form-item label="入账状态" :label-width="72" class="filter-field">
+            <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable :consistent-menu-width="false" />
+          </n-form-item>
+          <n-form-item label="复核状态" :label-width="72" class="filter-field">
+            <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable :consistent-menu-width="false" />
+          </n-form-item>
+          <n-form-item label="日期" :label-width="72" class="filter-field filter-date">
+            <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 100%" />
+          </n-form-item>
+        </div>
+        <div class="filter-actions">
+          <n-button @click="resetFilters">重置</n-button>
+          <n-button type="primary" @click="applyFilters">查询</n-button>
+        </div>
+      </n-form>
+    </div>
 
     <n-data-table
       :columns="columns"
@@ -432,3 +436,51 @@ onMounted(async () => {
   loadData()
 })
 </script>
+
+<style scoped>
+.filter-bar {
+  margin-bottom: 16px;
+  padding: 14px 16px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--bp-line);
+  border-radius: 12px;
+}
+/* 查询条件统一为等宽网格，标签定宽，控件占满单元格 */
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px 20px;
+}
+.filter-field {
+  width: 100%;
+}
+.filter-field :deep(.n-form-item-blank) {
+  min-width: 0;
+}
+/* 日期区间跨度更大，避免两个日期挤在一起被截断 */
+.filter-date {
+  grid-column: span 2;
+}
+.filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+@media (max-width: 1279px) {
+  .filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 719px) {
+  .filter-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .filter-date {
+    grid-column: span 1;
+  }
+  .filter-bar {
+    padding: 12px;
+  }
+}
+</style>
