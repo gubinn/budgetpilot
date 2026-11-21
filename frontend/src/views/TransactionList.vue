@@ -38,11 +38,6 @@
       remote
     />
 
-    <!-- 操作按钮 -->
-    <n-space style="margin-top: 16px; justify-content: flex-end">
-      <n-button type="primary" @click="router.push('/transactions/add')">新增交易</n-button>
-    </n-space>
-
     <!-- 复核弹窗 -->
     <n-modal v-model:show="showReview" preset="card" title="复核交易" style="width: 560px">
       <n-descriptions v-if="reviewRow" :column="1" size="small" bordered>
