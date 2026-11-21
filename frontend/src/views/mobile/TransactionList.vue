@@ -30,8 +30,10 @@
             <span v-if="tx.parentCategoryId" class="tx-subcategory">/ {{ tx.categoryName }}</span>
           </div>
           <div class="tx-meta">
+            <n-tag size="tiny" :type="typeTagType(tx.type)" :bordered="false">{{ typeLabel(tx.type) }}</n-tag>
             <span>{{ tx.transactionDate }}</span>
-            <span v-if="tx.accountName">{{ tx.type === 3 && tx.targetAccountName ? tx.accountName + ' → ' + tx.targetAccountName : tx.accountName }}</span>
+            <span v-if="tx.accountName">{{ tx.accountName }}</span>
+            <span v-if="tx.type === 3 && tx.targetAccountName">对手方：{{ tx.targetAccountName }}</span>
             <span v-if="tx.merchantName">{{ tx.merchantName }}</span>
           </div>
           <div class="tx-tags">
@@ -107,6 +109,11 @@ const router = useRouter()
 const message = useMessage()
 const loading = ref(false)
 const transactions = ref([])
+
+const typeLabels = { 1: '支出', 2: '收入', 3: '转账', 4: '退款' }
+const typeTagTypes = { 1: 'error', 2: 'success', 3: 'info', 4: 'warning' }
+const typeLabel = (type) => typeLabels[type] || '-'
+const typeTagType = (type) => typeTagTypes[type] || 'default'
 
 const filters = ref({
   type: null,

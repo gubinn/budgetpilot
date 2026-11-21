@@ -37,6 +37,7 @@
       :data="transactions"
       :loading="loading"
       :pagination="pagination"
+      :scroll-x="1600"
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
       remote
@@ -197,16 +198,27 @@ const pagination = ref({
   pageSizes: [10, 20, 50, 100]
 })
 
+const typeLabels = { 1: '支出', 2: '收入', 3: '转账', 4: '退款' }
+const typeTagTypes = { 1: 'error', 2: 'success', 3: 'info', 4: 'warning' }
+
 const columns = [
   {
     title: '日期', key: 'transactionDate', width: 110,
     render: (row) => row.transactionDate
   },
   {
-    title: '账户', key: 'accountName', width: 200,
-    render: (row) => row.type === 3 && row.targetAccountName
-      ? `${row.accountName || '-'} → ${row.targetAccountName}`
-      : row.accountName || '-'
+    title: '类型', key: 'type', width: 80,
+    render: (row) => h(NTag, {
+      size: 'small', type: typeTagTypes[row.type] || 'default', bordered: false
+    }, { default: () => typeLabels[row.type] || '-' })
+  },
+  {
+    title: '账户', key: 'accountName', width: 140,
+    render: (row) => row.accountName || '-'
+  },
+  {
+    title: '对手方', key: 'targetAccountName', width: 160,
+    render: (row) => row.type === 3 && row.targetAccountName ? row.targetAccountName : '-'
   },
   {
     title: '一级分类', key: 'parentCategoryName', width: 110,
