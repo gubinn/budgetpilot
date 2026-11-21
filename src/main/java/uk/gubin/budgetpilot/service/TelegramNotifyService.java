@@ -40,18 +40,23 @@ public class TelegramNotifyService {
     }
 
     /**
-     * 发送到指定 Chat ID（复用全局 Bot Token），用于按用户投递登录验证码。
+     * 发送到指定 Chat ID（复用全局 Bot Token），用于系统级通知。
      */
     public boolean sendToChat(String chatId, String content) {
-        String token = resolveConfig("telegram_bot_token", defaultBotToken);
+        return sendToChat(resolveConfig("telegram_bot_token", defaultBotToken), chatId, content);
+    }
 
-        if (token == null || token.isBlank() || chatId == null || chatId.isBlank()) {
+    /**
+     * 使用指定 Bot Token 发送到指定 Chat ID，用于按用户投递登录验证码。
+     */
+    public boolean sendToChat(String botToken, String chatId, String content) {
+        if (botToken == null || botToken.isBlank() || chatId == null || chatId.isBlank()) {
             log.warn("Telegram 未配置，跳过推送");
             return false;
         }
 
         try {
-            String url = String.format(API_URL, token);
+            String url = String.format(API_URL, botToken);
             String escapedContent = escapeMarkdownV2(content);
             Map<String, Object> body = Map.of(
                     "chat_id", chatId,

@@ -39,7 +39,6 @@ public class LoginOtpService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final StringRedisTemplate redisTemplate;
-    private final ConfigService configService;
     private final UserService userService;
     private final UserConfigMapper userConfigMapper;
     private final TelegramNotifyService telegramNotifyService;
@@ -156,51 +155,33 @@ public class LoginOtpService {
         return buildChallenge(challengeId, target);
     }
 
+    /**
+     * 只读取该用户自己的配置，不回退到系统全局配置。
+     * Telegram 与 WhatsApp 只要有一个配置完整就可用；都未配置则不能公网登录。
+     */
     private ChannelTarget resolveTarget(Long userId) {
-        String channel = firstNonBlank(
-                userConfig(userId, "notify_channel"),
-                configService.get("notify_channel"),
-                "TELEGRAM"
-        ).trim().toUpperCase();
+        String telegramBotToken = userConfig(userId, "telegram_bot_token");
+        String telegramChatId = userConfig(userId, "telegram_chat_id");
+        String whatsappApiKey = userConfig(userId, "whatsapp_api_key");
+        String whatsappTo = userConfig(userId, "whatsapp_to");
+        String whatsappBaseUrl = userConfig(userId, "whatsapp_base_url");
 
-        String telegramChatId = firstNonBlank(
-                userConfig(userId, "telegram_chat_id"),
-                configService.get("telegram_chat_id"),
-                telegramNotifyService.resolveChatId()
-        );
-        String whatsappTo = firstNonBlank(
-                userConfig(userId, "whatsapp_to"),
-                configService.get("whatsapp_to"),
-                whatsAppNotifyService.resolveRecipient()
-        );
+        boolean telegramReady = !isBlank(telegramBotToken) && !isBlank(telegramChatId);
+        boolean whatsappReady = !isBlank(whatsappApiKey) && !isBlank(whatsappTo);
 
-        return switch (channel) {
-            case "TELEGRAM" -> {
-                if (isBlank(telegramChatId)) {
-                    throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
-                }
-                yield new ChannelTarget("TELEGRAM", "Telegram", telegramChatId, null);
-            }
-            case "WHATSAPP" -> {
-                if (isBlank(whatsappTo)) {
-                    throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
-                }
-                yield new ChannelTarget("WHATSAPP", "WhatsApp", null, whatsappTo);
-            }
-            case "BOTH" -> {
-                if (isBlank(telegramChatId) && isBlank(whatsappTo)) {
-                    throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
-                }
-                if (isBlank(whatsappTo)) {
-                    yield new ChannelTarget("TELEGRAM", "Telegram", telegramChatId, null);
-                }
-                if (isBlank(telegramChatId)) {
-                    yield new ChannelTarget("WHATSAPP", "WhatsApp", null, whatsappTo);
-                }
-                yield new ChannelTarget("BOTH", "Telegram + WhatsApp", telegramChatId, whatsappTo);
-            }
-            default -> throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
-        };
+        if (!telegramReady && !whatsappReady) {
+            throw new BizException(ErrorCode.AUTH_OTP_NO_CHANNEL);
+        }
+        if (telegramReady && whatsappReady) {
+            return new ChannelTarget("BOTH", "Telegram + WhatsApp",
+                    telegramBotToken, telegramChatId, whatsappApiKey, whatsappBaseUrl, whatsappTo);
+        }
+        if (telegramReady) {
+            return new ChannelTarget("TELEGRAM", "Telegram",
+                    telegramBotToken, telegramChatId, null, null, null);
+        }
+        return new ChannelTarget("WHATSAPP", "WhatsApp",
+                null, null, whatsappApiKey, whatsappBaseUrl, whatsappTo);
     }
 
     private boolean send(ChannelTarget target, String code, String clientIp) {
@@ -217,10 +198,12 @@ public class LoginOtpService {
 
         boolean sent = false;
         if (!isBlank(target.telegramChatId())) {
-            sent = telegramNotifyService.sendToChat(target.telegramChatId(), message) || sent;
+            sent = telegramNotifyService.sendToChat(
+                    target.telegramBotToken(), target.telegramChatId(), message) || sent;
         }
         if (!isBlank(target.whatsappTo())) {
-            sent = whatsAppNotifyService.sendToRecipient(target.whatsappTo(), message) || sent;
+            sent = whatsAppNotifyService.sendToRecipient(
+                    target.whatsappApiKey(), target.whatsappBaseUrl(), target.whatsappTo(), message) || sent;
         }
         return sent;
     }
@@ -307,15 +290,6 @@ public class LoginOtpService {
         }
     }
 
-    private static String firstNonBlank(String... values) {
-        for (String value : values) {
-            if (!isBlank(value)) {
-                return value.trim();
-            }
-        }
-        return "";
-    }
-
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
@@ -335,12 +309,16 @@ public class LoginOtpService {
         return CHALLENGE_PREFIX + challengeId;
     }
 
-    private record ChannelTarget(String channel, String channelLabel, String telegramChatId, String whatsappTo) {
+    private record ChannelTarget(String channel, String channelLabel,
+                                 String telegramBotToken, String telegramChatId,
+                                 String whatsappApiKey, String whatsappBaseUrl, String whatsappTo) {
         String maskedRecipient() {
-            if (telegramChatId != null && whatsappTo != null) {
+            boolean hasTelegram = telegramChatId != null;
+            boolean hasWhatsApp = whatsappTo != null;
+            if (hasTelegram && hasWhatsApp) {
                 return "Telegram " + mask(telegramChatId) + " / WhatsApp " + mask(whatsappTo);
             }
-            return mask(telegramChatId != null ? telegramChatId : whatsappTo);
+            return mask(hasTelegram ? telegramChatId : whatsappTo);
         }
     }
 }

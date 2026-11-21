@@ -67,7 +67,7 @@ public enum ErrorCode {
     AUTH_OTP_INVALID(80110, "验证码错误或已过期"),
     AUTH_OTP_TOO_MANY(80111, "验证码尝试次数过多，请重新登录"),
     AUTH_OTP_SEND_FAILED(80112, "验证码发送失败，请检查通知渠道配置"),
-    AUTH_OTP_NO_CHANNEL(80113, "该账号未配置可用的验证码接收渠道"),
+    AUTH_OTP_NO_CHANNEL(80113, "该账号未配置 Telegram 或 WhatsApp，无法公网登录"),
     AUTH_OTP_RESEND_LIMIT(80114, "验证码发送过于频繁，请稍后再试"),
     AUTH_ADMIN_PUBLIC_FORBIDDEN(80115, "管理员账号仅允许内网登录"),
 

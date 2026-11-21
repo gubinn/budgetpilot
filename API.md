@@ -559,6 +559,8 @@ WhatsApp 推送走官方 **Agent Platform API**（`https://api.whatsapp.com/agen
 
 定时提醒的默认渠道由 `t_config.notify_channel` 决定（`TELEGRAM` / `WHATSAPP` / `BOTH` / `APP`，默认 `TELEGRAM`）；单条预警规则可在规则中单独指定渠道。
 
+> `t_config` 中的 Telegram / WhatsApp 配置仅用于**系统定时提醒与预警**，不用于用户公网登录验证码；后者只读 `t_user_config`（见 9.3）。
+
 ```
 PUT /api/v1/system/config/whatsapp_api_key
 { "value": "<Agent API Key>" }
@@ -718,7 +720,7 @@ PUT /api/v1/system/config/notify_channel
 
 ##### 登录响应（公网 / Cloudflare Tunnel）
 
-公网来源在用户名密码校验通过后**不直接返回 token**，而是返回验证码挑战；验证码通过该用户在 `/api/v1/users/config` 配置的渠道发送，未配置时回退到系统全局通知配置：
+公网来源在用户名密码校验通过后**不直接返回 token**，而是返回验证码挑战；验证码只通过该用户自己在 `/api/v1/users/config` 配置的 Telegram / WhatsApp 发送。**没有个人配置时不会回退到系统全局配置**，而是直接返回 `80113`，无法公网登录：
 
 ```json
 {
@@ -824,20 +826,30 @@ PUT /api/v1/system/config/notify_channel
 | GET | `/api/v1/users/config` | 获取当前用户所有配置 | - |
 | PUT | `/api/v1/users/config/{key}` | 设置配置 | `{ "value": "xxx" }` |
 
-公网登录验证码使用以下用户级配置（`t_user_config`），未配置时回退到 `t_config` 的全局值：
+公网登录验证码只使用以下用户级配置（`t_user_config`），**不回退到 `t_config` 全局配置**：
 
 | key | 说明 |
 |-----|------|
-| `notify_channel` | `TELEGRAM` / `WHATSAPP` / `BOTH`；留空跟随全局 |
-| `telegram_chat_id` | 该用户的 Telegram Chat ID；留空跟随全局 |
-| `whatsapp_to` | 该用户的 WhatsApp 接收者（`user:<id>`）；留空跟随全局。Agent Platform 只能发给创建者本人，家人建议用 Telegram |
+| `telegram_bot_token` | 该用户自己的 Telegram Bot Token |
+| `telegram_chat_id` | 该用户自己的 Telegram Chat ID |
+| `whatsapp_api_key` | 该用户自己的 WhatsApp Agent API Key |
+| `whatsapp_to` | 该用户自己的 WhatsApp 接收者（`user:<id>`） |
+| `whatsapp_base_url` | 可选，默认 `https://api.whatsapp.com/agent/v1` |
+
+Telegram 需要 `telegram_bot_token` + `telegram_chat_id` 同时配置；WhatsApp 需要 `whatsapp_api_key` + `whatsapp_to` 同时配置。至少完整配置一组才能公网登录，否则返回 `80113`。两组都完整时同时发送。Agent Platform 只能发给创建者本人，家人建议用 Telegram。
 
 ```json
-PUT /api/v1/users/config/notify_channel
-{ "value": "TELEGRAM" }
+PUT /api/v1/users/config/telegram_bot_token
+{ "value": "123456:ABC-xxx" }
 
 PUT /api/v1/users/config/telegram_chat_id
 { "value": "123456789" }
+
+PUT /api/v1/users/config/whatsapp_api_key
+{ "value": "<Agent API Key>" }
+
+PUT /api/v1/users/config/whatsapp_to
+{ "value": "user:12345678901234" }
 ```
 
 ---
@@ -971,7 +983,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 80110 | 验证码错误或已过期 |
 | 80111 | 验证码尝试次数过多，请重新登录 |
 | 80112 | 验证码发送失败，请检查通知渠道配置 |
-| 80113 | 该账号未配置可用的验证码接收渠道 |
+| 80113 | 该账号未配置 Telegram 或 WhatsApp，无法公网登录 |
 | 80114 | 验证码发送过于频繁，请稍后再试 |
 | 80115 | 管理员账号仅允许内网登录 |
 

@@ -784,7 +784,7 @@ curl -k https://localhost/api/v1/accounts
 
 **方式一：通过前端页面（推荐）**
 
-1. 打开系统设置页面
+1. 用 ADMIN 登录，打开 系统设置 → 系统 Telegram（定时提醒）
 2. 填入 Bot Token 和 Chat ID
 3. 点击「保存」
 
@@ -840,7 +840,7 @@ WhatsApp 渠道使用官方 **Agent Platform API**（`https://api.whatsapp.com/a
 
 1. 在 WhatsApp App 中进入 **设置 → Agents（智能体）**，创建一个 Agent
 2. 打开该 Agent 的聊天，进入 **聊天信息 → API key**，复制密钥
-3. 在「系统设置 → WhatsApp 通知」中填入 API Key 与接收者（`user:<id>`，纯数字会自动补前缀）
+3. 用 ADMIN 登录，在「系统设置 → 系统 WhatsApp（定时提醒）」中填入 API Key 与接收者（`user:<id>`，纯数字会自动补前缀）
 4. 点击「保存配置」后点「推送测试」
 
 > 该 API 只能给创建 Agent 的本人发送消息；出站频率限制为每分钟 12 条。
@@ -904,7 +904,7 @@ BUDGETPILOT_INGRESS_TRUSTED_PROXIES=100.64.1.2,fd7a:115c:a1e0::1
 #### 公网登录流程
 
 1. 用户名 + 密码校验通过；
-2. 服务端生成 6 位验证码，通过该用户的验证码渠道发送；
+2. 服务端生成 6 位验证码，通过该用户自己的 Telegram / WhatsApp 配置发送；
 3. 前端输入验证码，`POST /api/v1/auth/verify` 换取 token；
 4. 公网 token 12 小时有效、1 小时无操作过期；Tailscale / 局域网仍是 7 天。
 
@@ -914,13 +914,19 @@ BUDGETPILOT_INGRESS_TRUSTED_PROXIES=100.64.1.2,fd7a:115c:a1e0::1
 
 #### 配置每个用户的接收渠道
 
-登录后进入 **设置 → 登录验证（公网访问）**：
+每个用户登录后进入 **设置 → 我的 Telegram 通知 / 我的 WhatsApp 通知**，填写自己的凭证：
 
-- 验证码接收渠道：跟随全局 / Telegram / WhatsApp / 两者都发；
-- Telegram Chat ID、WhatsApp 接收者（`user:<id>`）留空则使用全局配置。
+- Telegram：`Bot Token` + `Chat ID`；
+- WhatsApp：`Agent API Key` + 接收者 `user:<id>`。
 
-新用户第一次从公网登录时还没有个人渠道，验证码会发到全局通知渠道；登录后应及时改成自己的渠道。
+规则：
 
+- 公网登录验证码**只使用当前用户自己的配置**，不回退到系统全局配置。
+- Telegram 与 WhatsApp 至少完整配置一组；都未配置时公网登录返回 `80113`，收不到验证码。
+- 两组都完整时会给两个渠道都发送，任一成功即可。
+- 新用户必须先在内网（Tailscale / 局域网）登录后配置，或由 ADMIN 直接写入 `t_user_config`，否则不能公网登录。
+
+> 设置页中的「系统 Telegram / 系统 WhatsApp（定时提醒）」是 **ADMIN 专用**，只用于信用卡还款、周期账单、预算超支等系统定时提醒，不影响用户公网登录验证码。
 > WhatsApp Agent Platform 只能给 Agent 创建者本人发消息，家人建议统一用 Telegram（每个家人先给 Bot 发一条消息，再用 `getUpdates` 获取各自 Chat ID）。
 
 #### 权限变化

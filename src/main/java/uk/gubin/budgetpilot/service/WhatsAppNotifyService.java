@@ -55,12 +55,23 @@ public class WhatsAppNotifyService {
      * <p>注意：Agent Platform 只允许向 Agent 创建者发送消息。</p>
      */
     public boolean sendToRecipient(String to, String content) {
-        String apiKey = resolveConfig("whatsapp_api_key", defaultApiKey);
-        String baseUrl = resolveConfig("whatsapp_base_url", defaultBaseUrl);
+        return sendToRecipient(
+                resolveConfig("whatsapp_api_key", defaultApiKey),
+                resolveConfig("whatsapp_base_url", defaultBaseUrl),
+                to,
+                content);
+    }
 
+    /**
+     * 使用指定 API Key 发送到指定接收者，用于按用户投递登录验证码。
+     */
+    public boolean sendToRecipient(String apiKey, String baseUrl, String to, String content) {
         if (apiKey == null || apiKey.isBlank() || to == null || to.isBlank()) {
             log.warn("WhatsApp 未配置，跳过推送");
             return false;
+        }
+        if (baseUrl == null || baseUrl.isBlank()) {
+            baseUrl = DEFAULT_BASE_URL;
         }
 
         try {

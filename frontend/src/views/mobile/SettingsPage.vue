@@ -12,9 +12,39 @@
       <div class="config-hint">信用卡还款、周期账单、预算超支等系统定时提醒统一使用该渠道；单条预警规则在「预警规则」页单独设置。</div>
     </div>
 
-    <!-- Telegram -->
+    <!-- 我的 Telegram -->
+    <div class="section-card">
+      <h3 class="section-title">我的 Telegram 通知</h3>
+      <n-form label-placement="top" label-width="auto">
+        <n-form-item label="Bot Token">
+          <n-input v-model:value="myConfig.telegram_bot_token" type="password" show-password-on="click" placeholder="你自己的 Bot Token" />
+        </n-form-item>
+        <n-form-item label="Chat ID">
+          <n-input v-model:value="myConfig.telegram_chat_id" placeholder="你自己的 Chat ID" />
+        </n-form-item>
+        <n-button type="primary" size="small" @click="saveMyTelegram">保存</n-button>
+      </n-form>
+      <div class="config-hint">未配置则无法通过 Telegram 收公网验证码。</div>
+    </div>
+
+    <!-- 我的 WhatsApp -->
+    <div class="section-card">
+      <h3 class="section-title">我的 WhatsApp 通知</h3>
+      <n-form label-placement="top" label-width="auto">
+        <n-form-item label="API Key">
+          <n-input v-model:value="myConfig.whatsapp_api_key" type="password" show-password-on="click" placeholder="你自己的 Agent API Key" />
+        </n-form-item>
+        <n-form-item label="接收者 ID">
+          <n-input v-model:value="myConfig.whatsapp_to" placeholder="user:<id>（不是手机号）" />
+        </n-form-item>
+        <n-button type="primary" size="small" @click="saveMyWhatsApp">保存</n-button>
+      </n-form>
+      <div class="config-hint">未配置则无法通过 WhatsApp 收公网验证码；WhatsApp 只能发给 Agent 创建者。</div>
+    </div>
+
+    <!-- 系统 Telegram（定时提醒，ADMIN） -->
     <div class="section-card" v-if="auth.isAdmin">
-      <h3 class="section-title">Telegram 通知</h3>
+      <h3 class="section-title">系统 Telegram（定时提醒）</h3>
       <n-form label-placement="top" label-width="auto">
         <n-form-item label="Bot Token">
           <n-input v-model:value="config.telegram_bot_token" type="password" show-password-on="click" placeholder="输入 Bot Token" />
@@ -27,11 +57,12 @@
           <n-button size="small" @click="testTelegram">推送测试</n-button>
         </n-space>
       </n-form>
+      <div class="config-hint">仅用于系统定时提醒，不用于用户公网登录验证码。</div>
     </div>
 
-    <!-- WhatsApp -->
+    <!-- 系统 WhatsApp（定时提醒，ADMIN） -->
     <div class="section-card" v-if="auth.isAdmin">
-      <h3 class="section-title">WhatsApp 通知</h3>
+      <h3 class="section-title">系统 WhatsApp（定时提醒）</h3>
       <n-form label-placement="top" label-width="auto">
         <n-form-item label="API Key">
           <n-input v-model:value="config.whatsapp_api_key" type="password" show-password-on="click" placeholder="Agent API Key（留空则使用环境变量）" />
@@ -44,24 +75,7 @@
           <n-button size="small" @click="testWhatsApp">推送测试</n-button>
         </n-space>
       </n-form>
-    </div>
-
-    <!-- 公网登录验证：每个用户自己的接收渠道 -->
-    <div class="section-card">
-      <h3 class="section-title">登录验证（公网访问）</h3>
-      <n-form label-placement="top" label-width="auto">
-        <n-form-item label="验证码接收渠道">
-          <n-select v-model:value="myConfig.notify_channel" :options="myChannelOptions" />
-        </n-form-item>
-        <n-form-item label="Telegram Chat ID">
-          <n-input v-model:value="myConfig.telegram_chat_id" placeholder="留空则使用系统全局配置" />
-        </n-form-item>
-        <n-form-item label="WhatsApp 接收者">
-          <n-input v-model:value="myConfig.whatsapp_to" placeholder="user:<id>；留空则使用系统全局配置" />
-        </n-form-item>
-        <n-button type="primary" size="small" @click="saveMyNotify">保存</n-button>
-      </n-form>
-      <div class="config-hint">公网登录时验证码发到这里；WhatsApp 只能发给 Agent 创建者，家人建议用 Telegram。</div>
+      <div class="config-hint">仅用于系统定时提醒，不用于用户公网登录验证码。</div>
     </div>
 
     <!-- 汇率 -->
@@ -147,16 +161,11 @@ const notifyChannelOptions = [
   { label: '仅应用内', value: 'APP' }
 ]
 const myConfig = ref({
-  notify_channel: '',
+  telegram_bot_token: '',
   telegram_chat_id: '',
+  whatsapp_api_key: '',
   whatsapp_to: ''
 })
-const myChannelOptions = [
-  { label: '跟随系统全局配置', value: '' },
-  { label: 'Telegram', value: 'TELEGRAM' },
-  { label: 'WhatsApp', value: 'WHATSAPP' },
-  { label: '两者都发', value: 'BOTH' }
-]
 const supportedCurrencies = ref([])
 const rates = ref([])
 const alerts = ref([])
@@ -210,16 +219,24 @@ async function saveNotifyChannel() {
 async function loadMyNotify() {
   try {
     const res = await userApi.getMyConfig()
-    myConfig.value.notify_channel = res.data.notify_channel || ''
+    myConfig.value.telegram_bot_token = res.data.telegram_bot_token || ''
     myConfig.value.telegram_chat_id = res.data.telegram_chat_id || ''
+    myConfig.value.whatsapp_api_key = res.data.whatsapp_api_key || ''
     myConfig.value.whatsapp_to = res.data.whatsapp_to || ''
   } catch (e) { console.error('Failed to load my notify config', e) }
 }
 
-async function saveMyNotify() {
+async function saveMyTelegram() {
   try {
-    await userApi.setMyConfig('notify_channel', myConfig.value.notify_channel || '')
+    await userApi.setMyConfig('telegram_bot_token', myConfig.value.telegram_bot_token || '')
     await userApi.setMyConfig('telegram_chat_id', myConfig.value.telegram_chat_id || '')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function saveMyWhatsApp() {
+  try {
+    await userApi.setMyConfig('whatsapp_api_key', myConfig.value.whatsapp_api_key || '')
     await userApi.setMyConfig('whatsapp_to', myConfig.value.whatsapp_to || '')
     message.success('保存成功')
   } catch (e) { message.error('保存失败') }
