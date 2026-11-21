@@ -402,3 +402,69 @@ Content-Type: application/json
 - 年度预算创建成功，进度接口返回专项项和全年累计支出。
 - 父子分类同时设置仍返回 `code=10001`。
 - 现有 `2026-12` 月度预算已更新为日常分类项。
+
+---
+
+## 2026-11-21（补充 10）— 商户聚合与分页修复
+
+**问题**
+
+- 商户页面出现三百多条记录，绝大多数只对应一笔交易。
+- 桌面端分页器看起来存在，但点击页码不生效；移动端没有分页，一次性渲染全部商户。
+
+**原因**
+
+- accounting_buddy 每笔交易把邮件中的原始商户名（如 `支付宝-北京三快在线科技有限公司`）
+  作为 `merchantName` 发送；`TransactionServiceImpl.create` 调用
+  `MerchantService.findOrCreate`，原逻辑对每个没见过的字符串都自动建一条商户。
+- 原始名称包含支付渠道前缀、公司全称、门店名和 `快捷支付` 后缀，同一品牌会膨胀成多条。
+- `GET /api/v1/merchants` 忽略 `page` / `size`，直接返回全部；桌面端又把 `size` 固定成 1000，
+  分页器没有 `onUpdatePage`，所以翻页无效。移动端没有分页组件。
+
+**后端**
+
+- 新增 `MerchantNameNormalizer`：
+  - 清洗支付渠道前缀（支付宝、财付通、京东支付、抖音支付、滴滴支付、程支付、Apple Pay、数字人民币等）；
+  - 清洗 `快捷支付`、`扫码付款`、`消费` 等后缀；
+  - 清洗公司/个体户后缀和门店括号；
+  - 品牌别名归一（三快/美团 → 美团，拉扎斯 → 饿了么，金拱门/麦当劳 → 麦当劳，
+    盒马、山姆、京东、携程、滴滴、12306、航旅纵横等）。
+- 新增 `t_merchant_alias`：保存原始商户名 → 聚合商户的映射。
+  - `findOrCreate` 先按聚合名查找，再按原始名别名查找；新原始名自动记录别名。
+  - 历史遗留的原始名称商户在首次命中时直接改名，避免继续制造重复。
+- 新增 `GET /api/v1/merchants/page`，真正按 `page` / `size` 分页，返回 `items/total/page/size/totalPages`。
+- 保留 `GET /api/v1/merchants` 全量列表，避免破坏 accounting_buddy 的商户学习映射。
+- 新增 `POST /api/v1/merchants/consolidate`（幂等）：
+  - 按归一化名称分组合并历史商户；
+  - 重新指向交易、周期规则和别名；
+  - 删除重复商户；
+  - 商户默认分类改为该商户历史交易中出现最多的分类；
+  - 重算 `usage_count` / `last_used_at`。
+- 列表 VO 增加 `aliases`、`aliasCount`、`transactionCount`。
+- 删除用户、清空测试数据时同步清理商户和商户别名。
+
+**前端（桌面 + 移动端）**
+
+- 商户页改为服务端分页：桌面端 10/20/50/100 每页，移动端底部页码。
+- 搜索改为服务端搜索，支持名称、手工别名和聚合前的原始名称，带 300ms 防抖。
+- 桌面端增加「合并重复」按钮和确认提示。
+- 列表展示交易笔数、原始名称数量、最近使用日期。
+
+**accounting_buddy 联动**
+
+- `build_merchant_map` 读取 BudgetPilot 返回的 `aliases`，把每个原始名称都映射到聚合商户的分类。
+- 这样在网页上修正一次分类，后续同样原始名称的邮件仍能命中；商户学习映射从 348 条原始记录收敛为 253 个聚合商户、776 条名称映射。
+
+**迁移**
+
+- 执行 `sql/migrations/merchant_alias.sql`。
+- 部署后调用一次 `POST /api/v1/merchants/consolidate`。
+- 本次执行结果：348 → 253 个商户，合并 42 组，删除 94 条重复商户，重指向 137 笔交易；再次执行返回 0 变更。
+
+**验证**
+
+- `mvn -DskipTests package`、前端 `npm run build` 通过。
+- `MerchantNameNormalizerTest` 通过。
+- `/merchants/page?page=2&size=10` 返回正确的第二页和总数。
+- 搜索 `三快` 能命中聚合商户 `美团` 及其 4 个原始名称。
+- 合并前后交易总数不变，无 `merchant_id` 指向已删除商户的孤儿交易。

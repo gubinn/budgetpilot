@@ -69,10 +69,12 @@ export const reportApi = {
 
 export const merchantApi = {
   list: (params) => api.get('/merchants', { params }),
+  page: (params) => api.get('/merchants/page', { params }),
   get: (id) => api.get(`/merchants/${id}`),
   create: (data) => api.post('/merchants', data),
   update: (id, data) => api.put(`/merchants/${id}`, data),
   remove: (id) => api.delete(`/merchants/${id}`),
+  consolidate: () => api.post('/merchants/consolidate'),
   search: (keyword, limit = 10) => api.get('/merchants/search', { params: { keyword, limit } })
 }
 

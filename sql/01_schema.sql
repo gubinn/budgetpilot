@@ -257,6 +257,18 @@ CREATE TABLE t_merchant (
     INDEX idx_active (is_active)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商户表';
 
+-- 商户原始名称别名表
+CREATE TABLE t_merchant_alias (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
+    merchant_id     BIGINT          NOT NULL COMMENT '聚合后的商户ID',
+    raw_name        VARCHAR(100)    NOT NULL COMMENT '支付渠道原始商户名',
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_user_raw (user_id, raw_name),
+    INDEX idx_merchant (merchant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='商户原始名称别名表';
+
 -- 系统配置表
 CREATE TABLE t_config (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,

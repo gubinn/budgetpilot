@@ -1,6 +1,7 @@
 package uk.gubin.budgetpilot.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import uk.gubin.budgetpilot.common.PageResult;
 import uk.gubin.budgetpilot.dto.MerchantCreateDTO;
 import uk.gubin.budgetpilot.dto.MerchantQueryDTO;
 import uk.gubin.budgetpilot.dto.MerchantUpdateDTO;
@@ -8,6 +9,7 @@ import uk.gubin.budgetpilot.entity.Merchant;
 import uk.gubin.budgetpilot.vo.MerchantVO;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 商户服务接口
@@ -35,9 +37,21 @@ public interface MerchantService extends IService<Merchant> {
     void delete(Long id);
 
     /**
-     * 分页查询商户列表
+     * 查询商户列表（保持旧接口：返回当前用户全部匹配商户，供采集端学习映射使用）
      */
     List<MerchantVO> query(MerchantQueryDTO dto);
+
+    /**
+     * 分页查询商户列表（管理页面使用）
+     */
+    PageResult<MerchantVO> queryPage(MerchantQueryDTO dto);
+
+    /**
+     * 合并重复商户：按归一化名称聚合，原始名称写入别名表。
+     *
+     * @return 合并统计
+     */
+    Map<String, Object> consolidate();
 
     /**
      * 商户模糊搜索（用于交易表单）

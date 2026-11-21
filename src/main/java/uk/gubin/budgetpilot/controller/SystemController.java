@@ -33,6 +33,8 @@ public class SystemController {
     private final TelegramNotifyService telegramNotifyService;
     private final CurrencyRateMapper currencyRateMapper;
     private final TransactionMapper transactionMapper;
+    private final MerchantAliasMapper merchantAliasMapper;
+    private final MerchantMapper merchantMapper;
     private final AccountMapper accountMapper;
     private final RecurringRuleMapper recurringRuleMapper;
     private final AlertRuleMapper alertRuleMapper;
@@ -112,6 +114,8 @@ public class SystemController {
     public Result<Map<String, Integer>> clearTestData() {
         // 清空所有测试数据（保留系统分类）
         int transactions = transactionMapper.delete(new LambdaQueryWrapper<>());
+        int merchantAliases = merchantAliasMapper.delete(new LambdaQueryWrapper<>());
+        int merchants = merchantMapper.delete(new LambdaQueryWrapper<>());
         int accounts = accountMapper.delete(new LambdaQueryWrapper<>());
         int recurringRules = recurringRuleMapper.delete(new LambdaQueryWrapper<>());
         int alertRules = alertRuleMapper.delete(new LambdaQueryWrapper<>());
@@ -125,16 +129,18 @@ public class SystemController {
         deleteRedisKeys("report:*");
         deleteRedisKeys("idempotency:*");
 
-        return Result.ok(Map.of(
-            "transactions", transactions,
-            "accounts", accounts,
-            "recurringRules", recurringRules,
-            "alertRules", alertRules,
-            "alertLogs", alertLogs,
-            "budgets", budgets,
-            "budgetItems", budgetItems,
-            "annualBudgets", annualBudgets,
-            "annualBudgetItems", annualBudgetItems
+        return Result.ok(Map.ofEntries(
+            Map.entry("transactions", transactions),
+            Map.entry("merchantAliases", merchantAliases),
+            Map.entry("merchants", merchants),
+            Map.entry("accounts", accounts),
+            Map.entry("recurringRules", recurringRules),
+            Map.entry("alertRules", alertRules),
+            Map.entry("alertLogs", alertLogs),
+            Map.entry("budgets", budgets),
+            Map.entry("budgetItems", budgetItems),
+            Map.entry("annualBudgets", annualBudgets),
+            Map.entry("annualBudgetItems", annualBudgetItems)
         ));
     }
 

@@ -25,6 +25,21 @@ public class MerchantVO {
     private String alias;
 
     /**
+     * 支付渠道原始名称（聚合前），用于展示和分类学习
+     */
+    private List<String> aliases;
+
+    /**
+     * 原始名称数量
+     */
+    private Integer aliasCount;
+
+    /**
+     * 关联交易笔数
+     */
+    private Long transactionCount;
+
+    /**
      * 关联分类ID
      */
     private Long categoryId;

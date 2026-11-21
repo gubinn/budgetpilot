@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import uk.gubin.budgetpilot.common.PageResult;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.dto.MerchantCreateDTO;
 import uk.gubin.budgetpilot.dto.MerchantQueryDTO;
@@ -12,6 +13,7 @@ import uk.gubin.budgetpilot.service.MerchantService;
 import uk.gubin.budgetpilot.vo.MerchantVO;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 商户管理 Controller
@@ -33,11 +35,27 @@ public class MerchantController {
     }
 
     /**
-     * 商户列表（分页查询）
+     * 商户列表（兼容接口：返回全部匹配商户，供采集端学习映射）
      */
     @GetMapping
     public Result<List<MerchantVO>> list(MerchantQueryDTO dto) {
         return Result.ok(merchantService.query(dto));
+    }
+
+    /**
+     * 商户分页列表（管理页面）
+     */
+    @GetMapping("/page")
+    public Result<PageResult<MerchantVO>> page(MerchantQueryDTO dto) {
+        return Result.ok(merchantService.queryPage(dto));
+    }
+
+    /**
+     * 合并重复商户（按归一化名称聚合，原始名称保留到别名表）
+     */
+    @PostMapping("/consolidate")
+    public Result<Map<String, Object>> consolidate() {
+        return Result.ok(merchantService.consolidate());
     }
 
     /**

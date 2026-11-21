@@ -368,7 +368,7 @@ Content-Type: application/json
 | `targetAccountId` | long | 否 | - | 不能与 accountId 相同 | 目标账户 ID（仅 type=3 转账时需要） |
 | `categoryId` | long | 条件必填 | - | 分类必须存在 | 分类 ID（type=1/2 必填，type=3 不需要） |
 | `merchantId` | long | 否 | - | - | 商户 ID（指定已有商户） |
-| `merchantName` | string | 否 | - | 最长 50 字符 | 商户名称（与 merchantId 二选一，系统会自动创建商户） |
+| `merchantName` | string | 否 | - | 最长 50 字符 | 商户名称（与 merchantId 二选一，系统会归一化并自动匹配/创建商户） |
 | `autoCreateMerchant` | boolean | 否 | `true` | - | 是否自动创建不存在的商户 |
 | `note` | string | 否 | - | 最长 200 字符 | 备注 |
 | `tags` | string[] | 否 | `[]` | - | 标签列表 |
@@ -606,7 +606,9 @@ X-Api-Key: your-api-key
 
 **基础路径**: `/api/v1/merchants`
 
-> 创建交易时可通过 `merchantName` 自动创建商户。如需预先管理商户（设置别名、关联分类、图标等），可使用以下接口。
+> 创建交易时可通过 `merchantName` 自动匹配/创建商户。系统会先清洗支付渠道前缀、公司后缀和品牌别名（如 `支付宝-北京三快在线科技有限公司` → `美团`），原始名称保存在别名表；同一品牌不会重复建商户。
+>
+> 如需预先管理商户（设置别名、关联分类、图标等），可使用以下接口。
 
 #### 4.1 创建商户
 
@@ -642,17 +644,20 @@ Content-Type: application/json
 #### 4.2 商户列表
 
 ```
-GET /api/v1/merchants?keyword=&isActive=true&page=1&size=20
+GET /api/v1/merchants?keyword=&isActive=true
 X-Api-Key: your-api-key
 ```
 
+> 兼容接口：返回当前用户全部匹配商户的数组，供采集端构建学习映射。管理页面请使用
+> `GET /api/v1/merchants/page?page=1&size=20`，返回 `items/total/page/size/totalPages`。
+
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `keyword` | string | 否 | 按名称/别名模糊搜索 |
+| `keyword` | string | 否 | 按名称/别名/原始名称模糊搜索 |
 | `categoryId` | long | 否 | 按关联分类筛选 |
 | `isActive` | boolean | 否 | 是否只返回启用商户，默认 `true` |
-| `page` | int | 否 | 页码，从 `1` 开始，默认 `1` |
-| `size` | int | 否 | 每页条数，默认 `20` |
+| `page` | int | 否 | 页码，从 `1` 开始，默认 `1`（仅 `/merchants/page`） |
+| `size` | int | 否 | 每页条数，默认 `20`，最大 `200`（仅 `/merchants/page`） |
 | `sort` | string | 否 | 排序字段，默认 `usage_count,desc`（按使用频率排序） |
 
 **响应字段:**
@@ -660,8 +665,11 @@ X-Api-Key: your-api-key
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | long | 商户 ID |
-| `name` | string | 商户名称 |
-| `alias` | string | 商户别名 |
+| `name` | string | 聚合后的商户名称 |
+| `alias` | string | 手工别名 |
+| `aliases` | string[] | 支付渠道原始名称列表 |
+| `aliasCount` | int | 原始名称数量 |
+| `transactionCount` | long | 关联交易笔数 |
 | `categoryId` | long | 关联分类 ID |
 | `categoryName` | string | 关联分类名称 |
 | `categoryColor` | string | 关联分类颜色 |
@@ -726,6 +734,32 @@ X-Api-Key: your-api-key
 ```
 
 > 有关联交易的商户不可删除。系统预设商户（`isSystem=true`）不可删除。
+
+#### 4.7 合并重复商户
+
+```
+POST /api/v1/merchants/consolidate
+X-Api-Key: your-api-key
+```
+
+对当前用户执行一次幂等合并：按归一化名称聚合，重复商户的交易、周期规则、别名重新指向主商户，原始名称写入别名表，商户默认分类取历史交易中出现最多的分类。
+
+**响应示例:**
+
+```json
+{
+  "code": 0,
+  "data": {
+    "groups": 253,
+    "mergedGroups": 0,
+    "deleted": 0,
+    "transactionsRepointed": 0,
+    "aliasesCreated": 0
+  }
+}
+```
+
+> 可重复执行；数据已经聚合时返回 0 变更。
 
 ---
 

@@ -341,11 +341,65 @@
 | 方法 | 路径 | 功能 | 请求体 |
 |------|------|------|--------|
 | POST | `/api/v1/merchants` | 创建商户 | `MerchantCreateDTO` |
-| GET | `/api/v1/merchants` | 商户列表（分页） | `MerchantQueryDTO` |
+| GET | `/api/v1/merchants` | 商户列表（兼容接口，返回全部匹配项，供采集端学习映射） | `MerchantQueryDTO` |
+| GET | `/api/v1/merchants/page` | 商户分页列表（管理页面使用） | `MerchantQueryDTO` |
+| POST | `/api/v1/merchants/consolidate` | 合并重复商户 | - |
 | GET | `/api/v1/merchants/{id}` | 商户详情 | - |
 | PUT | `/api/v1/merchants/{id}` | 更新商户 | `MerchantUpdateDTO` |
 | DELETE | `/api/v1/merchants/{id}` | 删除商户 | - |
 | GET | `/api/v1/merchants/search` | 模糊搜索商户 | `keyword` (可选), `limit` (默认 10) |
+
+#### 商户聚合
+
+支付渠道返回的原始名称（如 `支付宝-北京三快在线科技有限公司`）不会逐条创建商户，
+而是先归一化为品牌名（如 `美团`），原始名称保存在 `t_merchant_alias`。转换逻辑在
+`MerchantNameNormalizer`：清洗渠道前缀/公司后缀/门店后缀，再套品牌别名。
+
+`POST /api/v1/merchants/consolidate` 对当前用户的历史数据执行一次幂等合并：
+
+- 按归一化名称分组，保留交易最多的一条为主商户；
+- 把重复商户的交易、周期规则、别名重新指向主商户；
+- 原始名称写入别名表；
+- 商户默认分类取该商户历史交易中出现最多的分类；
+- 重算 `usage_count` 和 `last_used_at`。
+
+响应示例：
+
+```json
+{
+  "code": 0,
+  "data": {
+    "groups": 253,
+    "mergedGroups": 0,
+    "deleted": 0,
+    "transactionsRepointed": 0,
+    "aliasesCreated": 0
+  }
+}
+```
+
+`GET /api/v1/merchants` 与 `/merchants/page` 的每一项还包含：
+
+```json
+{
+  "id": 4,
+  "name": "美团",
+  "alias": null,
+  "aliases": [
+    "支付宝-北京三快在线科技有限公司",
+    "支付宝-支付宝-消费-北京三快在线科技…快捷支付",
+    "财付通-美团",
+    "财付通-美团平台商户"
+  ],
+  "aliasCount": 4,
+  "transactionCount": 129,
+  "categoryId": 163,
+  "categoryName": "外卖"
+}
+```
+
+采集端（accounting_buddy）会把 `aliases` 一起加入商户学习映射，因此网页里修正一次
+分类后，后续原始名称相同的邮件也能命中。
 
 #### MerchantCreateDTO
 
@@ -380,11 +434,11 @@
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `keyword` | string | 名称/别名模糊搜索 |
+| `keyword` | string | 名称/别名/原始名称模糊搜索 |
 | `categoryId` | long | 分类ID筛选 |
 | `isActive` | boolean | 是否启用筛选 |
-| `page` | int | 页码 (默认 1) |
-| `size` | int | 每页条数 (默认 20) |
+| `page` | int | 页码 (默认 1，仅 `/merchants/page` 使用) |
+| `size` | int | 每页条数 (默认 20，最大 200，仅 `/merchants/page` 使用) |
 | `sort` | string | 排序字段 (默认 usage_count,desc) |
 
 ---
@@ -433,6 +487,8 @@
   "message": "ok",
   "data": {
     "transactions": 4,
+    "merchantAliases": 2,
+    "merchants": 1,
     "accounts": 1,
     "recurringRules": 0,
     "alertRules": 3,
@@ -446,7 +502,7 @@
 }
 ```
 
-**说明**: 清空所有业务数据（交易、账户、周期规则、预警规则、预警日志、月度预算、年度预算），保留系统预置分类，同时清除 Redis 缓存。
+**说明**: 清空所有业务数据（交易、商户、商户别名、账户、周期规则、预警规则、预警日志、月度预算、年度预算），保留系统预置分类，同时清除 Redis 缓存。
 
 #### Telegram 配置说明
 

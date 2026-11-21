@@ -2,7 +2,8 @@
   <n-card title="商户管理">
     <template #header-extra>
       <n-space>
-        <n-input v-model:value="searchKeyword" placeholder="搜索商户" clearable style="width: 200px" />
+        <n-input v-model:value="searchKeyword" placeholder="搜索商户 / 原始名称" clearable style="width: 240px" />
+        <n-button secondary @click="handleConsolidate">合并重复</n-button>
         <n-button type="primary" @click="openCreateModal">
           <template #icon><n-icon><AddOutline /></n-icon></template>
           新增商户
@@ -12,9 +13,11 @@
 
     <n-data-table
       :columns="columns"
-      :data="filteredMerchants"
+      :data="merchants"
       :loading="loading"
       :pagination="pagination"
+      remote
+      :row-key="row => row.id"
     />
 
     <!-- 新增/编辑弹窗 -->
@@ -63,9 +66,9 @@
 </template>
 
 <script setup>
-import { ref, h, computed, onMounted } from 'vue'
+import { ref, h, computed, onMounted, watch } from 'vue'
 import { NButton, NTag, NSpace, NIcon, useDialog, useMessage } from 'naive-ui'
-import { AddOutline, BusinessOutline } from '@vicons/ionicons5'
+import { AddOutline } from '@vicons/ionicons5'
 import { merchantApi, categoryApi } from '@/api'
 
 const dialog = useDialog()
@@ -78,13 +81,28 @@ const showModal = ref(false)
 const editingId = ref(null)
 const submitting = ref(false)
 const formRef = ref(null)
+const page = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+let searchTimer = null
 
-const pagination = ref({
-  page: 1,
-  pageSize: 20,
+const pagination = computed(() => ({
+  page: page.value,
+  pageSize: pageSize.value,
+  itemCount: total.value,
   showSizePicker: true,
-  pageSizes: [10, 20, 50]
-})
+  pageSizes: [10, 20, 50, 100],
+  prefix: ({ itemCount }) => `共 ${itemCount} 个商户`,
+  onUpdatePage: (p) => {
+    page.value = p
+    loadData()
+  },
+  onUpdatePageSize: (size) => {
+    pageSize.value = size
+    page.value = 1
+    loadData()
+  }
+}))
 
 const form = ref({
   name: '',
@@ -112,15 +130,6 @@ function buildCascaderOption(c) {
   return opt
 }
 
-const filteredMerchants = computed(() => {
-  if (!searchKeyword.value) return merchants.value
-  const kw = searchKeyword.value.toLowerCase()
-  return merchants.value.filter(m =>
-    m.name.toLowerCase().includes(kw) ||
-    (m.alias && m.alias.toLowerCase().includes(kw))
-  )
-})
-
 const columns = [
   {
     title: '商户',
@@ -132,16 +141,36 @@ const columns = [
           height: '24px',
           borderRadius: '4px',
           background: row.color || '#ccc',
-          display: 'inline-block'
+          display: 'inline-block',
+          flexShrink: 0
         }
       }),
       h('span', {}, row.name),
       row.isSystem ? h(NTag, { size: 'tiny', type: 'info' }, { default: () => '系统' }) : null
     ])
   },
-  { title: '别名', key: 'alias', ellipsis: { tooltip: true } },
-  { title: '关联分类', key: 'categoryName' },
-  { title: '使用次数', key: 'usageCount', width: 100 },
+  { title: '关联分类', key: 'categoryName', width: 140 },
+  {
+    title: '交易笔数',
+    key: 'transactionCount',
+    width: 100,
+    render: (row) => row.transactionCount ?? row.usageCount ?? 0
+  },
+  {
+    title: '原始名称',
+    key: 'aliasCount',
+    width: 100,
+    render: (row) => {
+      if (!row.aliasCount) return '-'
+      return h('span', { title: (row.aliases || []).join('\n') }, `${row.aliasCount} 个`)
+    }
+  },
+  {
+    title: '最近使用',
+    key: 'lastUsedAt',
+    width: 120,
+    render: (row) => row.lastUsedAt || '-'
+  },
   {
     title: '操作',
     key: 'actions',
@@ -161,16 +190,9 @@ const columns = [
   }
 ]
 
-async function loadData() {
-  loading.value = true
+async function loadCategories() {
   try {
-    const [mRes, cRes] = await Promise.all([
-      merchantApi.list({ size: 1000 }),
-      categoryApi.tree(1)  // 仅支出分类
-    ])
-    merchants.value = mRes.data || []
-
-    // 展开分类树为扁平列表
+    const res = await categoryApi.tree(1)
     const flat = []
     function flatten(list) {
       list.forEach(c => {
@@ -178,14 +200,40 @@ async function loadData() {
         if (c.children?.length) flatten(c.children)
       })
     }
-    flatten(cRes.data || [])
+    flatten(res.data || [])
     categories.value = flat
   } catch (e) {
+    message.error('分类加载失败')
+  }
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const res = await merchantApi.page({
+      page: page.value,
+      size: pageSize.value,
+      keyword: searchKeyword.value?.trim() || undefined
+    })
+    const data = res.data || {}
+    merchants.value = data.items || []
+    total.value = data.total || 0
+  } catch (e) {
     message.error('加载失败')
+    merchants.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
 }
+
+watch(searchKeyword, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    page.value = 1
+    loadData()
+  }, 300)
+})
 
 function openCreateModal() {
   editingId.value = null
@@ -272,5 +320,28 @@ function handleDelete(id) {
   })
 }
 
-onMounted(loadData)
+function handleConsolidate() {
+  dialog.warning({
+    title: '合并重复商户',
+    content: '将按支付渠道、公司后缀和品牌名聚合重复商户，原始名称会保留为别名，交易不会丢失。是否继续？',
+    positiveText: '开始合并',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        const res = await merchantApi.consolidate()
+        const d = res.data || {}
+        message.success(`合并完成：处理 ${d.groups ?? 0} 组，合并 ${d.mergedGroups ?? 0} 组，删除 ${d.deleted ?? 0} 条重复商户`)
+        page.value = 1
+        loadData()
+      } catch (e) {
+        message.error(e.response?.data?.message || '合并失败')
+      }
+    }
+  })
+}
+
+onMounted(async () => {
+  await loadCategories()
+  await loadData()
+})
 </script>

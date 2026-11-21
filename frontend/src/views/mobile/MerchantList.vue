@@ -2,21 +2,21 @@
   <div class="mobile-merchants">
     <!-- 搜索栏 -->
     <div class="search-bar">
-      <n-input v-model:value="searchKeyword" placeholder="搜索商户名称或别名" clearable />
+      <n-input v-model:value="searchKeyword" placeholder="搜索商户名称或原始名称" clearable />
     </div>
 
     <!-- 商户卡片列表 -->
-    <div v-if="filteredMerchants.length" class="merchant-list">
-      <div v-for="m in filteredMerchants" :key="m.id" class="merchant-card">
+    <div v-if="merchants.length" class="merchant-list">
+      <div v-for="m in merchants" :key="m.id" class="merchant-card">
         <div class="merchant-header">
           <div class="merchant-left">
             <span class="color-dot" :style="{ background: m.color || '#ccc' }"></span>
             <span class="merchant-name">{{ m.name }}</span>
             <n-tag v-if="m.isSystem" size="tiny" type="info" :bordered="false">系统</n-tag>
           </div>
-          <span class="usage-count">{{ m.usageCount }} 次</span>
+          <span class="usage-count">{{ m.transactionCount ?? m.usageCount ?? 0 }} 笔</span>
         </div>
-        <div v-if="m.alias" class="merchant-alias">别名: {{ m.alias }}</div>
+        <div v-if="m.aliasCount" class="merchant-alias">原始名称 {{ m.aliasCount }} 个</div>
         <div v-if="m.categoryName" class="merchant-category">关联: {{ m.categoryName }}</div>
         <div v-if="m.description" class="merchant-desc">{{ m.description }}</div>
         <div class="merchant-actions">
@@ -27,6 +27,16 @@
     </div>
     <n-empty v-else-if="!loading" description="暂无商户" />
     <n-spin :show="loading" />
+
+    <div v-if="total > pageSize" class="pager">
+      <n-pagination
+        v-model:page="page"
+        :page-size="pageSize"
+        :item-count="total"
+        :page-slot="5"
+        @update:page="loadData"
+      />
+    </div>
 
     <!-- 新增/编辑弹窗 -->
     <n-drawer v-model:show="showModal" :height="'75vh'" placement="bottom">
@@ -84,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { merchantApi, categoryApi } from '@/api'
 import { AddOutline } from '@vicons/ionicons5'
@@ -99,6 +109,10 @@ const showModal = ref(false)
 const editingId = ref(null)
 const submitting = ref(false)
 const formRef = ref(null)
+const page = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+let searchTimer = null
 
 const form = ref({ name: '', alias: '', categoryId: null, color: '#3498db', icon: '', description: '', tags: [], isActive: true })
 
@@ -114,34 +128,47 @@ function buildCascaderOption(c) {
   return opt
 }
 
-const filteredMerchants = computed(() => {
-  if (!searchKeyword.value) return merchants.value
-  const kw = searchKeyword.value.toLowerCase()
-  return merchants.value.filter(m =>
-    m.name.toLowerCase().includes(kw) || (m.alias && m.alias.toLowerCase().includes(kw))
-  )
-})
-
-async function loadData() {
-  loading.value = true
+async function loadCategories() {
   try {
-    const [mRes, cRes] = await Promise.all([
-      merchantApi.list({ size: 1000 }),
-      categoryApi.tree(1)
-    ])
-    merchants.value = mRes.data || []
+    const res = await categoryApi.tree(1)
     const flat = []
     function flatten(list) {
       list.forEach(c => { flat.push(c); if (c.children?.length) flatten(c.children) })
     }
-    flatten(cRes.data || [])
+    flatten(res.data || [])
     categories.value = flat
   } catch (e) {
+    message.error('分类加载失败')
+  }
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    const res = await merchantApi.page({
+      page: page.value,
+      size: pageSize.value,
+      keyword: searchKeyword.value?.trim() || undefined
+    })
+    const data = res.data || {}
+    merchants.value = data.items || []
+    total.value = data.total || 0
+  } catch (e) {
     message.error('加载失败')
+    merchants.value = []
+    total.value = 0
   } finally {
     loading.value = false
   }
 }
+
+watch(searchKeyword, () => {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    page.value = 1
+    loadData()
+  }, 300)
+})
 
 function openCreateModal() {
   editingId.value = null
@@ -190,12 +217,15 @@ function handleDelete(id) {
     positiveText: '删除', negativeText: '取消',
     onPositiveClick: async () => {
       try { await merchantApi.remove(id); message.success('已删除'); loadData() }
-      catch (e) { message.error('删除失败') }
+      catch (e) { message.error(e.response?.data?.message || '删除失败') }
     }
   })
 }
 
-onMounted(loadData)
+onMounted(async () => {
+  await loadCategories()
+  await loadData()
+})
 </script>
 
 <style scoped>
@@ -221,6 +251,8 @@ onMounted(loadData)
 .merchant-desc { font-size: 12px; color: #999; margin-top: 4px; }
 
 .merchant-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+
+.pager { display: flex; justify-content: center; padding: 16px 0 8px; }
 
 .fab {
   position: fixed;

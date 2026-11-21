@@ -1517,6 +1517,35 @@ mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW COLUMNS FROM t_trans
 sudo systemctl restart budgetpilot
 ```
 
+### 商户别名表迁移（旧版本升级）
+
+`t_merchant_alias` 用于保存支付渠道原始商户名，指向归一化后的聚合商户。先执行迁移，再部署新代码。
+
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/migrations/merchant_alias.sql
+mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW TABLES LIKE 't_merchant_alias';"
+```
+
+**Docker 方式：**
+
+```bash
+cd /opt/budgetpilot
+cat sql/migrations/merchant_alias.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SHOW TABLES LIKE 't_merchant_alias';"
+```
+
+部署后建议执行一次商户合并（幂等，可重复执行）：
+
+```bash
+curl -X POST http://127.0.0.1:6060/api/v1/merchants/consolidate \
+  -H "X-Api-Key: ${API_KEY}"
+```
+
+合并会把历史原始名称收进别名表，并删除重复商户；交易、周期规则会重新指向主商户。
+
 ### MySQL 异常
 
 **Docker 方式：**
