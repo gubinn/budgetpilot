@@ -24,8 +24,8 @@
         <n-form-item label="API Key">
           <n-input v-model:value="config.whatsapp_api_key" type="password" show-password-on="click" placeholder="Agent API Key（留空则使用环境变量）" />
         </n-form-item>
-        <n-form-item label="接收者">
-          <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>，纯数字自动补前缀" />
+        <n-form-item label="接收者 ID">
+          <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>（不是手机号）" />
         </n-form-item>
         <n-form-item label="定时提醒渠道">
           <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" />

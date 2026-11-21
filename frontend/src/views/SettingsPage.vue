@@ -27,8 +27,8 @@
           <n-form-item label="API Key">
             <n-input v-model:value="config.whatsapp_api_key" type="password" show-password-on="click" placeholder="Agent API Key（留空则使用环境变量）" />
           </n-form-item>
-          <n-form-item label="接收者">
-            <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>，纯数字会自动补前缀" />
+          <n-form-item label="接收者 ID">
+            <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>（不是手机号）" />
           </n-form-item>
           <n-form-item label="定时提醒渠道">
             <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" style="width: 100%" />
@@ -38,7 +38,7 @@
             <n-button @click="testWhatsApp" style="margin-left: 8px">推送测试</n-button>
           </n-form-item>
         </n-form>
-        <div class="config-hint">使用 WhatsApp 官方 Agent Platform，消息只能发给创建该 Agent 的本人。</div>
+        <div class="config-hint">API Key 决定以哪个 Agent 身份发送，接收者 ID 决定发给谁。官方只允许发给创建 Agent 的本人，ID 可在 OpenClaw 配置的 creatorId 或收到的消息事件中查看。</div>
       </n-card>
     </n-gi>
 
