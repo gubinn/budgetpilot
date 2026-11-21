@@ -37,6 +37,13 @@ export const budgetApi = {
   progress: (yearMonth) => api.get(`/budgets/${yearMonth}/progress`)
 }
 
+export const annualBudgetApi = {
+  get: (year) => api.get(`/annual-budgets/${year}`),
+  create: (data) => api.post('/annual-budgets', data),
+  update: (year, data) => api.put(`/annual-budgets/${year}`, data),
+  progress: (year) => api.get(`/annual-budgets/${year}/progress`)
+}
+
 export const recurringApi = {
   list: () => api.get('/recurring-rules'),
   get: (id) => api.get(`/recurring-rules/${id}`),

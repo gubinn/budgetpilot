@@ -44,6 +44,8 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final AlertRuleMapper alertRuleMapper;
     private final uk.gubin.budgetpilot.mapper.BudgetMapper budgetMapper;
     private final uk.gubin.budgetpilot.mapper.BudgetItemMapper budgetItemMapper;
+    private final uk.gubin.budgetpilot.mapper.AnnualBudgetMapper annualBudgetMapper;
+    private final uk.gubin.budgetpilot.mapper.AnnualBudgetItemMapper annualBudgetItemMapper;
     private final uk.gubin.budgetpilot.mapper.TransactionMapper transactionMapper;
     private final uk.gubin.budgetpilot.mapper.AccountMapper accountMapper;
     private final uk.gubin.budgetpilot.mapper.MerchantMapper merchantMapper;
@@ -309,6 +311,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         // 清理预算项和预算
         budgetItemMapper.deleteByUserId(id);
         budgetMapper.deleteByUserId(id);
+        // 清理年度预算
+        annualBudgetItemMapper.deleteByUserId(id);
+        annualBudgetMapper.deleteByUserId(id);
         // 清理交易
         transactionMapper.deleteByUserId(id);
         // 清理商户

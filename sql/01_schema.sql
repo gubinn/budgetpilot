@@ -179,6 +179,32 @@ CREATE TABLE t_budget_item (
     INDEX idx_budget (budget_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='预算分类明细表';
 
+-- 年度预算表（目前用于专项支出）
+CREATE TABLE t_annual_budget (
+    id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
+    budget_year     CHAR(4)         NOT NULL COMMENT 'YYYY',
+    total_amount    DECIMAL(14,2)   NOT NULL COMMENT '年度总预算（CNY）',
+    note            VARCHAR(200)    DEFAULT NULL,
+    is_locked       TINYINT(1)      DEFAULT 0 COMMENT '锁定后不可修改',
+    created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_user_year (user_id, budget_year)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='年度预算表';
+
+-- 年度预算分类明细表
+CREATE TABLE t_annual_budget_item (
+    id                BIGINT          PRIMARY KEY AUTO_INCREMENT,
+    user_id           BIGINT          NOT NULL COMMENT '所属用户ID',
+    annual_budget_id  BIGINT          NOT NULL,
+    category_id       BIGINT          NOT NULL COMMENT '分类ID',
+    amount            DECIMAL(14,2)   NOT NULL COMMENT '该分类年度预算额度（CNY）',
+    created_at        DATETIME        DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE INDEX uk_annual_budget_cat (annual_budget_id, category_id),
+    INDEX idx_annual_budget (annual_budget_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='年度预算分类明细表';
+
 -- 预警规则表
 CREATE TABLE t_alert_rule (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,

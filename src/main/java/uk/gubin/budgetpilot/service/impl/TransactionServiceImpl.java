@@ -443,13 +443,11 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             String oldYearMonth = oldDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
             String newYearMonth = newDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
             if (!oldYearMonth.equals(newYearMonth)) {
-                Long oldTopId = getTopCategoryId(oldCategoryId);
-                Long newTopId = getTopCategoryId(entity.getCategoryId());
-                if (oldTopId != null) {
-                    budgetService.updateItemSpent(oldTopId, oldYearMonth, entity.getAmountBase().negate());
+                if (oldCategoryId != null) {
+                    budgetService.updateItemSpent(oldCategoryId, oldYearMonth, entity.getAmountBase().negate());
                 }
-                if (newTopId != null) {
-                    budgetService.updateItemSpent(newTopId, newYearMonth, entity.getAmountBase());
+                if (entity.getCategoryId() != null) {
+                    budgetService.updateItemSpent(entity.getCategoryId(), newYearMonth, entity.getAmountBase());
                 }
             }
         }
@@ -856,12 +854,6 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                 .select(uk.gubin.budgetpilot.entity.Category::getId);
         return categoryMapper.selectList(query).stream()
                 .map(uk.gubin.budgetpilot.entity.Category::getId).toList();
-    }
-
-    private Long getTopCategoryId(Long categoryId) {
-        uk.gubin.budgetpilot.entity.Category cat = categoryMapper.selectById(categoryId);
-        if (cat == null) return null;
-        return cat.getParentId() == 0 ? cat.getId() : cat.getParentId();
     }
 
     /**

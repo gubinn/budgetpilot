@@ -280,6 +280,58 @@
 }
 ```
 
+**分类层级规则**
+
+- 预算可以设在任意一级支出分类。
+- 父分类与子分类不能同时设置，否则父分类已包含子分类消费，会重复计算。
+- 交易落在子分类时，会更新子分类预算；没有子分类预算时回退到父分类预算。
+
+---
+
+### 4.1 年度预算 (AnnualBudgetController)
+
+**基础路径**: `/api/v1/annual-budgets`
+
+目前用于专项支出（旅行、学费、大额购物等），按自然年 1/1–12/31 统计。
+
+| 方法 | 路径 | 功能 | 请求体 |
+|------|------|------|--------|
+| POST | `/api/v1/annual-budgets` | 创建年度预算 | `AnnualBudgetCreateDTO` |
+| GET | `/api/v1/annual-budgets/{year}` | 获取年度预算进度 | - |
+| GET | `/api/v1/annual-budgets/{year}/progress` | 获取年度预算进度 | - |
+| PUT | `/api/v1/annual-budgets/{year}` | 更新年度预算 | `AnnualBudgetUpdateDTO` |
+
+#### AnnualBudgetCreateDTO
+
+```json
+{
+  "year": "年份 (必填, yyyy)",
+  "totalAmount": "年度总预算 (必填, >0)",
+  "note": "备注",
+  "items": [
+    {
+      "categoryId": "分类ID (必填)",
+      "amount": "分类年度预算 (必填, >0)"
+    }
+  ]
+}
+```
+
+#### AnnualBudgetUpdateDTO
+
+```json
+{
+  "totalAmount": "年度总预算 (>0)",
+  "note": "备注",
+  "items": [
+    {
+      "categoryId": "分类ID (必填)",
+      "amount": "分类年度预算 (必填, >0)"
+    }
+  ]
+}
+```
+
 ---
 
 ### 5. 商户管理 (MerchantController)
@@ -386,13 +438,15 @@
     "alertRules": 3,
     "alertLogs": 4,
     "budgets": 1,
-    "budgetItems": 1
+    "budgetItems": 1,
+    "annualBudgets": 1,
+    "annualBudgetItems": 3
   },
   "timestamp": 1234567890
 }
 ```
 
-**说明**: 清空所有业务数据（交易、账户、周期规则、预警规则、预警日志、预算），保留系统预置分类，同时清除 Redis 缓存。
+**说明**: 清空所有业务数据（交易、账户、周期规则、预警规则、预警日志、月度预算、年度预算），保留系统预置分类，同时清除 Redis 缓存。
 
 #### Telegram 配置说明
 
@@ -710,6 +764,8 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 50001 | 预算不存在 |
 | 50002 | 预算已锁定，不可修改 |
 | 50003 | 该月份预算已存在 |
+| 50004 | 年度预算不存在 |
+| 50005 | 该年度预算已存在 |
 | 60001 | 币种不支持 |
 | 60002 | 汇率获取失败 |
 | 60003 | 汇率 API 限流 |
@@ -794,6 +850,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | TransactionController | `src/main/java/uk/gubin/budgetpilot/controller/TransactionController.java` |
 | CategoryController | `src/main/java/uk/gubin/budgetpilot/controller/CategoryController.java` |
 | BudgetController | `src/main/java/uk/gubin/budgetpilot/controller/BudgetController.java` |
+| AnnualBudgetController | `src/main/java/uk/gubin/budgetpilot/controller/AnnualBudgetController.java` |
 | ReportController | `src/main/java/uk/gubin/budgetpilot/controller/ReportController.java` |
 | SystemController | `src/main/java/uk/gubin/budgetpilot/controller/SystemController.java` |
 | RecurringRuleController | `src/main/java/uk/gubin/budgetpilot/controller/RecurringRuleController.java` |

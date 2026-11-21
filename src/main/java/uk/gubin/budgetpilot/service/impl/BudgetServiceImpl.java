@@ -28,8 +28,11 @@ import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -47,6 +50,10 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         if (exists(dto.getYearMonth())) {
             throw new BizException(ErrorCode.BUDGET_MONTH_DUPLICATE);
         }
+
+        // 校验：分类必须有效，且父分类与子分类不能同时设置（否则父子会重复计算）
+        validateBudgetCategories(dto.getItems() == null ? List.of()
+                : dto.getItems().stream().map(BudgetCreateDTO.BudgetItemDTO::getCategoryId).toList());
 
         // 校验：总预算应等于明细之和
         if (dto.getItems() != null && !dto.getItems().isEmpty()) {
@@ -178,6 +185,12 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             }
         }
 
+        // 校验：分类必须有效，且父分类与子分类不能同时设置（否则父子会重复计算）
+        if (dto.getItems() != null && !dto.getItems().isEmpty()) {
+            validateBudgetCategories(dto.getItems().stream()
+                    .map(BudgetUpdateDTO.BudgetItemDTO::getCategoryId).toList());
+        }
+
         // 校验：如果传入了明细，总预算应等于明细之和
         if (dto.getItems() != null && !dto.getItems().isEmpty()) {
             BigDecimal itemsSum = dto.getItems().stream()
@@ -255,10 +268,15 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         Budget budget = getBudgetByMonth(yearMonth);
         if (budget == null) return null;
 
-        LambdaQueryWrapper<BudgetItem> query = new LambdaQueryWrapper<>();
-        query.eq(BudgetItem::getBudgetId, budget.getId())
-                .eq(BudgetItem::getCategoryId, categoryId);
-        return budgetItemMapper.selectOne(query);
+        // 预算可以设在任意一级分类：优先精确匹配，找不到再向上找父分类。
+        for (Long id : categoryPathIds(categoryId)) {
+            LambdaQueryWrapper<BudgetItem> query = new LambdaQueryWrapper<>();
+            query.eq(BudgetItem::getBudgetId, budget.getId())
+                    .eq(BudgetItem::getCategoryId, id);
+            BudgetItem item = budgetItemMapper.selectOne(query);
+            if (item != null) return item;
+        }
+        return null;
     }
 
     @Override
@@ -267,13 +285,17 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         Budget budget = getBudgetByMonth(yearMonth);
         if (budget == null) return;
 
-        LambdaQueryWrapper<BudgetItem> query = new LambdaQueryWrapper<>();
-        query.eq(BudgetItem::getBudgetId, budget.getId())
-                .eq(BudgetItem::getCategoryId, categoryId);
-        BudgetItem item = budgetItemMapper.selectOne(query);
-        if (item != null) {
-            item.setSpent(item.getSpent().add(spentDelta));
-            budgetItemMapper.updateById(item);
+        // 一笔交易可能同时影响“子分类预算”和“父分类预算”，但预算页会禁止父子同时设置；
+        // 这里仍按分类链逐级更新，兼容历史数据。
+        for (Long id : categoryPathIds(categoryId)) {
+            LambdaQueryWrapper<BudgetItem> query = new LambdaQueryWrapper<>();
+            query.eq(BudgetItem::getBudgetId, budget.getId())
+                    .eq(BudgetItem::getCategoryId, id);
+            BudgetItem item = budgetItemMapper.selectOne(query);
+            if (item != null) {
+                item.setSpent(item.getSpent().add(spentDelta));
+                budgetItemMapper.updateById(item);
+            }
         }
     }
 
@@ -376,6 +398,64 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         LambdaQueryWrapper<Category> query = new LambdaQueryWrapper<>();
         query.eq(Category::getParentId, parentId).select(Category::getId);
         return categoryMapper.selectList(query).stream().map(Category::getId).toList();
+    }
+
+    /**
+     * 校验预算分类：必须是当前用户的支出分类，且不能同时设置父分类和子分类。
+     * 父分类预算本身已经包含子分类消费，父子同时设置会导致总额重复计算。
+     */
+    private void validateBudgetCategories(List<Long> categoryIds) {
+        if (categoryIds == null || categoryIds.isEmpty()) return;
+
+        Set<Long> uniqueIds = new LinkedHashSet<>(categoryIds);
+        if (uniqueIds.size() != categoryIds.size()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "预算分类不能重复");
+        }
+
+        Map<Long, Category> categories = categoryMapper.selectBatchIds(uniqueIds).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+        for (Long id : uniqueIds) {
+            Category category = categories.get(id);
+            if (category == null) {
+                throw new BizException(ErrorCode.PARAM_ERROR, "预算分类不存在: " + id);
+            }
+            if (category.getType() == null || category.getType() != 1) {
+                throw new BizException(ErrorCode.PARAM_ERROR,
+                        "预算只能设置在支出分类: " + category.getName());
+            }
+        }
+
+        for (Long id : uniqueIds) {
+            Category category = categories.get(id);
+            Long parentId = category.getParentId();
+            Set<Long> seen = new HashSet<>();
+            while (parentId != null && parentId > 0 && seen.add(parentId)) {
+                if (uniqueIds.contains(parentId)) {
+                    Category parent = categories.get(parentId);
+                    String parentName = parent != null ? parent.getName() : String.valueOf(parentId);
+                    throw new BizException(ErrorCode.PARAM_ERROR,
+                            "父分类「" + parentName + "」与子分类「" + category.getName()
+                                    + "」不能同时设置预算，请只保留一层");
+                }
+                Category parent = categoryMapper.selectById(parentId);
+                parentId = parent == null ? null : parent.getParentId();
+            }
+        }
+    }
+
+    /**
+     * 返回分类自身到根分类的 ID 链，用于预算父/子分类的命中与汇总。
+     */
+    private List<Long> categoryPathIds(Long categoryId) {
+        List<Long> result = new ArrayList<>();
+        Set<Long> seen = new HashSet<>();
+        Long current = categoryId;
+        while (current != null && current > 0 && seen.add(current)) {
+            result.add(current);
+            Category category = categoryMapper.selectById(current);
+            current = category == null ? null : category.getParentId();
+        }
+        return result;
     }
 
     private String calculateStatus(BigDecimal progressPct, String yearMonth) {

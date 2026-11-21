@@ -55,17 +55,15 @@ public class TransactionEventListener {
         String yearMonth = tx.getTransactionDate().format(MONTH_FMT);
 
         if (event.getAction() == TransactionEvent.Action.DELETE) {
-            Long topCategoryId = getTopCategoryId(tx.getCategoryId());
-            if (topCategoryId != null) {
-                budgetService.updateItemSpent(topCategoryId, yearMonth, tx.getAmountBase().negate());
+            if (tx.getCategoryId() != null) {
+                budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, tx.getAmountBase().negate());
             }
             return;
         }
 
-        // 1. 更新预算已消费
-        Long topCategoryId = getTopCategoryId(tx.getCategoryId());
-        if (topCategoryId != null) {
-            budgetService.updateItemSpent(topCategoryId, yearMonth, tx.getAmountBase());
+        // 1. 更新预算已消费（预算可能设在父分类或子分类，由 service 沿分类链命中）
+        if (tx.getCategoryId() != null) {
+            budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, tx.getAmountBase());
         }
 
         // 2. 检查预警规则（使用显式 userId 避免异步线程租户上下文丢失）
@@ -115,10 +113,9 @@ public class TransactionEventListener {
             var config = objectMapper.readTree(rule.getConfig());
             int threshold = config.path("threshold_pct").asInt(80);
 
-            Long topCategoryId = getTopCategoryId(tx.getCategoryId());
-            if (topCategoryId == null) return false;
+            if (tx.getCategoryId() == null) return false;
 
-            var item = budgetService.getItem(topCategoryId, yearMonth);
+            var item = budgetService.getItem(tx.getCategoryId(), yearMonth);
             if (item == null || item.getAmount().compareTo(BigDecimal.ZERO) == 0) return false;
 
             BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, RoundingMode.HALF_UP)
@@ -158,8 +155,8 @@ public class TransactionEventListener {
         switch (rule.getType()) {
             case 1 -> {
                 title = "📊 预算预警";
-                Long topId = getTopCategoryId(tx.getCategoryId());
-                var item = topId != null ? budgetService.getItem(topId, yearMonth) : null;
+                var item = tx.getCategoryId() != null
+                        ? budgetService.getItem(tx.getCategoryId(), yearMonth) : null;
                 if (item != null && item.getAmount().compareTo(BigDecimal.ZERO) > 0) {
                     BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, BigDecimal.ROUND_HALF_UP)
                             .multiply(BigDecimal.valueOf(100)).setScale(0, BigDecimal.ROUND_HALF_UP);
@@ -227,14 +224,5 @@ public class TransactionEventListener {
         if (categoryId == null) return "未分类";
         Category cat = categoryMapper.selectById(categoryId);
         return cat != null ? cat.getName() : "未分类";
-    }
-
-    private Long getTopCategoryId(Long categoryId) {
-        Category cat = categoryMapper.selectById(categoryId);
-        if (cat == null) return null;
-        // 如果是一级分类，直接返回
-        if (cat.getParentId() == 0) return cat.getId();
-        // 否则返回父级
-        return cat.getParentId();
     }
 }

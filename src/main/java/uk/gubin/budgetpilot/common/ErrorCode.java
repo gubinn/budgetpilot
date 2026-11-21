@@ -42,6 +42,8 @@ public enum ErrorCode {
     BUDGET_NOT_FOUND(50001, "预算不存在"),
     BUDGET_LOCKED(50002, "预算已锁定，不可修改"),
     BUDGET_MONTH_DUPLICATE(50003, "该月份预算已存在"),
+    ANNUAL_BUDGET_NOT_FOUND(50004, "年度预算不存在"),
+    ANNUAL_BUDGET_DUPLICATE(50005, "该年度预算已存在"),
 
     // 汇率 60001-60099
     CURRENCY_UNSUPPORTED(60001, "币种不支持: %s"),

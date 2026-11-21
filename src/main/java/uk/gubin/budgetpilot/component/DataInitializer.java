@@ -16,6 +16,7 @@ import uk.gubin.budgetpilot.mapper.UserMapper;
 
 import java.security.SecureRandom;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -74,16 +75,12 @@ public class DataInitializer {
      */
     @InterceptorIgnore(tenantLine = "true")
     private void initSystemCategories() {
-        // 通过检查已知系统分类名称是否存在来判断是否已初始化
-        // 不依赖 is_system 字段计数（旧数据可能 is_system 为 false）
-        long existing = categoryMapper.selectCount(
-                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category>()
-                        .eq(uk.gubin.budgetpilot.entity.Category::getUserId, 0L)
-                        .eq(uk.gubin.budgetpilot.entity.Category::getParentId, 0L)
-                        .in(uk.gubin.budgetpilot.entity.Category::getIcon,
-                                "food", "transport", "salary", "adjust"));
-        if (existing >= 4) {
-            log.info("System categories already exist (count={}), skipping init", existing);
+        // 通过 mapper 上带 @InterceptorIgnore 的查询判断是否已初始化。
+        // 不能在本类内部直接调用 selectCount：@InterceptorIgnore 在同类调用时不生效，
+        // 租户拦截器会把 user_id=0 的系统分类过滤掉，导致每次启动重复插入一整套分类。
+        List<Category> existing = categoryMapper.selectSystemDefaults();
+        if (!existing.isEmpty()) {
+            log.info("System categories already exist (count={}), skipping init", existing.size());
             return;
         }
 

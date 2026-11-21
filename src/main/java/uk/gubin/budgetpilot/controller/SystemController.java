@@ -39,6 +39,8 @@ public class SystemController {
     private final AlertLogMapper alertLogMapper;
     private final BudgetMapper budgetMapper;
     private final BudgetItemMapper budgetItemMapper;
+    private final AnnualBudgetMapper annualBudgetMapper;
+    private final AnnualBudgetItemMapper annualBudgetItemMapper;
     private final StringRedisTemplate redisTemplate;
     private final ScheduledTasks scheduledTasks;
 
@@ -116,6 +118,8 @@ public class SystemController {
         int alertLogs = alertLogMapper.delete(new LambdaQueryWrapper<>());
         int budgets = budgetMapper.delete(new LambdaQueryWrapper<>());
         int budgetItems = budgetItemMapper.delete(new LambdaQueryWrapper<>());
+        int annualBudgets = annualBudgetMapper.delete(new LambdaQueryWrapper<>());
+        int annualBudgetItems = annualBudgetItemMapper.delete(new LambdaQueryWrapper<>());
 
         // 清除 Redis 缓存（仅删除应用相关 key，不 flushDb）
         deleteRedisKeys("report:*");
@@ -128,7 +132,9 @@ public class SystemController {
             "alertRules", alertRules,
             "alertLogs", alertLogs,
             "budgets", budgets,
-            "budgetItems", budgetItems
+            "budgetItems", budgetItems,
+            "annualBudgets", annualBudgets,
+            "annualBudgetItems", annualBudgetItems
         ));
     }
 
