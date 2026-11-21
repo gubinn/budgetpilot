@@ -10,6 +10,7 @@ import java.util.List;
 public class BudgetProgressVO {
     private String yearMonth;
     private Long budgetId;
+    private String note;
     private BigDecimal totalBudget;
     private BigDecimal totalSpent;
     private BigDecimal remaining;

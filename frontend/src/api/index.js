@@ -82,7 +82,7 @@ export const userApi = {
   create: (data) => api.post('/users', data),
   update: (id, data) => api.patch(`/users/${id}`, data),
   remove: (id) => api.delete(`/users/${id}`),
-  resetPassword: (id, newPassword) => api.put(`/users/${id}/password`, { newPassword }),
+  resetPassword: (id, newPassword) => api.put(`/users/${id}/password`, { password: newPassword }),
   getMyConfig: () => api.get('/users/config'),
   setMyConfig: (key, value) => api.put(`/users/config/${key}`, { value })
 }

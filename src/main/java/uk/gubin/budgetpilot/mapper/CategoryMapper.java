@@ -32,6 +32,11 @@ public interface CategoryMapper extends BaseMapper<Category> {
     Category selectByIdIgnoreTenant(@Param("id") Long id);
 
     @InterceptorIgnore(tenantLine = "true")
+    @Select("SELECT * FROM t_category WHERE name = '余额调整' AND type = #{type} " +
+            "AND user_id = 0 AND is_active = 1 LIMIT 1")
+    Category selectSystemBalanceAdjust(@Param("type") int type);
+
+    @InterceptorIgnore(tenantLine = "true")
     @Delete("DELETE FROM t_category WHERE user_id = #{userId}")
     int deleteByUserId(@Param("userId") Long userId);
 }

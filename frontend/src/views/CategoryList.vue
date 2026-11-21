@@ -6,7 +6,7 @@
         <n-radio-button :value="1">支出</n-radio-button>
         <n-radio-button :value="2">收入</n-radio-button>
       </n-radio-group>
-      <n-button type="primary" @click="showCreate = true">新增分类</n-button>
+      <n-button type="primary" @click="openCreate">新增分类</n-button>
     </template>
 
     <n-tree
@@ -118,6 +118,12 @@ function renderLabel({ option }) {
       !option.isSystem ? h(NButton, { size: 'small', type: 'error', onClick: (e) => { e.stopPropagation(); handleDelete(option.id) } }, { default: () => '删除' }) : null
     ].filter(Boolean))
   ])
+}
+
+function openCreate() {
+  editingId.value = null
+  form.value = { name: '', type: filterType.value || 1, parentId: 0, color: '#3498db', icon: '' }
+  showCreate.value = true
 }
 
 function handleEdit(row) {

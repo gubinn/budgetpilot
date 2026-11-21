@@ -99,7 +99,18 @@ for (let i = -12; i <= 0; i++) {
   monthOptions.value.push({ label: m.format('YYYY年MM月'), value: m.format('YYYY-MM') })
 }
 
+function resetCharts() {
+  trendChart?.dispose(); trendChart = null
+  pieChart?.dispose(); pieChart = null
+  merchantChart?.dispose(); merchantChart = null
+  currencyChart?.dispose(); currencyChart = null
+}
+
 async function loadAll() {
+  // 先清空旧数据和图表，避免切到无数据月份时继续显示上个月
+  resetCharts()
+  summaryCards.value = []
+  compareData.value = null
   try {
     const [summary, trend, currencyDist, merchantDist] = await Promise.allSettled([
       reportApi.monthlySummary(selectedMonth.value),

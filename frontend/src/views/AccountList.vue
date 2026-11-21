@@ -1,7 +1,7 @@
 <template>
   <n-card title="账户管理">
     <template #header-extra>
-      <n-button type="primary" @click="showCreate = true">新增账户</n-button>
+      <n-button type="primary" @click="openCreate">新增账户</n-button>
     </template>
 
     <n-data-table :columns="columns" :data="accounts" :loading="loading" />
@@ -196,6 +196,11 @@ async function loadData() {
   }
 }
 
+function openCreate() {
+  resetForm()
+  showCreate.value = true
+}
+
 function handleEdit(row) {
   editingId.value = row.id
   originalBalance.value = row.currentBalance
@@ -214,6 +219,23 @@ function handleEdit(row) {
   showCreate.value = true
 }
 
+function buildAccountPayload() {
+  const extFields = {}
+  extFieldsList.value
+    .filter(item => item.key && item.key.trim())
+    .forEach(item => { extFields[item.key.trim()] = item.value })
+  return {
+    name: form.value.name,
+    type: form.value.type,
+    currency: form.value.currency,
+    creditLimit: form.value.creditLimit,
+    billingDay: form.value.billingDay,
+    paymentDay: form.value.paymentDay,
+    sortOrder: form.value.sortOrder,
+    extFields
+  }
+}
+
 async function handleSubmit() {
   if (!form.value.name) {
     message.error('请输入账户名称')
@@ -221,39 +243,19 @@ async function handleSubmit() {
   }
   submitting.value = true
   try {
+    const payload = buildAccountPayload()
     if (editingId.value) {
-      // 检查余额是否有变化
+      // 先保存名称/类型/币种/额度/扩展字段，再走余额调整
+      await accountApi.update(editingId.value, payload)
       if (balanceDiff.value !== 0) {
         adjustReason.value = ''
         showBalanceAdjust.value = true
         submitting.value = false
         return
       }
-      // 余额没变化，直接更新其他字段
-      const data = { ...form.value }
-      if (extFieldsList.value.length > 0) {
-        const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
-        if (valid.length > 0) {
-          data.extFields = {}
-          valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
-        }
-      } else {
-        data.extFields = undefined
-      }
-      await accountApi.update(editingId.value, data)
       message.success('更新成功')
     } else {
-      const data = { ...form.value }
-      if (extFieldsList.value.length > 0) {
-        const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
-        if (valid.length > 0) {
-          data.extFields = {}
-          valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
-        }
-      } else {
-        data.extFields = undefined
-      }
-      await accountApi.create(data)
+      await accountApi.create({ ...payload, initialBalance: form.value.currentBalance || 0 })
       message.success('创建成功')
     }
     showCreate.value = false
@@ -273,19 +275,7 @@ async function confirmBalanceAdjust() {
   }
   adjusting.value = true
   try {
-    // 先更新扩展字段（不含余额）
-    const updateData = {}
-    if (extFieldsList.value.length > 0) {
-      const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
-      if (valid.length > 0) {
-        updateData.extFields = {}
-        valid.forEach(item => { updateData.extFields[item.key.trim()] = item.value })
-      }
-    }
-    if (Object.keys(updateData).length > 0) {
-      await accountApi.update(editingId.value, updateData)
-    }
-    // 再调用余额调整
+    // 其他字段在 handleSubmit 中已保存，这里只调整余额
     await accountApi.adjustBalance(editingId.value, {
       newBalance: form.value.currentBalance,
       reason: adjustReason.value.trim()

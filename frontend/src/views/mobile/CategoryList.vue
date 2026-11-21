@@ -54,7 +54,7 @@
     </n-drawer>
 
     <div class="fab">
-      <n-button type="primary" round size="large" @click="showCreate = true">
+      <n-button type="primary" round size="large" @click="openCreate">
         <template #icon><n-icon><AddOutline /></n-icon></template>
         新增分类
       </n-button>
@@ -108,6 +108,12 @@ const filteredCats = computed(() => {
   })
   return sorted
 })
+
+function openCreate() {
+  editingId.value = null
+  form.value = { name: '', type: filterType.value || 1, parentId: 0, color: '#3498db', icon: '' }
+  showCreate.value = true
+}
 
 function handleEdit(row) {
   editingId.value = row.id

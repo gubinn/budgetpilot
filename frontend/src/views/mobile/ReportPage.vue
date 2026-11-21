@@ -109,7 +109,21 @@ for (let i = -12; i <= 0; i++) {
   monthOptions.value.push({ label: m.format('YYYY-MM'), value: m.format('YYYY-MM') })
 }
 
+function resetCharts() {
+  trendChart?.dispose(); trendChart = null
+  pieChart?.dispose(); pieChart = null
+  merchantChart?.dispose(); merchantChart = null
+  currencyChart?.dispose(); currencyChart = null
+  hasPieData.value = false
+  hasMerchantData.value = false
+  hasCurrencyData.value = false
+}
+
 async function loadAll() {
+  // 先清空旧数据和图表，避免切到无数据月份时继续显示上个月
+  resetCharts()
+  summaryCards.value = []
+  compareData.value = null
   try {
     const [summary, trend, currencyDist, merchantDist] = await Promise.allSettled([
       reportApi.monthlySummary(selectedMonth.value),
@@ -129,10 +143,11 @@ async function loadAll() {
       ]
 
       // 饼图
-      if (pieChartRef.value && s.categoryShares?.length) {
+      if (s.categoryShares?.length) {
         hasPieData.value = true
         if (pieChart) pieChart.dispose()
         await new Promise(r => setTimeout(r, 50))
+        if (!pieChartRef.value) return
         pieChart = echarts.init(pieChartRef.value)
         pieChart.setOption({
           tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },

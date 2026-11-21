@@ -152,6 +152,7 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
 
         if (dto.getName() != null) entity.setName(dto.getName());
         if (dto.getIcon() != null) entity.setIcon(dto.getIcon());
+        if (dto.getType() != null) entity.setType(dto.getType());
         if (dto.getCurrency() != null) entity.setCurrency(dto.getCurrency());
         if (dto.getInitialBalance() != null) entity.setInitialBalance(dto.getInitialBalance());
         if (dto.getCurrentBalance() != null) entity.setCurrentBalance(dto.getCurrentBalance());
@@ -316,12 +317,16 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
      * 动态查找“余额调整”分类 ID（按名称+类型查询 user_id=0 的系统分类）
      */
     private Long getBalanceAdjustCategoryId(int type) {
+        // 优先使用当前用户自己的“余额调整”分类（租户拦截器会自动加 user_id）
         LambdaQueryWrapper<uk.gubin.budgetpilot.entity.Category> query = new LambdaQueryWrapper<>();
         query.eq(uk.gubin.budgetpilot.entity.Category::getName, "余额调整")
                 .eq(uk.gubin.budgetpilot.entity.Category::getType, type)
-                .eq(uk.gubin.budgetpilot.entity.Category::getUserId, 0L)
                 .last("LIMIT 1");
         uk.gubin.budgetpilot.entity.Category cat = categoryMapper.selectOne(query);
+        // 用户没有个人分类时，回退到系统分类（忽略租户）
+        if (cat == null) {
+            cat = categoryMapper.selectSystemBalanceAdjust(type);
+        }
         if (cat == null) {
             throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "余额调整分类未找到，请先初始化系统分类");
         }

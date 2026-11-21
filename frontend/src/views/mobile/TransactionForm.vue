@@ -58,6 +58,7 @@
             remote
             :loading="merchantLoading"
             @search="handleMerchantSearch"
+            @clear="form.merchantName = ''"
           />
         </n-form-item>
 
@@ -228,15 +229,10 @@ async function handleSubmit() {
       data.merchantName = undefined
       data.autoCreateMerchant = undefined
     }
-    if (extFieldsList.value.length > 0) {
-      const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
-      if (valid.length > 0) {
-        data.extFields = {}
-        valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
-      }
-    } else {
-      data.extFields = undefined
-    }
+    data.extFields = {}
+    extFieldsList.value
+      .filter(item => item.key && item.key.trim())
+      .forEach(item => { data.extFields[item.key.trim()] = item.value })
 
     if (isEdit.value) {
       await transactionApi.update(route.params.id, data)

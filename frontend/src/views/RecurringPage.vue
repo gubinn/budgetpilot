@@ -1,7 +1,7 @@
 <template>
   <n-card title="周期交易">
     <template #header-extra>
-      <n-button type="primary" size="small" @click="showCreate = true">
+      <n-button type="primary" size="small" @click="openCreate">
         + 新增规则
       </n-button>
     </template>
@@ -262,8 +262,11 @@ async function handleSave() {
     const data = {
       ...createForm.value,
       startDate: dayjs(createForm.value.startDate).format('YYYY-MM-DD'),
-      endDate: createForm.value.endDate ? dayjs(createForm.value.endDate).format('YYYY-MM-DD') : null,
-      nextExecute: dayjs(createForm.value.startDate).format('YYYY-MM-DD')
+      endDate: createForm.value.endDate ? dayjs(createForm.value.endDate).format('YYYY-MM-DD') : null
+    }
+    // 仅新建时设置首次执行日；编辑时保留后端现有的 nextExecute，避免重复执行
+    if (!editingId.value) {
+      data.nextExecute = dayjs(createForm.value.startDate).format('YYYY-MM-DD')
     }
     if (editingId.value) {
       await recurringApi.update(editingId.value, data)
@@ -280,6 +283,11 @@ async function handleSave() {
   } finally {
     submitting.value = false
   }
+}
+
+function openCreate() {
+  resetForm()
+  showCreate.value = true
 }
 
 function openEdit(rule) {
@@ -303,6 +311,7 @@ function openEdit(rule) {
 }
 
 function resetForm() {
+  editingId.value = null
   createForm.value = {
     name: '',
     type: 1,

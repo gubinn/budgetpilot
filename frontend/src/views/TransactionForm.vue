@@ -49,6 +49,7 @@
           remote
           :loading="merchantLoading"
           @search="handleMerchantSearch"
+          @clear="form.merchantName = ''"
         />
       </n-form-item>
 
@@ -248,15 +249,11 @@ async function handleSubmit() {
       data.autoCreateMerchant = undefined
     }
 
-    if (extFieldsList.value.length > 0) {
-      const valid = extFieldsList.value.filter(item => item.key && item.key.trim())
-      if (valid.length > 0) {
-        data.extFields = {}
-        valid.forEach(item => { data.extFields[item.key.trim()] = item.value })
-      }
-    } else {
-      data.extFields = undefined
-    }
+    // 始终发送 extFields（空对象表示清空），避免后端保留旧扩展字段
+    data.extFields = {}
+    extFieldsList.value
+      .filter(item => item.key && item.key.trim())
+      .forEach(item => { data.extFields[item.key.trim()] = item.value })
 
     if (isEdit.value) {
       await transactionApi.update(route.params.id, data)

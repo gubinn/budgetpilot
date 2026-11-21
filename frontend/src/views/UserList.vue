@@ -2,7 +2,7 @@
   <div>
     <n-space justify="space-between" style="margin-bottom: 16px">
       <h3>用户管理</h3>
-      <n-button type="primary" @click="showModal = true">新增用户</n-button>
+      <n-button type="primary" @click="openCreate">新增用户</n-button>
     </n-space>
 
     <n-data-table :columns="columns" :data="users" :loading="loading" :bordered="false" />

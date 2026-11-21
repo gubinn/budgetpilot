@@ -1,5 +1,7 @@
 package uk.gubin.budgetpilot.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -11,6 +13,9 @@ public class AccountUpdateDTO {
     @Size(max = 50, message = "账户名称不能超过50个字符")
     private String name;
     private String icon;
+    @Min(value = 1, message = "账户类型必须为1-5之间的值")
+    @Max(value = 5, message = "账户类型必须为1-5之间的值")
+    private Integer type;
     private String currency;
     private BigDecimal initialBalance;
     private BigDecimal currentBalance;

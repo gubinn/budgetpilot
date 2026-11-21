@@ -3,7 +3,7 @@
     <template #header-extra>
       <n-space :size="8" :wrap="true">
         <n-select v-model:value="selectedMonth" :options="monthOptions" style="min-width: 120px; max-width: 140px" />
-        <n-button type="primary" size="small" @click="showCreate = !budget">
+        <n-button type="primary" size="small" @click="openCreate">
           {{ budget ? '编辑' : '创建' }}
         </n-button>
         <n-button size="small" @click="handleCopy" :disabled="!budget">复制</n-button>
@@ -136,6 +136,35 @@ async function loadBudget() {
   } catch (e) {
     budget.value = null
   }
+}
+
+function openCreate() {
+  if (budget.value) {
+    const existing = new Map((budget.value.items || []).map(i => [i.categoryId, Number(i.budget ?? 0)]))
+    const items = expenseCategories.value.map(c => ({
+      categoryId: c.id,
+      categoryName: c.name,
+      amount: existing.get(c.id) ?? 0
+    }))
+    const seen = new Set(items.map(i => i.categoryId))
+    ;(budget.value.items || []).forEach(i => {
+      if (!seen.has(i.categoryId)) {
+        items.push({ categoryId: i.categoryId, categoryName: i.categoryName, amount: Number(i.budget ?? 0) })
+      }
+    })
+    createForm.value = {
+      totalAmount: Number(budget.value.totalBudget ?? 0),
+      note: budget.value.note || '',
+      items
+    }
+  } else {
+    createForm.value = {
+      totalAmount: null,
+      note: '',
+      items: expenseCategories.value.map(c => ({ categoryId: c.id, categoryName: c.name, amount: 0 }))
+    }
+  }
+  showCreate.value = true
 }
 
 async function handleSave() {

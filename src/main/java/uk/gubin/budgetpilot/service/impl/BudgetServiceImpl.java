@@ -139,6 +139,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         BudgetProgressVO vo = new BudgetProgressVO();
         vo.setYearMonth(yearMonth);
         vo.setBudgetId(budget.getId());
+        vo.setNote(budget.getNote());
         vo.setTotalBudget(budget.getTotalAmount());
         vo.setTotalSpent(totalSpent);
         vo.setRemaining(remaining);
@@ -165,6 +166,16 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         }
         if (Boolean.TRUE.equals(budget.getIsLocked())) {
             throw new BizException(ErrorCode.BUDGET_LOCKED);
+        }
+
+        // 防止客户端误传空明细导致整月预算项被清空
+        if (dto.getItems() != null && dto.getItems().isEmpty()) {
+            Long existingItems = budgetItemMapper.selectCount(
+                    new LambdaQueryWrapper<BudgetItem>().eq(BudgetItem::getBudgetId, budget.getId()));
+            if (existingItems != null && existingItems > 0) {
+                throw new BizException(ErrorCode.PARAM_ERROR,
+                        "预算分类明细不能为空；请至少保留一项");
+            }
         }
 
         // 校验：如果传入了明细，总预算应等于明细之和

@@ -96,7 +96,7 @@
     </n-drawer>
 
     <div class="fab">
-      <n-button type="primary" round size="large" @click="showCreate = true">
+      <n-button type="primary" round size="large" @click="openCreate">
         <template #icon><n-icon><AddOutline /></n-icon></template>
         新增规则
       </n-button>
@@ -180,8 +180,10 @@ async function handleSave() {
     const data = {
       ...createForm.value,
       startDate: dayjs(createForm.value.startDate).format('YYYY-MM-DD'),
-      endDate: createForm.value.endDate ? dayjs(createForm.value.endDate).format('YYYY-MM-DD') : null,
-      nextExecute: dayjs(createForm.value.startDate).format('YYYY-MM-DD')
+      endDate: createForm.value.endDate ? dayjs(createForm.value.endDate).format('YYYY-MM-DD') : null
+    }
+    if (!editingId.value) {
+      data.nextExecute = dayjs(createForm.value.startDate).format('YYYY-MM-DD')
     }
     if (editingId.value) { await recurringApi.update(editingId.value, data) }
     else { await recurringApi.create(data) }
@@ -191,6 +193,11 @@ async function handleSave() {
     resetForm()
     loadRules()
   } catch (e) { message.error('保存失败') } finally { submitting.value = false }
+}
+
+function openCreate() {
+  resetForm()
+  showCreate.value = true
 }
 
 function openEdit(rule) {
@@ -207,6 +214,7 @@ function openEdit(rule) {
 }
 
 function resetForm() {
+  editingId.value = null
   createForm.value = { name: '', type: 1, amount: null, currency: 'CNY', accountId: null, categoryId: null, merchantId: null, frequency: 'MONTHLY', executeDay: null, startDate: Date.now(), endDate: null, autoConfirm: false, note: '' }
 }
 

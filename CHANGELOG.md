@@ -128,3 +128,43 @@ Content-Type: application/json
 - `CategoryServiceImpl.java`、`AccountCreateDTO.java`
 - `API.md`、`API_EXTERNAL.md`、`DEPLOY.md`
 - `src/test/.../ExternalIdIdempotencyTest.java`
+
+---
+
+## 2026-11-21（补充）— 前端代码审查缺陷修复
+
+代码审查发现并修复了 10 个前端缺陷（桌面端 + 移动端），以及 3 处后端配套改动。
+
+### 前端修复
+
+1. **预算编辑会清空分类明细**
+   - 编辑时从现有预算回填总预算、备注和分类金额；已有但不在当前分类树中的明细也会保留。
+   - 桌面端 `编辑` 按钮不再写成 `showCreate = !budget`，改为 `openCreate()`。
+   - 移动端无预算时也显示 `创建` 按钮。
+   - 配套后端 `BudgetProgressVO` 增加 `note`，`BudgetServiceImpl.update` 拒绝“已有明细却传空 items”的请求，防止误清空。
+2. **调整账户余额会丢弃其他编辑**：保存时先提交名称/类型/币种/额度/扩展字段，再弹出余额调整确认；确认调整只调用 adjust-balance。
+3. **重置密码 payload 字段错误**：前端由 `{newPassword}` 改为后端约定的 `{password}`。
+4. **编辑周期规则重置 nextExecute**：编辑时不再发送 `nextExecute`，仅新建时设置，避免重复生成周期交易。
+5. **新增按钮未重置编辑状态**：账户、分类、周期规则、用户管理统一改为 `openCreate()`，先清空 `editingId` 和表单。
+6. **交易无法清除商户**：商户选择框增加 `@clear` 清空 `merchantName`；清空后提交空名称，后端解除商户关联。
+7. **扩展字段无法清空**：交易和账户更新始终发送 `extFields`（无内容时为 `{}`），而不是省略字段。
+8. **报表切换空月份仍显示旧图**：每次加载前先 dispose 并清空四类图表，同时重置汇总卡片和对比数据；移动端还重置 `hasPieData` 等标志。
+
+### 后端配套
+
+- `BudgetProgressVO.note` + `getProgress` 返回备注。
+- `BudgetServiceImpl.update` 空明细保护。
+- `AccountUpdateDTO` 支持 `type`（1–5），`AccountServiceImpl.update` 应用类型变更；前端账户编辑现在能保存类型。
+- 修复余额调整分类查找被租户拦截器过滤的问题：优先使用当前用户自己的“余额调整”分类，缺失时回退系统分类（`CategoryMapper.selectSystemBalanceAdjust`，忽略租户）。此问题在浏览器回归时暴露，会导致所有余额调整报“分类未找到”。
+
+### 验证
+
+- `npm run build` 通过。
+- `mvn -q -DskipTests compile/package` 通过。
+- 使用系统 Chrome + Playwright 实测：
+  - 桌面预算编辑弹窗可打开，总预算/分类金额正确回填；
+  - 账户“编辑 → 取消 → 新增”弹窗标题为“新增账户”；
+  - 移动端无预算时显示“创建”并可打开抽屉，有预算时可编辑并回填；
+  - 页面无 console error（无预算月份的“预算不存在”业务提示除外）。
+- API 验证：空 items 更新被拒绝；账户类型 2→4 更新成功；重置密码后可正常登录。
+- 测试数据（临时预算、临时账户、临时用户）已清理，账户余额和交易数量未受影响。
