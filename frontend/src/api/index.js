@@ -103,9 +103,9 @@ export const userApi = {
 }
 
 export const authApi = {
-  login: (data) => api.post('/auth/login', data),
+  login: (data) => api.post('/auth/login', data, { timeout: 20000 }),
   verifyOtp: (data) => api.post('/auth/verify', data),
-  resendOtp: (data) => api.post('/auth/otp/resend', data),
+  resendOtp: (data) => api.post('/auth/otp/resend', data, { timeout: 20000 }),
   ingress: () => api.get('/auth/ingress'),
   logout: () => api.post('/auth/logout'),
   info: () => api.get('/auth/info'),

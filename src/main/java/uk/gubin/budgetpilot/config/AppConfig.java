@@ -30,8 +30,8 @@ public class AppConfig implements MetaObjectHandler {
     public RestTemplate restTemplate() {
         // 通知推送 / 汇率刷新等外部调用必须有超时，避免登录验证码发送把请求拖死
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5000);
-        factory.setReadTimeout(10000);
+        factory.setConnectTimeout(3000);
+        factory.setReadTimeout(8000);
         return new RestTemplate(factory);
     }
 
