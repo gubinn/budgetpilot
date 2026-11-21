@@ -44,6 +44,9 @@ public class ReportVO {
             private Long categoryId;
             private String categoryName;
             private String categoryColor;
+            /** level=2 时的父分类，用于显示“父/子”路径 */
+            private Long parentId;
+            private String parentName;
             private BigDecimal amount;
             private BigDecimal percentage;
         }

@@ -93,8 +93,16 @@ const columns = [
     render: (row) => row.accountName || '-'
   },
   {
-    title: '分类', key: 'categoryName', width: 120,
-    render: (row) => h('span', { style: { color: row.categoryColor, fontWeight: 500 } }, row.categoryName || '-')
+    title: '一级分类', key: 'parentCategoryName', width: 110,
+    render: (row) => h('span', {
+      style: { color: row.parentCategoryColor || row.categoryColor, fontWeight: 500 }
+    }, row.parentCategoryName || row.categoryName || '-')
+  },
+  {
+    title: '二级分类', key: 'categoryName', width: 110,
+    render: (row) => h('span', {
+      style: { color: row.categoryColor, fontWeight: 500 }
+    }, row.parentCategoryId ? (row.categoryName || '-') : '-')
   },
   {
     title: '商户', key: 'merchantName', width: 120,

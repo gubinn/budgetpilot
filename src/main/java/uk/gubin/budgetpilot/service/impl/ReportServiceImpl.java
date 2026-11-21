@@ -43,7 +43,13 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public ReportVO monthlySummary(String month) {
-        String cacheKey = "report:monthly-summary:" + getUserId() + ":" + month;
+        return monthlySummary(month, 1);
+    }
+
+    @Override
+    public ReportVO monthlySummary(String month, int level) {
+        int reportLevel = level == 2 ? 2 : 1;
+        String cacheKey = "report:monthly-summary:" + getUserId() + ":" + month + ":L" + reportLevel;
         ReportVO cached = getCached(cacheKey);
         if (cached != null) return cached;
 
@@ -72,18 +78,22 @@ public class ReportServiceImpl implements ReportService {
         summary.setTotalIncome(sumBase(incomes));
         summary.setBalance(summary.getTotalIncome().subtract(totalExpense));
 
-        // 分类占比
-        Map<Long, BigDecimal> categoryAmounts = expenses.stream()
-                .collect(Collectors.groupingBy(Transaction::getCategoryId,
-                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmountBase, BigDecimal::add)));
+        // 分类占比：level=1 归并到父分类；level=2 按实际分类展示
+        Map<Long, Category> catMap = categoryMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+        Map<Long, BigDecimal> categoryAmounts = new HashMap<>();
+        for (Transaction tx : expenses) {
+            Long catId = tx.getCategoryId();
+            if (catId == null) continue;
+            Long groupId = catId;
+            Category cat = catMap.get(catId);
+            if (reportLevel == 1 && cat != null && cat.getParentId() != null && cat.getParentId() != 0) {
+                groupId = cat.getParentId();
+            }
+            categoryAmounts.merge(groupId, tx.getAmountBase(), BigDecimal::add);
+        }
 
         List<ReportVO.MonthlySummary.CategoryShareItem> shares = new ArrayList<>();
-
-        // 批量加载分类，避免 N+1
-        List<Long> catIds = categoryAmounts.keySet().stream().distinct().toList();
-        Map<Long, Category> catMap = catIds.isEmpty() ? Map.of()
-                : categoryMapper.selectBatchIds(catIds).stream().collect(Collectors.toMap(Category::getId, c -> c));
-
         for (Map.Entry<Long, BigDecimal> entry : categoryAmounts.entrySet()) {
             ReportVO.MonthlySummary.CategoryShareItem item = new ReportVO.MonthlySummary.CategoryShareItem();
             item.setCategoryId(entry.getKey());
@@ -98,6 +108,16 @@ public class ReportServiceImpl implements ReportService {
             if (cat != null) {
                 item.setCategoryName(cat.getName());
                 item.setCategoryColor(cat.getColor());
+                if (reportLevel == 2 && cat.getParentId() != null && cat.getParentId() != 0) {
+                    Category parent = catMap.get(cat.getParentId());
+                    if (parent != null) {
+                        item.setParentId(parent.getId());
+                        item.setParentName(parent.getName());
+                        if (item.getCategoryColor() == null) {
+                            item.setCategoryColor(parent.getColor());
+                        }
+                    }
+                }
             }
             shares.add(item);
         }

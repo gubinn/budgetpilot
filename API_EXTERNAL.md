@@ -439,9 +439,12 @@ Content-Type: application/json
 | `targetAccountId` | long | 目标账户 ID（转账时有值） |
 | `targetAccountName` | string | 目标账户名称（转账时有值） |
 | `categoryId` | long | 分类 ID |
-| `categoryName` | string | 分类名称 |
+| `categoryName` | string | 分类名称（二级分类时为子分类名） |
 | `categoryIcon` | string | 分类图标 |
 | `categoryColor` | string | 分类颜色 |
+| `parentCategoryId` | long | 一级分类 ID（一级分类交易为 null） |
+| `parentCategoryName` | string | 一级分类名称（一级分类交易为 null） |
+| `parentCategoryColor` | string | 一级分类颜色（一级分类交易为 null） |
 | `merchantId` | long | 商户 ID |
 | `merchantName` | string | 商户名称 |
 | `merchantColor` | string | 商户颜色 |
@@ -472,6 +475,9 @@ Content-Type: application/json
     "categoryName": "午餐",
     "categoryIcon": "lunch",
     "categoryColor": "#e74c3c",
+    "parentCategoryId": 10,
+    "parentCategoryName": "餐饮",
+    "parentCategoryColor": "#FF6B6B",
     "merchantId": 5,
     "merchantName": "沙县小吃",
     "merchantColor": "#3498db",

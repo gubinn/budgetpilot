@@ -296,7 +296,7 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
         Long userId = getUserId();
         try {
             if (userId != null) {
-                redisTemplate.delete("report:monthly-summary:" + userId + ":" + month);
+                scanAndDelete("report:monthly-summary:" + userId + ":" + month + "*");
             }
             redisTemplate.delete("report:account-summary");
             log.info("Cleared report cache for month {}", month);

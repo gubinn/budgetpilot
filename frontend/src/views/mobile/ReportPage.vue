@@ -26,7 +26,13 @@
 
     <!-- 分类占比 -->
     <div class="chart-card">
-      <h3 class="chart-title">分类占比</h3>
+      <div class="chart-title-row">
+        <h3 class="chart-title">分类占比</h3>
+        <n-radio-group v-model:value="categoryLevel" size="small">
+          <n-radio-button :value="1">一级</n-radio-button>
+          <n-radio-button :value="2">二级</n-radio-button>
+        </n-radio-group>
+      </div>
       <div v-if="hasPieData" ref="pieChartRef" style="width: 100%; height: 250px"></div>
       <n-empty v-else description="暂无数据" />
     </div>
@@ -88,13 +94,14 @@ import dayjs from 'dayjs'
 const message = useMessage()
 const selectedMonth = ref(dayjs().format('YYYY-MM'))
 const trendMonths = ref(12)
+const categoryLevel = ref(1)
 const summaryCards = ref([])
 const compareData = ref(null)
 const hasPieData = ref(false)
 const hasMerchantData = ref(false)
 const hasCurrencyData = ref(false)
 
-watch([selectedMonth, trendMonths], loadAll)
+watch([selectedMonth, trendMonths, categoryLevel], loadAll)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -126,7 +133,7 @@ async function loadAll() {
   compareData.value = null
   try {
     const [summary, trend, currencyDist, merchantDist] = await Promise.allSettled([
-      reportApi.monthlySummary(selectedMonth.value),
+      reportApi.monthlySummary(selectedMonth.value, categoryLevel.value),
       reportApi.trend(trendMonths.value),
       reportApi.currencyDistribution(selectedMonth.value),
       reportApi.merchantDistribution(selectedMonth.value)
@@ -154,7 +161,7 @@ async function loadAll() {
           series: [{
             type: 'pie', radius: ['35%', '65%'],
             data: s.categoryShares.map(c => ({
-              name: c.categoryName, value: Number(c.amount),
+              name: categoryLabel(c), value: Number(c.amount),
               itemStyle: { color: c.categoryColor || '#3498db' }
             }))
           }]
@@ -228,6 +235,10 @@ async function loadAll() {
   }
 }
 
+function categoryLabel(c) {
+  return c.parentName ? `${c.parentName}/${c.categoryName}` : c.categoryName
+}
+
 function formatNum(n) {
   return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
@@ -292,12 +303,21 @@ onBeforeUnmount(() => {
   padding: 14px;
 }
 
+.chart-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
 .chart-title {
   font-size: 14px;
   font-weight: 600;
   margin: 0 0 10px;
   color: #333;
 }
+
+.chart-title-row .chart-title { margin: 0; }
 
 .compare-row { padding: 4px 0; }
 .compare-month { font-size: 14px; font-weight: 600; margin-bottom: 6px; color: #2c3e50; }

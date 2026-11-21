@@ -27,6 +27,10 @@ public class TransactionVO {
     private String categoryName;
     private String categoryIcon;
     private String categoryColor;
+    /** 二级分类的父分类；一级分类交易为 null */
+    private Long parentCategoryId;
+    private String parentCategoryName;
+    private String parentCategoryColor;
     private Long merchantId;
     private String merchantName;
     private String merchantColor;

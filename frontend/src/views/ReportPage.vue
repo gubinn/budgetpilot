@@ -30,6 +30,12 @@
     <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 16px">
       <n-gi>
         <n-card title="分类占比" hoverable>
+          <template #header-extra>
+            <n-radio-group v-model:value="categoryLevel" size="small">
+              <n-radio-button :value="1">一级</n-radio-button>
+              <n-radio-button :value="2">二级</n-radio-button>
+            </n-radio-group>
+          </template>
           <div ref="pieChartRef" style="width: 100%; height: 300px"></div>
         </n-card>
       </n-gi>
@@ -81,10 +87,11 @@ import dayjs from 'dayjs'
 const message = useMessage()
 const selectedMonth = ref(dayjs().format('YYYY-MM'))
 const trendMonths = ref(12)
+const categoryLevel = ref(1)
 const summaryCards = ref([])
 const compareData = ref(null)
 
-watch([selectedMonth, trendMonths], loadAll)
+watch([selectedMonth, trendMonths, categoryLevel], loadAll)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
@@ -113,7 +120,7 @@ async function loadAll() {
   compareData.value = null
   try {
     const [summary, trend, currencyDist, merchantDist] = await Promise.allSettled([
-      reportApi.monthlySummary(selectedMonth.value),
+      reportApi.monthlySummary(selectedMonth.value, categoryLevel.value),
       reportApi.trend(trendMonths.value),
       reportApi.currencyDistribution(selectedMonth.value),
       reportApi.merchantDistribution(selectedMonth.value)
@@ -141,7 +148,7 @@ async function loadAll() {
             itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
             label: { show: true, formatter: '{b}\n{d}%' },
             data: s.categoryShares.map(c => ({
-              name: c.categoryName, value: Number(c.amount),
+              name: categoryLabel(c), value: Number(c.amount),
               itemStyle: { color: c.categoryColor || '#3498db' }
             }))
           }]
@@ -214,6 +221,10 @@ async function loadAll() {
   } catch (e) {
     message.error('加载报表失败')
   }
+}
+
+function categoryLabel(c) {
+  return c.parentName ? `${c.parentName}/${c.categoryName}` : c.categoryName
 }
 
 function formatNum(n) {

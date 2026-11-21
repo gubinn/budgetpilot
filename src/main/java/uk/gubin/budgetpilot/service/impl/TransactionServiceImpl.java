@@ -253,13 +253,20 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 批量加载关联数据
         Map<Long, Account> accountMap = loadAccounts(result.getRecords());
         Map<Long, Category> categoryMap = loadCategories(result.getRecords());
+        Map<Long, Category> parentCategoryMap = loadParentCategories(categoryMap.values());
         Map<Long, Merchant> merchantMap = loadMerchants(result.getRecords());
 
         List<TransactionVO> items = result.getRecords().stream()
-                .map(t -> toVO(t,
-                        accountMap.get(t.getAccountId()),
-                        t.getCategoryId() != null ? categoryMap.get(t.getCategoryId()) : null,
-                        t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null))
+                .map(t -> {
+                    Category category = t.getCategoryId() != null ? categoryMap.get(t.getCategoryId()) : null;
+                    Category parent = category != null && category.getParentId() != null
+                            && category.getParentId() != 0 ? parentCategoryMap.get(category.getParentId()) : null;
+                    return toVO(t,
+                            accountMap.get(t.getAccountId()),
+                            category,
+                            t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null,
+                            parent);
+                })
                 .collect(Collectors.toList());
 
         return PageResult.of(items, result.getTotal(), dto.getPage(), dto.getSize());
@@ -681,6 +688,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                 .collect(Collectors.toMap(Category::getId, c -> c));
     }
 
+    private Map<Long, Category> loadParentCategories(java.util.Collection<Category> categories) {
+        List<Long> ids = categories.stream()
+                .map(Category::getParentId)
+                .filter(id -> id != null && id != 0)
+                .distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        return categoryMapper.selectBatchIds(ids).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+    }
+
     private Map<Long, Merchant> loadMerchants(List<Transaction> transactions) {
         List<Long> ids = transactions.stream()
                 .map(Transaction::getMerchantId)
@@ -722,7 +739,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     private void clearReportCache(String month, Long userId) {
         try {
             if (userId != null) {
-                redisTemplate.delete("report:monthly-summary:" + userId + ":" + month);
+                scanAndDelete("report:monthly-summary:" + userId + ":" + month + "*");
             }
             scanAndDelete("report:category-detail:" + month + ":*");
             redisTemplate.delete("report:account-summary");
@@ -764,6 +781,15 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     }
 
     private TransactionVO toVO(Transaction entity, Account account, Category category, Merchant merchant) {
+        Category parent = null;
+        if (category != null && category.getParentId() != null && category.getParentId() != 0) {
+            parent = categoryMapper.selectById(category.getParentId());
+        }
+        return toVO(entity, account, category, merchant, parent);
+    }
+
+    private TransactionVO toVO(Transaction entity, Account account, Category category,
+                               Merchant merchant, Category parentCategory) {
         TransactionVO vo = new TransactionVO();
         vo.setId(entity.getId());
         vo.setExternalId(entity.getExternalId());
@@ -796,6 +822,11 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             vo.setCategoryName(category.getName());
             vo.setCategoryIcon(category.getIcon());
             vo.setCategoryColor(category.getColor());
+            if (parentCategory != null) {
+                vo.setParentCategoryId(parentCategory.getId());
+                vo.setParentCategoryName(parentCategory.getName());
+                vo.setParentCategoryColor(parentCategory.getColor());
+            }
         }
 
         // 商户信息

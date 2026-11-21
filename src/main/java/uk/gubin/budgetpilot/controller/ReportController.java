@@ -33,9 +33,13 @@ public class ReportController {
     }
 
     @GetMapping("/monthly-summary")
-    public Result<ReportVO> monthlySummary(@RequestParam String month) {
+    public Result<ReportVO> monthlySummary(@RequestParam String month,
+                                           @RequestParam(defaultValue = "1") Integer level) {
         validateMonth(month);
-        return Result.ok(reportService.monthlySummary(month));
+        if (level == null || (level != 1 && level != 2)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "level 只能为 1 或 2");
+        }
+        return Result.ok(reportService.monthlySummary(month, level));
     }
 
     @GetMapping("/category-detail")

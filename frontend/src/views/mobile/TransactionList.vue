@@ -21,7 +21,10 @@
     <div v-if="transactions.length" class="tx-list">
       <div v-for="tx in transactions" :key="tx.id" class="tx-item" @click="router.push(`/transactions/edit/${tx.id}`)">
         <div class="tx-left">
-          <div class="tx-category" :style="{ color: tx.categoryColor }">{{ tx.categoryName || '-' }}</div>
+          <div class="tx-category" :style="{ color: tx.parentCategoryColor || tx.categoryColor }">
+            {{ tx.parentCategoryName || tx.categoryName || '-' }}
+            <span v-if="tx.parentCategoryId" class="tx-subcategory">/ {{ tx.categoryName }}</span>
+          </div>
           <div class="tx-meta">
             <span>{{ tx.transactionDate }}</span>
             <span v-if="tx.accountName">{{ tx.accountName }}</span>
@@ -201,6 +204,7 @@ onMounted(async () => {
 
 .tx-left { flex: 1; min-width: 0; }
 .tx-category { font-size: 14px; font-weight: 500; }
+.tx-subcategory { font-size: 12px; font-weight: 400; opacity: 0.7; margin-left: 2px; }
 .tx-meta { font-size: 12px; color: #999; margin-top: 3px; }
 .tx-meta span { margin-right: 6px; }
 .tx-tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }

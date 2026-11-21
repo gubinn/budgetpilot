@@ -321,7 +321,7 @@
 
 | 方法 | 路径 | 功能 | Query 参数 |
 |------|------|------|-------------|
-| GET | `/api/v1/reports/monthly-summary` | 月度汇总 | `month` (yyyy-MM, 必填) |
+| GET | `/api/v1/reports/monthly-summary` | 月度汇总 | `month` (yyyy-MM, 必填), `level` (1=一级汇总, 2=二级明细, 默认 1) |
 | GET | `/api/v1/reports/category-detail` | 分类明细 | `month`, `categoryId` |
 | GET | `/api/v1/reports/trend` | 趋势分析 | `months` (默认12), `type` (可选) |
 | GET | `/api/v1/reports/compare` | 对比分析 | `month`, `compareWith` |
