@@ -513,6 +513,13 @@ GET /api/v1/transactions?page=1&size=20&startDate=2026-04-01&endDate=2026-04-30
 X-Api-Key: your-api-key
 ```
 
+查询当前用户使用过的全部标签：
+
+```
+GET /api/v1/transactions/tags
+X-Api-Key: your-api-key
+```
+
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `type` | int | 否 | 交易类型 (`1`/`2`/`3`) |
@@ -523,6 +530,9 @@ X-Api-Key: your-api-key
 | `minAmount` | decimal | 否 | 最小金额 |
 | `maxAmount` | decimal | 否 | 最大金额 |
 | `keyword` | string | 否 | 备注关键字搜索 |
+| `tags` | string[] | 否 | 标签过滤，任意一个命中即可 |
+| `extKey` | string | 否 | 扩展字段键 |
+| `extValue` | string | 否 | 扩展字段值（只传 `extKey` 时按存在性过滤） |
 | `confirmed` | boolean | 否 | 是否已确认 |
 | `page` | int | 否 | 页码，从 `1` 开始，默认 `1` |
 | `size` | int | 否 | 每页条数，默认 `20` |

@@ -11,6 +11,9 @@
         <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" size="small" style="flex: 1" clearable />
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="状态" size="small" style="flex: 1" clearable />
       </div>
+      <div class="filter-row">
+        <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="标签" size="small" style="flex: 1" />
+      </div>
       <div class="filter-actions">
         <n-button type="primary" size="small" @click="applyFilters">查询</n-button>
         <n-button size="small" @click="resetFilters" style="margin-left: 8px">重置</n-button>
@@ -79,6 +82,7 @@ const filters = ref({
   type: null,
   accountId: null,
   categoryId: null,
+  tags: [],
   isConfirmed: null,
   dateRange: null
 })
@@ -94,6 +98,7 @@ const confirmOptions = [
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
+const tagOptions = ref([])
 
 const pagination = ref({
   page: 1,
@@ -109,7 +114,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, isConfirmed: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, dateRange: null }
   pagination.value.page = 1
   loadData()
 }
@@ -129,6 +134,9 @@ async function loadData() {
       accountId: filters.value.accountId,
       categoryId: filters.value.categoryId,
       confirmed: filters.value.isConfirmed
+    }
+    if (filters.value.tags?.length) {
+      params.tags = filters.value.tags.join(',')
     }
     if (filters.value.dateRange?.length === 2) {
       params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
@@ -151,10 +159,12 @@ function formatNum(n) {
 
 onMounted(async () => {
   try {
-    const [accRes, catRes] = await Promise.all([
+    const [accRes, catRes, tagRes] = await Promise.all([
       accountApi.list(true),
-      categoryApi.tree(null)
+      categoryApi.tree(null),
+      transactionApi.tags()
     ])
+    tagOptions.value = (tagRes.data || []).map(t => ({ label: t, value: t }))
     accountOptions.value = accRes.data.map(a => ({ label: a.name, value: a.id }))
 
     function toTreeOption(c) {

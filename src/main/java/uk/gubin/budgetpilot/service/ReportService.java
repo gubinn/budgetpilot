@@ -3,6 +3,7 @@ package uk.gubin.budgetpilot.service;
 import uk.gubin.budgetpilot.vo.ReportVO;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public interface ReportService {
     ReportVO monthlySummary(String month);
@@ -17,4 +18,7 @@ public interface ReportService {
     ReportVO budgetReview(String month);
     ReportVO currencyDistribution(String month);
     ReportVO merchantDistribution(String month);
+
+    /** 按任意扩展字段 key 统计分布（缺失的记录归入“未标注”） */
+    List<ReportVO.ExtFieldShareItem> extFieldDistribution(String month, String key, int type);
 }

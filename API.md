@@ -94,6 +94,9 @@
 |------|------|------|--------|
 | POST | `/api/v1/transactions` | 创建交易 | `TransactionCreateDTO` |
 | GET | `/api/v1/transactions` | 查询交易列表 | `TransactionQueryDTO` |
+| GET | `/api/v1/transactions/tags` | 查询当前用户使用过的标签 | - |
+| GET | `/api/v1/transactions/ext-keys` | 查询扩展字段使用过的 key | - |
+| POST | `/api/v1/transactions/annotate` | 批量补充标签/扩展字段（不动余额） | `TransactionAnnotateDTO` |
 | GET | `/api/v1/transactions/{id}` | 获取交易详情 | - |
 | PUT | `/api/v1/transactions/{id}` | 更新交易 | `TransactionUpdateDTO` |
 | DELETE | `/api/v1/transactions/{id}` | 删除交易 | - |
@@ -140,10 +143,10 @@
 | `maxAmount` | decimal | 最大金额 |
 | `currency` | string | 币种 |
 | `keyword` | string | 关键字搜索 |
-| `tags` | list | 标签列表 |
+| `tags` | list | 标签列表（任意一个命中即可；可重复传参或逗号分隔） |
 | `confirmed` | boolean | 是否已确认 |
-| `extKey` | string | 扩展字段键 |
-| `extValue` | string | 扩展字段值 |
+| `extKey` | string | 扩展字段键（JSON path 的 key） |
+| `extValue` | string | 扩展字段值；只传 `extKey` 时按字段存在性过滤 |
 | `page` | int | 页码 (默认 1) |
 | `size` | int | 每页条数 (默认 20) |
 | `sort` | string | 排序字段 (默认 transaction_date,desc) |
@@ -172,6 +175,25 @@
   "metadata": {}
 }
 ```
+
+#### TransactionAnnotateDTO
+
+批量补充标签/扩展字段，只改 `tags` 和 `ext_fields`，不触碰余额、分类、预算：
+
+```json
+{
+  "items": [
+    {
+      "id": 123,
+      "addTags": ["自动扣款"],
+      "extFields": { "channel": "支付宝" }
+    }
+  ]
+}
+```
+
+- `addTags` 与已有标签合并去重，不会覆盖用户已有标签；
+- `extFields` 按 key 合并，不会删除其他扩展字段。
 
 ---
 
@@ -330,6 +352,7 @@
 | GET | `/api/v1/reports/budget-review` | 预算审查 | `month` (yyyy-MM, 必填) |
 | GET | `/api/v1/reports/currency-distribution` | 货币分布 | `month` (yyyy-MM, 必填) |
 | GET | `/api/v1/reports/merchant-distribution` | 商户消费分布 | `month` (yyyy-MM, 必填) |
+| GET | `/api/v1/reports/ext-field-distribution` | 任意扩展字段分布 | `month`, `key`, `type` (默认 1) |
 
 ---
 

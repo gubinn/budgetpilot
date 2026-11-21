@@ -37,6 +37,34 @@
       <n-empty v-else description="暂无数据" />
     </div>
 
+    <!-- 标签统计 -->
+    <div class="chart-card">
+      <h3 class="chart-title">标签统计</h3>
+      <div class="tag-chart-wrap">
+        <div ref="tagChartRef" style="width: 100%; height: 250px"></div>
+        <div v-if="!hasTagData" class="chart-empty">暂无标签数据</div>
+      </div>
+    </div>
+
+    <!-- 扩展字段统计（默认支付渠道） -->
+    <div class="chart-card">
+      <div class="chart-title-row">
+        <h3 class="chart-title">{{ extKey === 'channel' ? '支付渠道' : '扩展字段统计' }}</h3>
+        <n-select
+          v-model:value="extKey"
+          :options="extKeyOptions"
+          size="small"
+          style="width: 120px"
+          placeholder="扩展字段"
+          :disabled="extKeys.length === 0"
+        />
+      </div>
+      <div class="tag-chart-wrap">
+        <div ref="extChartRef" style="width: 100%; height: 250px"></div>
+        <div v-if="!hasExtData" class="chart-empty">暂无扩展字段数据</div>
+      </div>
+    </div>
+
     <!-- 商户消费 -->
     <div class="chart-card">
       <h3 class="chart-title">商户消费</h3>
@@ -85,9 +113,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useMessage } from 'naive-ui'
-import { reportApi } from '@/api'
+import { reportApi, transactionApi } from '@/api'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 
@@ -100,15 +128,25 @@ const compareData = ref(null)
 const hasPieData = ref(false)
 const hasMerchantData = ref(false)
 const hasCurrencyData = ref(false)
+const hasTagData = ref(false)
+const extKeys = ref([])
+const extKey = ref('channel')
+const hasExtData = ref(false)
+const extKeyOptions = computed(() => extKeys.value.map(k => ({
+  label: k === 'channel' ? '支付渠道' : k,
+  value: k
+})))
 
-watch([selectedMonth, trendMonths, categoryLevel], loadAll)
+watch([selectedMonth, trendMonths, categoryLevel, extKey], loadAll)
 
 const trendChartRef = ref(null)
 const pieChartRef = ref(null)
 const merchantChartRef = ref(null)
 const currencyChartRef = ref(null)
+const tagChartRef = ref(null)
+const extChartRef = ref(null)
 
-let trendChart, pieChart, merchantChart, currencyChart
+let trendChart, pieChart, merchantChart, currencyChart, tagChart, extChart
 
 const monthOptions = ref([])
 for (let i = -12; i <= 0; i++) {
@@ -124,6 +162,10 @@ function resetCharts() {
   hasPieData.value = false
   hasMerchantData.value = false
   hasCurrencyData.value = false
+  hasTagData.value = false
+  tagChart?.dispose(); tagChart = null
+  hasExtData.value = false
+  extChart?.dispose(); extChart = null
 }
 
 async function loadAll() {
@@ -132,11 +174,15 @@ async function loadAll() {
   summaryCards.value = []
   compareData.value = null
   try {
-    const [summary, trend, currencyDist, merchantDist] = await Promise.allSettled([
+    const extPromise = extKey.value
+      ? reportApi.extFieldDistribution(selectedMonth.value, extKey.value, 1)
+      : Promise.resolve({ data: [] })
+    const [summary, trend, currencyDist, merchantDist, extDist] = await Promise.allSettled([
       reportApi.monthlySummary(selectedMonth.value, categoryLevel.value),
       reportApi.trend(trendMonths.value),
       reportApi.currencyDistribution(selectedMonth.value),
-      reportApi.merchantDistribution(selectedMonth.value)
+      reportApi.merchantDistribution(selectedMonth.value),
+      extPromise
     ])
 
     // 月度总览
@@ -164,6 +210,88 @@ async function loadAll() {
               name: categoryLabel(c), value: Number(c.amount),
               itemStyle: { color: c.categoryColor || '#3498db' }
             }))
+          }]
+        })
+      }
+
+      // 标签统计
+      const tagShares = s.tagShares || []
+      hasTagData.value = tagShares.length > 0
+      if (tagChart) { tagChart.dispose(); tagChart = null }
+      if (tagShares.length && tagChartRef.value) {
+        const top = tagShares.slice(0, 10).slice().reverse()
+        tagChart = echarts.init(tagChartRef.value)
+        tagChart.setOption({
+          grid: { left: 78, right: 16, top: 8, bottom: 20 },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: p => `${p[0].name}: ¥${Number(p[0].value).toFixed(2)}`
+          },
+          xAxis: {
+            type: 'value',
+            axisLabel: { color: '#94a3b8', fontSize: 10 },
+            splitLine: { lineStyle: { color: '#eef2f7' } }
+          },
+          yAxis: {
+            type: 'category',
+            data: top.map(t => t.tag),
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLine: { show: false },
+            axisTick: { show: false }
+          },
+          series: [{
+            type: 'bar',
+            data: top.map(t => Number(t.amount)),
+            barWidth: 12,
+            itemStyle: {
+              borderRadius: [0, 6, 6, 0],
+              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                { offset: 0, color: '#2563eb' },
+                { offset: 1, color: '#0ea5a4' }
+              ])
+            }
+          }]
+        })
+      }
+
+      // 扩展字段统计（默认支付渠道）
+      const extItems = extDist.status === 'fulfilled' ? (extDist.value.data || []) : []
+      hasExtData.value = extItems.length > 0
+      if (extChart) { extChart.dispose(); extChart = null }
+      if (extItems.length && extChartRef.value) {
+        const top = extItems.slice(0, 10).slice().reverse()
+        extChart = echarts.init(extChartRef.value)
+        extChart.setOption({
+          grid: { left: 78, right: 16, top: 8, bottom: 20 },
+          tooltip: {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            formatter: p => `${p[0].name}: ¥${Number(p[0].value).toFixed(2)}`
+          },
+          xAxis: {
+            type: 'value',
+            axisLabel: { color: '#94a3b8', fontSize: 10 },
+            splitLine: { lineStyle: { color: '#eef2f7' } }
+          },
+          yAxis: {
+            type: 'category',
+            data: top.map(i => i.value),
+            axisLabel: { color: '#64748b', fontSize: 10 },
+            axisLine: { show: false },
+            axisTick: { show: false }
+          },
+          series: [{
+            type: 'bar',
+            data: top.map(i => Number(i.amount)),
+            barWidth: 12,
+            itemStyle: {
+              borderRadius: [0, 6, 6, 0],
+              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+                { offset: 0, color: '#0ea5a4' },
+                { offset: 1, color: '#2563eb' }
+              ])
+            }
           }]
         })
       }
@@ -248,9 +376,24 @@ function handleResize() {
   pieChart?.resize()
   merchantChart?.resize()
   currencyChart?.resize()
+  tagChart?.resize()
+  extChart?.resize()
 }
 
-onMounted(() => {
+async function loadExtKeys() {
+  try {
+    const res = await transactionApi.extKeys()
+    extKeys.value = res.data || []
+    if (!extKeys.value.includes(extKey.value)) {
+      extKey.value = extKeys.value.includes('channel') ? 'channel' : (extKeys.value[0] || '')
+    }
+  } catch (e) {
+    extKeys.value = []
+  }
+}
+
+onMounted(async () => {
+  await loadExtKeys()
   loadAll()
   window.addEventListener('resize', handleResize)
 })
@@ -261,6 +404,8 @@ onBeforeUnmount(() => {
   pieChart?.dispose()
   merchantChart?.dispose()
   currencyChart?.dispose()
+  tagChart?.dispose()
+  extChart?.dispose()
 })
 </script>
 
@@ -301,6 +446,21 @@ onBeforeUnmount(() => {
   background: #fff;
   border-radius: 10px;
   padding: 14px;
+}
+
+.tag-chart-wrap {
+  position: relative;
+  min-height: 250px;
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  font-size: 13px;
 }
 
 .chart-title-row {

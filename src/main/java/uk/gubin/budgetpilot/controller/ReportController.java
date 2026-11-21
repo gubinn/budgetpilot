@@ -93,4 +93,19 @@ public class ReportController {
         validateMonth(month);
         return Result.ok(reportService.merchantDistribution(month));
     }
+
+    @GetMapping("/ext-field-distribution")
+    public Result<java.util.List<ReportVO.ExtFieldShareItem>> extFieldDistribution(
+            @RequestParam String month,
+            @RequestParam String key,
+            @RequestParam(defaultValue = "1") Integer type) {
+        validateMonth(month);
+        if (key == null || key.trim().isEmpty()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "扩展字段 key 不能为空");
+        }
+        if (type == null || (type != 1 && type != 2 && type != 3)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "type 只能为 1、2 或 3");
+        }
+        return Result.ok(reportService.extFieldDistribution(month, key.trim(), type));
+    }
 }

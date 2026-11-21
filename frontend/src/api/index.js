@@ -16,7 +16,9 @@ export const transactionApi = {
   get: (id) => api.get(`/transactions/${id}`),
   update: (id, data) => api.put(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),
-  confirm: (id) => api.post(`/transactions/${id}/confirm`)
+  confirm: (id) => api.post(`/transactions/${id}/confirm`),
+  tags: () => api.get('/transactions/tags'),
+  extKeys: () => api.get('/transactions/ext-keys')
 }
 
 export const categoryApi = {
@@ -54,7 +56,8 @@ export const reportApi = {
   dailyHeatmap: (year) => api.get('/reports/daily-heatmap', { params: { year } }),
   budgetReview: (month) => api.get('/reports/budget-review', { params: { month } }),
   currencyDistribution: (month) => api.get('/reports/currency-distribution', { params: { month } }),
-  merchantDistribution: (month) => api.get('/reports/merchant-distribution', { params: { month } })
+  merchantDistribution: (month) => api.get('/reports/merchant-distribution', { params: { month } }),
+  extFieldDistribution: (month, key, type = 1) => api.get('/reports/ext-field-distribution', { params: { month, key, type } })
 }
 
 export const merchantApi = {

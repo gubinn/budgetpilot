@@ -10,6 +10,7 @@ import uk.gubin.budgetpilot.common.PageResult;
 import uk.gubin.budgetpilot.vo.TransactionVO;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 public interface TransactionService extends IService<Transaction> {
@@ -25,4 +26,13 @@ public interface TransactionService extends IService<Transaction> {
     Map<String, Object> getDailySpent(LocalDate date);
     Map<String, Object> getMonthlySpent(String yearMonth);
     Map<String, Object> getWeeklySpent(LocalDate date);
+
+    /** 当前用户使用过的全部标签（去重排序） */
+    List<String> listTags();
+
+    /** 当前用户使用过的全部扩展字段 key（去重排序） */
+    List<String> listExtFieldKeys();
+
+    /** 批量补充标签/扩展字段（不触碰余额/预算），返回更新数量 */
+    int annotate(uk.gubin.budgetpilot.dto.TransactionAnnotateDTO dto);
 }

@@ -3,8 +3,11 @@ package uk.gubin.budgetpilot.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 import uk.gubin.budgetpilot.common.PageResult;
 import uk.gubin.budgetpilot.common.Result;
+import uk.gubin.budgetpilot.dto.TransactionAnnotateDTO;
 import uk.gubin.budgetpilot.dto.TransactionCreateDTO;
 import uk.gubin.budgetpilot.dto.TransactionQueryDTO;
 import uk.gubin.budgetpilot.dto.TransactionReclassifyDTO;
@@ -28,6 +31,21 @@ public class TransactionController {
     @GetMapping
     public Result<PageResult<TransactionVO>> query(TransactionQueryDTO dto) {
         return Result.ok(transactionService.query(dto));
+    }
+
+    @GetMapping("/tags")
+    public Result<List<String>> tags() {
+        return Result.ok(transactionService.listTags());
+    }
+
+    @GetMapping("/ext-keys")
+    public Result<List<String>> extKeys() {
+        return Result.ok(transactionService.listExtFieldKeys());
+    }
+
+    @PostMapping("/annotate")
+    public Result<Integer> annotate(@Valid @RequestBody TransactionAnnotateDTO dto) {
+        return Result.ok(transactionService.annotate(dto));
     }
 
     @GetMapping("/{id}")

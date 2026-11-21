@@ -36,6 +36,8 @@ public class ReportVO {
         private BigDecimal balance;
         private BigDecimal avgDailyExpense;
         private List<CategoryShareItem> categoryShares;
+        /** 标签统计（支出交易；一笔交易多个标签会在每个标签下各计一次） */
+        private List<TagShareItem> tagShares;
         /** 商户消费占比（月度总览中包含） */
         private List<MerchantShareItem> merchantShares;
 
@@ -50,6 +52,23 @@ public class ReportVO {
             private BigDecimal amount;
             private BigDecimal percentage;
         }
+    }
+
+    @Data
+    public static class TagShareItem {
+        private String tag;
+        private BigDecimal amount;
+        private BigDecimal percentage;
+        private Integer count;
+    }
+
+    @Data
+    public static class ExtFieldShareItem {
+        /** 扩展字段的值（或“未标注”） */
+        private String value;
+        private BigDecimal amount;
+        private BigDecimal percentage;
+        private Integer count;
     }
 
     @Data

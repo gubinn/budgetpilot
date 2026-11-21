@@ -10,6 +10,9 @@
       <n-form-item label="分类">
         <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="选择分类" clearable style="width: 140px" key-field="value" label-field="label" children-field="children" />
       </n-form-item>
+      <n-form-item label="标签">
+        <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="选择标签" style="width: 180px" />
+      </n-form-item>
       <n-form-item label="状态">
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable style="width: 100px" />
       </n-form-item>
@@ -59,6 +62,7 @@ const filters = ref({
   type: null,
   accountId: null,
   categoryId: null,
+  tags: [],
   isConfirmed: null,
   dateRange: null
 })
@@ -74,6 +78,7 @@ const confirmOptions = [
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
+const tagOptions = ref([])
 
 const pagination = ref({
   page: 1,
@@ -169,6 +174,9 @@ async function loadData() {
       categoryId: filters.value.categoryId,
       confirmed: filters.value.isConfirmed
     }
+    if (filters.value.tags?.length) {
+      params.tags = filters.value.tags.join(',')
+    }
     if (filters.value.dateRange?.length === 2) {
       params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
       params.endDate = dayjs(filters.value.dateRange[1]).format('YYYY-MM-DD')
@@ -200,7 +208,7 @@ function onSizeChange(size) {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, isConfirmed: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, dateRange: null }
   loadData()
 }
 
@@ -238,12 +246,14 @@ function formatNum(n) {
 }
 
 onMounted(async () => {
-  const [accRes, catRes] = await Promise.all([
+  const [accRes, catRes, tagRes] = await Promise.all([
     accountApi.list(true),
-    categoryApi.tree(null)
+    categoryApi.tree(null),
+    transactionApi.tags()
   ])
   accounts.value = accRes.data
   categories.value = catRes.data
+  tagOptions.value = (tagRes.data || []).map(t => ({ label: t, value: t }))
   accountOptions.value = accounts.value.map(a => ({ label: a.name, value: a.id }))
 
   // 将分类树转为 tree-select 可用的格式

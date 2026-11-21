@@ -18,6 +18,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.PageResult;
+import uk.gubin.budgetpilot.dto.TransactionAnnotateDTO;
 import uk.gubin.budgetpilot.dto.TransactionCreateDTO;
 import uk.gubin.budgetpilot.dto.TransactionQueryDTO;
 import uk.gubin.budgetpilot.dto.TransactionReclassifyDTO;
@@ -44,8 +45,10 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -234,6 +237,32 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getCurrency() != null) query.eq(Transaction::getCurrency, dto.getCurrency());
         if (dto.getKeyword() != null) {
             query.and(q -> q.like(Transaction::getNote, dto.getKeyword()));
+        }
+        // 标签过滤：任意一个标签命中即可
+        if (dto.getTags() != null && !dto.getTags().isEmpty()) {
+            List<String> tags = dto.getTags().stream()
+                    .filter(t -> t != null && !t.isBlank())
+                    .map(String::trim).distinct().toList();
+            if (!tags.isEmpty()) {
+                query.and(q -> {
+                    for (int i = 0; i < tags.size(); i++) {
+                        if (i == 0) {
+                            q.apply("JSON_CONTAINS(tags, JSON_QUOTE({0}))", tags.get(i));
+                        } else {
+                            q.or().apply("JSON_CONTAINS(tags, JSON_QUOTE({0}))", tags.get(i));
+                        }
+                    }
+                });
+            }
+        }
+        // 扩展字段精确查询：extKey 必填，extValue 可选（只传 key 时按存在性过滤）
+        if (dto.getExtKey() != null && !dto.getExtKey().isBlank()) {
+            String path = "$." + dto.getExtKey().trim();
+            if (dto.getExtValue() != null) {
+                query.apply("JSON_UNQUOTE(JSON_EXTRACT(ext_fields, {0})) = {1}", path, dto.getExtValue());
+            } else {
+                query.apply("JSON_CONTAINS_PATH(ext_fields, 'one', {0})", path);
+            }
         }
 
         // 解析排序
@@ -542,6 +571,119 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
         log.info("Reclassified {} transactions", updated);
         return updated;
+    }
+
+    @Override
+    public List<String> listTags() {
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.select(Transaction::getTags).isNotNull(Transaction::getTags);
+        Set<String> tags = new java.util.TreeSet<>();
+        for (Transaction row : baseMapper.selectList(query)) {
+            if (row.getTags() == null) continue;
+            try {
+                List<String> parsed = objectMapper.readValue(row.getTags(), new TypeReference<List<String>>() {});
+                for (String tag : parsed) {
+                    if (tag != null && !tag.isBlank()) tags.add(tag.trim());
+                }
+            } catch (Exception ignored) {
+                // 忽略历史脏数据
+            }
+        }
+        return new java.util.ArrayList<>(tags);
+    }
+
+    @Override
+    public List<String> listExtFieldKeys() {
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.select(Transaction::getExtFields).isNotNull(Transaction::getExtFields);
+        Set<String> keys = new java.util.TreeSet<>();
+        for (Transaction row : baseMapper.selectList(query)) {
+            if (row.getExtFields() == null) continue;
+            try {
+                Map<String, Object> map = objectMapper.readValue(
+                        row.getExtFields(), new TypeReference<Map<String, Object>>() {});
+                keys.addAll(map.keySet());
+            } catch (Exception ignored) {
+                // 忽略历史脏数据
+            }
+        }
+        return new ArrayList<>(keys);
+    }
+
+    @Override
+    @Transactional
+    public int annotate(TransactionAnnotateDTO dto) {
+        int updated = 0;
+        Set<String> months = new HashSet<>();
+        for (TransactionAnnotateDTO.Item item : dto.getItems()) {
+            Transaction tx = baseMapper.selectById(item.getId());
+            if (tx == null) continue;
+
+            List<String> tags = parseTags(tx.getTags());
+            boolean changed = false;
+            if (item.getAddTags() != null) {
+                for (String raw : item.getAddTags()) {
+                    if (raw == null || raw.isBlank()) continue;
+                    String tag = raw.trim();
+                    if (!tags.contains(tag)) {
+                        tags.add(tag);
+                        changed = true;
+                    }
+                }
+            }
+
+            Map<String, Object> ext = parseExtFields(tx.getExtFields());
+            if (item.getExtFields() != null) {
+                for (Map.Entry<String, Object> entry : item.getExtFields().entrySet()) {
+                    String key = entry.getKey();
+                    Object value = entry.getValue();
+                    if (key == null || key.isBlank() || value == null) continue;
+                    if (!value.equals(ext.get(key))) {
+                        ext.put(key, value);
+                        changed = true;
+                    }
+                }
+            }
+
+            if (!changed) continue;
+            try {
+                baseMapper.update(null, new LambdaUpdateWrapper<Transaction>()
+                        .eq(Transaction::getId, tx.getId())
+                        .set(Transaction::getTags, objectMapper.writeValueAsString(tags))
+                        .set(Transaction::getExtFields, objectMapper.writeValueAsString(ext))
+                        .set(Transaction::getUpdatedAt, LocalDateTime.now()));
+                if (tx.getTransactionDate() != null) {
+                    months.add(tx.getTransactionDate().format(MONTH_FMT));
+                }
+                updated++;
+            } catch (Exception e) {
+                log.warn("Failed to annotate transaction {}", tx.getId(), e);
+            }
+        }
+        Long userId = getCurrentUserId();
+        for (String month : months) {
+            clearReportCache(month, userId);
+        }
+        log.info("Annotated {} transactions", updated);
+        return updated;
+    }
+
+    private List<String> parseTags(String json) {
+        if (json == null || json.isBlank()) return new ArrayList<>();
+        try {
+            return new ArrayList<>(objectMapper.readValue(json, new TypeReference<List<String>>() {}));
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
+    }
+
+    private Map<String, Object> parseExtFields(String json) {
+        if (json == null || json.isBlank()) return new LinkedHashMap<>();
+        try {
+            return new LinkedHashMap<>(objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {}));
+        } catch (Exception e) {
+            return new LinkedHashMap<>();
+        }
     }
 
     @Override

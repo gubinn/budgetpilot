@@ -124,6 +124,39 @@ public class ReportServiceImpl implements ReportService {
         shares.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
         summary.setCategoryShares(shares);
 
+        // 标签统计：仅统计支出交易；一笔交易有多个标签时，每个标签各计全额
+        Map<String, BigDecimal> tagAmounts = new LinkedHashMap<>();
+        Map<String, Integer> tagCounts = new LinkedHashMap<>();
+        for (Transaction tx : expenses) {
+            if (tx.getTags() == null) continue;
+            try {
+                List<String> tags = objectMapper.readValue(tx.getTags(), new TypeReference<List<String>>() {});
+                Set<String> distinct = new LinkedHashSet<>();
+                for (String tag : tags) {
+                    if (tag != null && !tag.isBlank()) distinct.add(tag.trim());
+                }
+                for (String tag : distinct) {
+                    tagAmounts.merge(tag, tx.getAmountBase(), BigDecimal::add);
+                    tagCounts.merge(tag, 1, Integer::sum);
+                }
+            } catch (Exception ignored) {
+                // 忽略历史脏数据
+            }
+        }
+        List<ReportVO.TagShareItem> tagShares = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> entry : tagAmounts.entrySet()) {
+            ReportVO.TagShareItem item = new ReportVO.TagShareItem();
+            item.setTag(entry.getKey());
+            item.setAmount(entry.getValue());
+            item.setCount(tagCounts.getOrDefault(entry.getKey(), 0));
+            item.setPercentage(totalExpense.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO
+                    : entry.getValue().divide(totalExpense, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
+            tagShares.add(item);
+        }
+        tagShares.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
+        summary.setTagShares(tagShares);
+
         vo.setMonthlySummary(summary);
         putCache(cacheKey, vo, isCurrentMonth(month) ? 1 : 24); // 当前月份缓存1小时，历史月份24小时
         return vo;
@@ -343,6 +376,52 @@ public class ReportServiceImpl implements ReportService {
         }
         vo.setCurrencyDistribution(items);
         return vo;
+    }
+
+    @Override
+    public List<ReportVO.ExtFieldShareItem> extFieldDistribution(String month, String key, int type) {
+        YearMonth ym = YearMonth.parse(month);
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getType, type)
+                .ge(Transaction::getTransactionDate, ym.atDay(1))
+                .le(Transaction::getTransactionDate, ym.atEndOfMonth());
+        List<Transaction> txs = transactionMapper.selectList(query);
+        BigDecimal total = sumBase(txs);
+
+        Map<String, BigDecimal> amounts = new LinkedHashMap<>();
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Transaction tx : txs) {
+            String label = "未标注";
+            if (tx.getExtFields() != null) {
+                try {
+                    Map<String, Object> ext = objectMapper.readValue(
+                            tx.getExtFields(), new TypeReference<Map<String, Object>>() {});
+                    Object value = ext.get(key);
+                    if (value != null && !String.valueOf(value).isBlank()) {
+                        label = String.valueOf(value);
+                    }
+                } catch (Exception ignored) {
+                    // 忽略历史脏数据
+                }
+            }
+            amounts.merge(label, tx.getAmountBase() == null ? BigDecimal.ZERO : tx.getAmountBase(), BigDecimal::add);
+            counts.merge(label, 1, Integer::sum);
+        }
+
+        List<ReportVO.ExtFieldShareItem> items = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> entry : amounts.entrySet()) {
+            ReportVO.ExtFieldShareItem item = new ReportVO.ExtFieldShareItem();
+            item.setValue(entry.getKey());
+            item.setAmount(entry.getValue());
+            item.setCount(counts.getOrDefault(entry.getKey(), 0));
+            item.setPercentage(total.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO
+                    : entry.getValue().divide(total, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
+            items.add(item);
+        }
+        items.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
+        return items;
     }
 
     @Override
