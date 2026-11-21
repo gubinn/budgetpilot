@@ -7,6 +7,7 @@ import uk.gubin.budgetpilot.common.PageResult;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.dto.TransactionCreateDTO;
 import uk.gubin.budgetpilot.dto.TransactionQueryDTO;
+import uk.gubin.budgetpilot.dto.TransactionReclassifyDTO;
 import uk.gubin.budgetpilot.dto.TransactionUpdateDTO;
 import uk.gubin.budgetpilot.service.TransactionService;
 import uk.gubin.budgetpilot.vo.TransactionVO;
@@ -48,5 +49,14 @@ public class TransactionController {
     @PostMapping("/{id}/confirm")
     public Result<TransactionVO> confirm(@PathVariable Long id) {
         return Result.ok(transactionService.confirm(id));
+    }
+
+    /**
+     * 批量重分类：只更新 category_id，不触碰余额/预算/预警。
+     * 用于邮件记账规则升级后的历史数据修正。
+     */
+    @PostMapping("/reclassify")
+    public Result<Integer> reclassify(@Valid @RequestBody TransactionReclassifyDTO dto) {
+        return Result.ok(transactionService.reclassify(dto));
     }
 }

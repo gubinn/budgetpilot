@@ -13,6 +13,7 @@ import java.util.Map;
 @Data
 public class TransactionVO {
     private Long id;
+    private String externalId;
     private Integer type;
     private BigDecimal amount;
     private String currency;

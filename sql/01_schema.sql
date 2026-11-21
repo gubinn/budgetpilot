@@ -80,6 +80,7 @@ CREATE TABLE t_category (
 CREATE TABLE t_transaction (
     id                  BIGINT          PRIMARY KEY AUTO_INCREMENT,
     user_id             BIGINT          NOT NULL COMMENT '所属用户ID',
+    external_id         VARCHAR(100)    DEFAULT NULL COMMENT '外部系统幂等ID（同一用户下唯一）',
     type                TINYINT         NOT NULL COMMENT '1-支出 2-收入 3-转账',
     amount              DECIMAL(14,2)   NOT NULL COMMENT '原始金额（原始币种，正数）',
     currency            CHAR(3)         DEFAULT 'CNY' COMMENT '原始币种 ISO 4217',
@@ -106,7 +107,8 @@ CREATE TABLE t_transaction (
     INDEX idx_category (category_id),
     INDEX idx_merchant (merchant_id),
     INDEX idx_type_date (type, transaction_date),
-    INDEX idx_confirmed (is_confirmed)
+    INDEX idx_confirmed (is_confirmed),
+    UNIQUE INDEX uk_user_external (user_id, external_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易记录表';
 
 -- 汇率表

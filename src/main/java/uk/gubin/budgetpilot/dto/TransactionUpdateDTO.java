@@ -31,6 +31,8 @@ public class TransactionUpdateDTO {
     private Long categoryId;
     private Long merchantId;
     private String merchantName;
+    /** 修改分类时是否同步更新关联商户的默认分类（默认 true，用于学习） */
+    private Boolean syncMerchantCategory = true;
     private Boolean autoCreateMerchant = true;
     private List<String> tags;
     private List<String> attachmentUrls;

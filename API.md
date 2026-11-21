@@ -98,6 +98,7 @@
 | PUT | `/api/v1/transactions/{id}` | 更新交易 | `TransactionUpdateDTO` |
 | DELETE | `/api/v1/transactions/{id}` | 删除交易 | - |
 | POST | `/api/v1/transactions/{id}/confirm` | 确认交易 | - |
+| POST | `/api/v1/transactions/reclassify` | 批量修改分类（只改 category_id） | `TransactionReclassifyDTO` |
 
 #### TransactionCreateDTO
 
@@ -105,6 +106,7 @@
 {
   "type": "交易类型 (必填, 1-支出 2-收入 3-转账)",
   "amount": "金额 (必填, >0)",
+  "externalId": "外部幂等ID (可选，同一用户下唯一，重复请求返回已有交易)",
   "currency": "币种 (默认 CNY)",
   "transactionDate": "交易日期",
   "transactionTime": "交易时间",
@@ -162,6 +164,7 @@
   "merchantId": "商户ID",
   "merchantName": "商户名称 (用于匹配已有或自动创建)",
   "autoCreateMerchant": "是否自动创建商户 (默认 true)",
+  "syncMerchantCategory": "修改分类时是否同步更新关联商户的默认分类 (默认 true)",
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认",

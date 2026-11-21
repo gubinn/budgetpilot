@@ -24,6 +24,10 @@ public class TransactionCreateDTO {
     @Positive(message = "金额必须大于0")
     private BigDecimal amount;
 
+    /** 外部系统幂等 ID：同一用户下相同值只创建一次，重复请求直接返回已有交易 */
+    @Size(max = 100, message = "外部幂等ID不能超过100个字符")
+    private String externalId;
+
     private String currency = "CNY";
     private LocalDate transactionDate;
     private LocalTime transactionTime;

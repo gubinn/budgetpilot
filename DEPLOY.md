@@ -1472,6 +1472,51 @@ sudo systemctl restart budgetpilot
 
 > 迁移后所有现有数据归属于默认 admin 用户（user_id = 1），数据隔离机制自动生效。
 
+### 交易外部幂等 ID 迁移（旧版本升级）
+
+`t_transaction` 新增 `external_id` 字段和 `(user_id, external_id)` 唯一索引，用于外部系统（如邮件记账）幂等创建交易。**必须先执行迁移再部署新代码**，否则交易查询/插入会因未知字段失败。
+
+**Docker 方式：**
+
+```bash
+cd /opt/budgetpilot
+source .env
+
+# 1. 备份
+DATE=$(date +%Y%m%d_%H%M%S)
+docker compose exec mysql mysqldump -ubudgetpilot -p${DB_PASS} budgetpilot \
+  --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
+
+# 2. 执行迁移
+cat sql/migrations/external_id_migration.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+
+# 3. 验证
+docker compose exec mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot -e "SHOW COLUMNS FROM t_transaction LIKE 'external_id'; SHOW INDEX FROM t_transaction WHERE Key_name='uk_user_external';"
+
+# 4. 部署新代码并重启 API
+docker compose up -d --build budgetpilot-api
+```
+
+**裸机方式：**
+
+```bash
+cd /opt/budgetpilot
+
+# 1. 备份
+DATE=$(date +%Y%m%d_%H%M%S)
+mysqldump -ubudgetpilot -pyour_db_password budgetpilot \
+  --single-transaction --routines > backup/budgetpilot_backup_${DATE}.sql
+
+# 2. 执行迁移
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/migrations/external_id_migration.sql
+
+# 3. 验证
+mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW COLUMNS FROM t_transaction LIKE 'external_id'; SHOW INDEX FROM t_transaction WHERE Key_name='uk_user_external';"
+
+# 4. 部署新 JAR 后重启
+sudo systemctl restart budgetpilot
+```
+
 ### MySQL 异常
 
 **Docker 方式：**

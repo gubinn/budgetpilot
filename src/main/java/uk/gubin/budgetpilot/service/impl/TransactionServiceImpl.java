@@ -1,6 +1,7 @@
 package uk.gubin.budgetpilot.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -8,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +20,7 @@ import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.PageResult;
 import uk.gubin.budgetpilot.dto.TransactionCreateDTO;
 import uk.gubin.budgetpilot.dto.TransactionQueryDTO;
+import uk.gubin.budgetpilot.dto.TransactionReclassifyDTO;
 import uk.gubin.budgetpilot.dto.TransactionUpdateDTO;
 import uk.gubin.budgetpilot.entity.Account;
 import uk.gubin.budgetpilot.entity.Category;
@@ -38,16 +41,22 @@ import uk.gubin.budgetpilot.vo.TransactionVO;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Transaction> implements TransactionService {
+
+    private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
 
     private final ObjectMapper objectMapper;
     private final CurrencyRateService currencyRateService;
@@ -63,6 +72,16 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     @Override
     @Transactional
     public TransactionVO create(TransactionCreateDTO dto) {
+        // 外部幂等：同一用户的相同 externalId 直接返回已有交易，不重复入账
+        String externalId = normalizeExternalId(dto.getExternalId());
+        if (externalId != null) {
+            Transaction existing = findByExternalId(externalId);
+            if (existing != null) {
+                log.info("Idempotent hit for externalId={}, returning transaction {}", externalId, existing.getId());
+                return getById(existing.getId());
+            }
+        }
+
         // 校验账户
         Account account = accountMapper.selectById(dto.getAccountId());
         if (account == null) {
@@ -123,7 +142,21 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 构建实体
         Transaction entity = buildEntity(dto, account, category, merchantId);
-        baseMapper.insert(entity);
+        entity.setExternalId(externalId);
+        try {
+            baseMapper.insert(entity);
+        } catch (DuplicateKeyException e) {
+            // 并发下两个请求同时通过幂等预查，唯一索引兜底；返回已创建的那条
+            if (externalId != null) {
+                Transaction existing = findByExternalId(externalId);
+                if (existing != null) {
+                    log.info("Concurrent idempotent hit for externalId={}, returning transaction {}",
+                            externalId, existing.getId());
+                    return getById(existing.getId());
+                }
+            }
+            throw e;
+        }
 
         // 更新商户使用统计
         if (merchantId != null && Boolean.TRUE.equals(entity.getIsConfirmed())) {
@@ -282,7 +315,11 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                 throw new BizException(ErrorCode.MERCHANT_NOT_FOUND);
             }
         }
-        entity.setMerchantId(merchantId);
+        // 只有显式传了 merchantId 或 merchantName 才改变商户关联；
+        // 只改分类等字段时保留原商户，避免误清空
+        if (dto.getMerchantId() != null || dto.getMerchantName() != null) {
+            entity.setMerchantId(merchantId);
+        }
 
         // 更新字段
         if (dto.getType() != null) entity.setType(dto.getType());
@@ -294,6 +331,18 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getAccountId() != null) entity.setAccountId(dto.getAccountId());
         if (dto.getTargetAccountId() != null) entity.setTargetAccountId(dto.getTargetAccountId());
         if (dto.getCategoryId() != null) entity.setCategoryId(dto.getCategoryId());
+
+        // 学习闭环：用户修改交易分类时，同步更新关联商户的默认分类
+        if (dto.getCategoryId() != null && entity.getMerchantId() != null
+                && Boolean.TRUE.equals(dto.getSyncMerchantCategory())) {
+            Merchant linked = merchantMapper.selectById(entity.getMerchantId());
+            if (linked != null && !dto.getCategoryId().equals(linked.getCategoryId())) {
+                linked.setCategoryId(dto.getCategoryId());
+                merchantMapper.updateById(linked);
+                log.info("Learned merchant '{}' -> category {}", linked.getName(), dto.getCategoryId());
+            }
+        }
+
         if (dto.getTags() != null) {
             try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception e) { log.warn("Failed to serialize tags", e); }
         }
@@ -451,6 +500,44 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     }
 
     @Override
+    @Transactional
+    public int reclassify(TransactionReclassifyDTO dto) {
+        int updated = 0;
+        Set<String> months = new HashSet<>();
+        for (TransactionReclassifyDTO.Item item : dto.getItems()) {
+            Transaction entity = baseMapper.selectById(item.getId());
+            if (entity == null || entity.getType() == null || entity.getType() == 3) {
+                continue;
+            }
+            Category category = categoryMapper.selectById(item.getCategoryId());
+            if (category == null) {
+                continue;
+            }
+            if (category.getType() != null && !category.getType().equals(entity.getType())) {
+                continue;
+            }
+            if (item.getCategoryId().equals(entity.getCategoryId())) {
+                continue;
+            }
+            // 只更新分类，不触碰余额/预算/预警
+            baseMapper.update(null, new LambdaUpdateWrapper<Transaction>()
+                    .eq(Transaction::getId, entity.getId())
+                    .set(Transaction::getCategoryId, item.getCategoryId())
+                    .set(Transaction::getUpdatedAt, LocalDateTime.now()));
+            if (entity.getTransactionDate() != null) {
+                months.add(entity.getTransactionDate().format(MONTH_FMT));
+            }
+            updated++;
+        }
+        Long userId = getCurrentUserId();
+        for (String month : months) {
+            clearReportCache(month, userId);
+        }
+        log.info("Reclassified {} transactions", updated);
+        return updated;
+    }
+
+    @Override
     public Map<String, Object> getDailySpent(LocalDate date) {
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getType, 1)
@@ -490,6 +577,20 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     }
 
     // ==================== Internal Methods ====================
+
+    private String normalizeExternalId(String externalId) {
+        if (externalId == null) {
+            return null;
+        }
+        String trimmed = externalId.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Transaction findByExternalId(String externalId) {
+        return baseMapper.selectOne(new LambdaQueryWrapper<Transaction>()
+                .eq(Transaction::getExternalId, externalId)
+                .last("LIMIT 1"));
+    }
 
     private Transaction buildEntity(TransactionCreateDTO dto, Account account, Category category, Long merchantId) {
         Transaction entity = new Transaction();
@@ -665,6 +766,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     private TransactionVO toVO(Transaction entity, Account account, Category category, Merchant merchant) {
         TransactionVO vo = new TransactionVO();
         vo.setId(entity.getId());
+        vo.setExternalId(entity.getExternalId());
         vo.setType(entity.getType());
         vo.setAmount(entity.getAmount());
         vo.setCurrency(entity.getCurrency());

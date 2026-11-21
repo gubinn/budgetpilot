@@ -14,6 +14,7 @@ import java.time.LocalTime;
 @TableName("t_transaction")
 public class Transaction extends BaseEntity {
     private Long userId;
+    private String externalId;
     private Integer type;
     private java.math.BigDecimal amount;
     private String currency;

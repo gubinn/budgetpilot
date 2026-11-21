@@ -17,8 +17,8 @@ public class AccountCreateDTO {
     private String name;
 
     @NotNull(message = "账户类型不能为空")
-    @Min(value = 1, message = "账户类型必须为1-3之间的值")
-    @Max(value = 3, message = "账户类型必须为1-3之间的值")
+    @Min(value = 1, message = "账户类型必须为1-5之间的值")
+    @Max(value = 5, message = "账户类型必须为1-5之间的值")
     private Integer type;
 
     private String icon = "wallet";

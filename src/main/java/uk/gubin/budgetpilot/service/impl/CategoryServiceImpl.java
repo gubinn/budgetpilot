@@ -104,19 +104,21 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         // 循环引用检测
         detectCircularReference(all);
 
-        List<Category> roots = all.stream()
-                .filter(c -> c.getParentId() == 0)
-                .collect(Collectors.toList());
+        return buildTree(all, 0L);
+    }
 
-        return roots.stream().map(root -> {
-            CategoryVO vo = toVO(root);
-            List<CategoryVO> children = all.stream()
-                    .filter(c -> c.getParentId() != null && c.getParentId().equals(root.getId()))
-                    .map(this::toVO)
-                    .collect(Collectors.toList());
-            vo.setChildren(children);
-            return vo;
-        }).collect(Collectors.toList());
+    /**
+     * 递归组装分类树，支持任意层级（此前只组装两层，三级及以下会丢失）
+     */
+    private List<CategoryVO> buildTree(List<Category> all, long parentId) {
+        return all.stream()
+                .filter(c -> c.getParentId() != null && c.getParentId() == parentId)
+                .map(c -> {
+                    CategoryVO vo = toVO(c);
+                    vo.setChildren(buildTree(all, c.getId()));
+                    return vo;
+                })
+                .collect(Collectors.toList());
     }
 
     /**
