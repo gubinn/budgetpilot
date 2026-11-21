@@ -28,32 +28,113 @@
     <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 16px">
       <n-gi>
         <n-card title="预算进度" hoverable>
-          <div v-if="budgetProgress" class="budget-list">
-            <div v-for="item in budgetProgress" :key="item.categoryId" class="budget-item">
-              <div class="budget-header">
-                <span>{{ item.categoryName }}</span>
-                <span :class="['badge', item.status.toLowerCase()]">{{ item.progressPct }}%</span>
-              </div>
-              <n-progress
-                type="line"
-                :percentage="Math.min(item.progressPct, 100)"
-                :status="getProgressStatus(item.status)"
-                :show-indicator="false"
-                :height="8"
-                style="margin-top: 8px"
-              />
-              <div class="budget-amounts">
-                <span class="spent">已花 ¥{{ formatNum(item.spent) }}</span>
-                <span class="budget">预算 ¥{{ formatNum(item.budget) }}</span>
-              </div>
-            </div>
-          </div>
-          <n-empty v-else description="本月未设置预算" />
+          <n-tabs v-model:value="budgetTab" type="segment" size="small">
+            <n-tab-pane name="monthly" :tab="monthlyTabLabel">
+              <template v-if="monthlyBudget">
+                <div class="budget-overall">
+                  <div>
+                    <div class="bo-label">已花 / 预算</div>
+                    <div class="bo-value">
+                      ¥{{ formatNum(monthlyBudget.totalSpent) }}
+                      <span class="bo-muted">/ ¥{{ formatNum(monthlyBudget.totalBudget) }}</span>
+                    </div>
+                  </div>
+                  <div class="bo-pct" :class="monthlyBudget.progressPct > 100 ? 'red' : 'green'">
+                    {{ monthlyBudget.progressPct }}%
+                  </div>
+                </div>
+                <n-progress
+                  type="line"
+                  :percentage="Math.min(monthlyBudget.progressPct, 100)"
+                  :status="getProgressStatus(monthlyBudget.progressPct > 100 ? 'EXCEEDED' : 'NORMAL')"
+                  :show-indicator="false"
+                  :height="8"
+                  style="margin: 8px 0 14px"
+                />
+                <div class="budget-list">
+                  <div v-for="item in monthlyBudget.items" :key="item.categoryId" class="budget-item">
+                    <div class="budget-header">
+                      <span>{{ item.categoryName }}</span>
+                      <span :class="['badge', item.status.toLowerCase()]">{{ item.progressPct }}%</span>
+                    </div>
+                    <n-progress
+                      type="line"
+                      :percentage="Math.min(item.progressPct, 100)"
+                      :status="getProgressStatus(item.status)"
+                      :show-indicator="false"
+                      :height="6"
+                      style="margin-top: 6px"
+                    />
+                    <div class="budget-amounts">
+                      <span class="spent">已花 ¥{{ formatNum(item.spent) }}</span>
+                      <span class="budget">预算 ¥{{ formatNum(item.budget) }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="monthlyFallback" class="budget-hint">
+                  本月（{{ currentMonth }}）未设置预算，显示最近一期 {{ monthlyBudget.yearMonth }} 的预算
+                </div>
+              </template>
+              <n-empty v-else description="本月未设置预算" />
+            </n-tab-pane>
+            <n-tab-pane name="annual" :tab="annualTabLabel">
+              <template v-if="annualBudget">
+                <div class="budget-overall">
+                  <div>
+                    <div class="bo-label">已花 / 年度预算</div>
+                    <div class="bo-value">
+                      ¥{{ formatNum(annualBudget.totalSpent) }}
+                      <span class="bo-muted">/ ¥{{ formatNum(annualBudget.totalBudget) }}</span>
+                    </div>
+                  </div>
+                  <div class="bo-pct" :class="annualBudget.progressPct > 100 ? 'red' : 'green'">
+                    {{ annualBudget.progressPct }}%
+                  </div>
+                </div>
+                <n-progress
+                  type="line"
+                  :percentage="Math.min(annualBudget.progressPct, 100)"
+                  :status="getProgressStatus(annualBudget.progressPct > 100 ? 'EXCEEDED' : 'NORMAL')"
+                  :show-indicator="false"
+                  :height="8"
+                  style="margin: 8px 0 14px"
+                />
+                <div class="budget-list">
+                  <div v-for="item in annualBudget.items" :key="item.categoryId" class="budget-item">
+                    <div class="budget-header">
+                      <span>{{ item.categoryName }}</span>
+                      <span :class="['badge', item.status.toLowerCase()]">{{ item.progressPct }}%</span>
+                    </div>
+                    <n-progress
+                      type="line"
+                      :percentage="Math.min(item.progressPct, 100)"
+                      :status="getProgressStatus(item.status)"
+                      :show-indicator="false"
+                      :height="6"
+                      style="margin-top: 6px"
+                    />
+                    <div class="budget-amounts">
+                      <span class="spent">已花 ¥{{ formatNum(item.spent) }}</span>
+                      <span class="budget">预算 ¥{{ formatNum(item.budget) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <n-empty v-else description="未设置年度预算" />
+            </n-tab-pane>
+          </n-tabs>
         </n-card>
       </n-gi>
       <n-gi>
         <n-card title="分类占比" hoverable>
-          <div ref="pieChartRef" style="width: 100%; height: 300px"></div>
+          <template #header-extra>
+            <n-radio-group v-model:value="pieMode" size="small">
+              <n-radio-button value="excludingFixed">不含固定支出</n-radio-button>
+              <n-radio-button value="all">全部支出</n-radio-button>
+            </n-radio-group>
+          </template>
+          <div v-if="pieChartData.length" ref="pieChartRef" style="width: 100%; height: 300px"></div>
+          <n-empty v-else description="本月无支出数据" style="height: 300px; justify-content: center" />
         </n-card>
       </n-gi>
       <n-gi>
@@ -79,10 +160,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, h } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { reportApi, budgetApi, transactionApi, accountApi } from '@/api'
+import { reportApi, budgetApi, annualBudgetApi, transactionApi, accountApi } from '@/api'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 
@@ -91,12 +172,33 @@ const message = useMessage()
 const loading = ref(true)
 const totalAssets = ref(0)
 const summaryCards = ref([])
-const budgetProgress = ref([])
+const monthlyBudget = ref(null)
+const annualBudget = ref(null)
+const budgetTab = ref('monthly')
 const recentTransactions = ref([])
 const pieChartRef = ref(null)
 const merchantPieRef = ref(null)
 const pieChart = ref(null)
 const merchantPieChart = ref(null)
+
+const currentMonth = dayjs().format('YYYY-MM')
+const currentYear = dayjs().year()
+const monthLabel = (ym) => `${Number(ym.slice(5))}月`
+const monthlyTabLabel = computed(() => `月度 · ${monthLabel(monthlyBudget.value?.yearMonth || currentMonth)}`)
+const annualTabLabel = computed(() => `年度 · ${annualBudget.value?.year || currentYear}`)
+const monthlyFallback = computed(() => !!monthlyBudget.value && monthlyBudget.value.yearMonth !== currentMonth)
+
+const pieMode = ref('excludingFixed')
+const categorySharesAll = ref([])
+const categorySharesExcludingFixed = ref([])
+const pieChartData = computed(() =>
+  pieMode.value === 'excludingFixed' ? categorySharesExcludingFixed.value : categorySharesAll.value
+)
+
+watch(pieMode, async () => {
+  await nextTick()
+  renderPieChart()
+})
 
 const columns = [
   { title: '日期', key: 'date', width: 110 },
@@ -121,12 +223,13 @@ onMounted(async () => {
   const month = now.format('YYYY-MM')
 
   try {
-    const [summaryRes, budgetRes, txRes, assetsRes, merchantRes] = await Promise.allSettled([
+    const [summaryRes, budgetRes, txRes, assetsRes, merchantRes, annualRes] = await Promise.allSettled([
       reportApi.monthlySummary(month),
-      budgetApi.progress(month),
+      budgetApi.progress(month, true),
       transactionApi.list({ page: 1, size: 10, sort: 'transaction_date,desc' }),
       accountApi.totalAssets(),
-      reportApi.merchantDistribution(month)
+      reportApi.merchantDistribution(month),
+      annualBudgetApi.progress(String(now.year()))
     ])
 
     if (summaryRes.status === 'fulfilled' && summaryRes.value.data?.monthlySummary) {
@@ -138,28 +241,21 @@ onMounted(async () => {
         { label: '日均支出', value: `¥${formatNum(s.avgDailyExpense)}`, sub: '日均消费', color: 'blue' }
       ]
 
-      // 饼图
-      if (pieChartRef.value && s.categoryShares?.length) {
-        pieChart.value = echarts.init(pieChartRef.value)
-        pieChart.value.setOption({
-          tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-          series: [{
-            type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
-            itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
-            data: s.categoryShares.map(c => ({
-              name: c.categoryName,
-              value: Number(c.amount),
-              itemStyle: { color: c.categoryColor || '#3498db' }
-            }))
-          }]
-        })
-      }
+      categorySharesAll.value = s.categoryShares || []
+      categorySharesExcludingFixed.value = s.categorySharesExcludingFixed || []
+      await nextTick()
+      renderPieChart()
     }
 
     if (budgetRes.status === 'fulfilled' && budgetRes.value.data) {
-      budgetProgress.value = Array.isArray(budgetRes.value.data.items) ? budgetRes.value.data.items : []
+      monthlyBudget.value = budgetRes.value.data
+      if (!budgetRes.value.data.items?.length) {
+        monthlyBudget.value = null
+      }
+    }
+
+    if (annualRes.status === 'fulfilled' && annualRes.value.data) {
+      annualBudget.value = annualRes.value.data
     }
 
     if (txRes.status === 'fulfilled' && txRes.value.data?.items) {
@@ -211,6 +307,34 @@ onBeforeUnmount(() => {
   pieChart.value?.dispose()
   merchantPieChart.value?.dispose()
 })
+
+function renderPieChart() {
+  if (!pieChartRef.value || !pieChartData.value.length) return
+  if (pieChart.value && pieChart.value.getDom() !== pieChartRef.value) {
+    pieChart.value.dispose()
+    pieChart.value = null
+  }
+  if (!pieChart.value) {
+    pieChart.value = echarts.init(pieChartRef.value)
+  }
+  pieChart.value.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    legend: { bottom: 0, type: 'scroll' },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['50%', '44%'],
+      avoidLabelOverlap: false,
+      itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      data: pieChartData.value.map(c => ({
+        name: c.categoryName,
+        value: Number(c.amount),
+        itemStyle: { color: c.categoryColor || '#3498db' }
+      }))
+    }]
+  }, true)
+  pieChart.value.resize()
+}
 
 function getProgressStatus(status) {
   switch (status) {
@@ -307,8 +431,16 @@ function formatNum(n) {
 .red { color: #ef4444; }
 .blue { color: #2563eb; }
 
+.budget-overall { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 12px; }
+.bo-label { font-size: 11px; color: var(--bp-muted); margin-bottom: 3px; }
+.bo-value { font-size: 16px; font-weight: 700; color: var(--bp-ink); }
+.bo-muted { font-size: 12px; font-weight: 500; color: var(--bp-muted); }
+.bo-pct { font-size: 18px; font-weight: 750; }
+.bo-pct.green { color: #10b981; }
+.bo-pct.red { color: #ef4444; }
 .budget-list { max-height: 300px; overflow-y: auto; }
 .budget-item { margin-bottom: 18px; }
+.budget-hint { margin-top: 4px; padding: 6px 10px; border-radius: 8px; background: #f8fafc; color: var(--bp-muted); font-size: 11px; }
 .budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; }
 .badge.exceeded { background: #ef4444; }

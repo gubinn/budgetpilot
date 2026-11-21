@@ -92,7 +92,18 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
 
     @Override
     public BudgetProgressVO getProgress(String yearMonth) {
+        return getProgress(yearMonth, false);
+    }
+
+    @Override
+    public BudgetProgressVO getProgress(String yearMonth, boolean fallback) {
         Budget budget = getBudgetByMonth(yearMonth);
+        if (budget == null && fallback) {
+            budget = findNearestBudget(yearMonth);
+            if (budget != null) {
+                yearMonth = budget.getYearMonth();
+            }
+        }
         if (budget == null) {
             throw new BizException(ErrorCode.BUDGET_NOT_FOUND);
         }
@@ -358,6 +369,22 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         LambdaQueryWrapper<Budget> query = new LambdaQueryWrapper<>();
         query.eq(Budget::getYearMonth, yearMonth);
         return baseMapper.selectOne(query);
+    }
+
+    /** 最近一期预算：优先取不晚于目标月份的最近一期，否则取之后最早的一期。 */
+    private Budget findNearestBudget(String yearMonth) {
+        LambdaQueryWrapper<Budget> before = new LambdaQueryWrapper<>();
+        before.le(Budget::getYearMonth, yearMonth)
+                .orderByDesc(Budget::getYearMonth)
+                .last("LIMIT 1");
+        Budget budget = baseMapper.selectOne(before);
+        if (budget != null) return budget;
+
+        LambdaQueryWrapper<Budget> after = new LambdaQueryWrapper<>();
+        after.gt(Budget::getYearMonth, yearMonth)
+                .orderByAsc(Budget::getYearMonth)
+                .last("LIMIT 1");
+        return baseMapper.selectOne(after);
     }
 
     private List<BudgetProgressVO.ItemProgress> calculateItemProgress(Budget budget, String yearMonth) {

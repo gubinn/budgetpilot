@@ -36,6 +36,8 @@ public class ReportVO {
         private BigDecimal balance;
         private BigDecimal avgDailyExpense;
         private List<CategoryShareItem> categoryShares;
+        /** 分类占比（剔除固定支出分类，用于首页“不含固定支出”视图） */
+        private List<CategoryShareItem> categorySharesExcludingFixed;
         /** 标签统计（支出交易；一笔交易多个标签会在每个标签下各计一次） */
         private List<TagShareItem> tagShares;
         /** 商户消费占比（月度总览中包含） */

@@ -87,49 +87,20 @@ public class ReportServiceImpl implements ReportService {
         summary.setBalance(summary.getTotalIncome().subtract(totalExpense));
 
         // 分类占比：level=1 归并到父分类；level=2 按实际分类展示；退款冲减原分类
-        Map<Long, BigDecimal> categoryAmounts = new HashMap<>();
-        for (Transaction tx : expenses) {
-            Long catId = tx.getCategoryId();
-            if (catId == null) continue;
-            Long groupId = catId;
-            Category cat = catMap.get(catId);
-            if (reportLevel == 1 && cat != null && cat.getParentId() != null && cat.getParentId() != 0) {
-                groupId = cat.getParentId();
-            }
-            BigDecimal delta = tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase();
-            categoryAmounts.merge(groupId, delta, BigDecimal::add);
-        }
+        Map<Long, BigDecimal> categoryAmounts = groupCategoryAmounts(expenses, catMap, reportLevel);
+        summary.setCategoryShares(buildCategoryShares(categoryAmounts, totalExpense, catMap, reportLevel));
 
-        List<ReportVO.MonthlySummary.CategoryShareItem> shares = new ArrayList<>();
-        for (Map.Entry<Long, BigDecimal> entry : categoryAmounts.entrySet()) {
-            ReportVO.MonthlySummary.CategoryShareItem item = new ReportVO.MonthlySummary.CategoryShareItem();
-            item.setCategoryId(entry.getKey());
-            item.setAmount(entry.getValue());
-            if (totalExpense.compareTo(BigDecimal.ZERO) == 0) {
-                item.setPercentage(BigDecimal.ZERO);
-            } else {
-                item.setPercentage(entry.getValue().divide(totalExpense, 4, RoundingMode.HALF_UP).multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
-            }
-
-            Category cat = catMap.get(entry.getKey());
-            if (cat != null) {
-                item.setCategoryName(cat.getName());
-                item.setCategoryColor(cat.getColor());
-                if (reportLevel == 2 && cat.getParentId() != null && cat.getParentId() != 0) {
-                    Category parent = catMap.get(cat.getParentId());
-                    if (parent != null) {
-                        item.setParentId(parent.getId());
-                        item.setParentName(parent.getName());
-                        if (item.getCategoryColor() == null) {
-                            item.setCategoryColor(parent.getColor());
-                        }
-                    }
-                }
-            }
-            shares.add(item);
-        }
-        shares.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
-        summary.setCategoryShares(shares);
+        // 分类占比（剔除固定支出）：固定支出不参与该视图，百分比按剔除后的总额计算
+        List<Transaction> nonFixedExpenses = expenses.stream()
+                .filter(tx -> {
+                    Category cat = catMap.get(tx.getCategoryId());
+                    return cat == null || !"FIXED".equals(cat.getBudgetType());
+                })
+                .toList();
+        BigDecimal nonFixedExpense = sumNetExpense(nonFixedExpenses);
+        Map<Long, BigDecimal> nonFixedAmounts = groupCategoryAmounts(nonFixedExpenses, catMap, reportLevel);
+        summary.setCategorySharesExcludingFixed(
+                buildCategoryShares(nonFixedAmounts, nonFixedExpense, catMap, reportLevel));
 
         // 标签统计：仅统计支出交易；一笔交易有多个标签时，每个标签各计全额
         Map<String, BigDecimal> tagAmounts = new LinkedHashMap<>();
@@ -570,6 +541,69 @@ public class ReportServiceImpl implements ReportService {
         if (tx.getCategoryId() == null) return true;
         Category category = categories.get(tx.getCategoryId());
         return category == null || !Boolean.TRUE.equals(category.getExcludeFromReports());
+    }
+
+    /** 按一级/二级分类归并支出金额；退款冲减原分类。 */
+    private Map<Long, BigDecimal> groupCategoryAmounts(List<Transaction> txs,
+                                                       Map<Long, Category> catMap,
+                                                       int reportLevel) {
+        Map<Long, BigDecimal> amounts = new HashMap<>();
+        for (Transaction tx : txs) {
+            Long catId = tx.getCategoryId();
+            if (catId == null) continue;
+            Long groupId = catId;
+            Category cat = catMap.get(catId);
+            if (reportLevel == 1 && cat != null && cat.getParentId() != null && cat.getParentId() != 0) {
+                groupId = cat.getParentId();
+            }
+            BigDecimal delta = tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase();
+            amounts.merge(groupId, delta, BigDecimal::add);
+        }
+        return amounts;
+    }
+
+    private List<ReportVO.MonthlySummary.CategoryShareItem> buildCategoryShares(
+            Map<Long, BigDecimal> categoryAmounts, BigDecimal total,
+            Map<Long, Category> catMap, int reportLevel) {
+        List<ReportVO.MonthlySummary.CategoryShareItem> shares = new ArrayList<>();
+        for (Map.Entry<Long, BigDecimal> entry : categoryAmounts.entrySet()) {
+            ReportVO.MonthlySummary.CategoryShareItem item = new ReportVO.MonthlySummary.CategoryShareItem();
+            item.setCategoryId(entry.getKey());
+            item.setAmount(entry.getValue());
+            if (total.compareTo(BigDecimal.ZERO) == 0) {
+                item.setPercentage(BigDecimal.ZERO);
+            } else {
+                item.setPercentage(entry.getValue().divide(total, 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP));
+            }
+
+            Category cat = catMap.get(entry.getKey());
+            if (cat != null) {
+                item.setCategoryName(cat.getName());
+                item.setCategoryColor(cat.getColor());
+                if (reportLevel == 2 && cat.getParentId() != null && cat.getParentId() != 0) {
+                    Category parent = catMap.get(cat.getParentId());
+                    if (parent != null) {
+                        item.setParentId(parent.getId());
+                        item.setParentName(parent.getName());
+                        if (item.getCategoryColor() == null) {
+                            item.setCategoryColor(parent.getColor());
+                        }
+                    }
+                }
+            }
+            shares.add(item);
+        }
+        shares.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
+        return shares;
+    }
+
+    /** 净支出 = 支出(type=1) - 退款(type=4)，入参应已过滤可统计交易。 */
+    private BigDecimal sumNetExpense(List<Transaction> txs) {
+        if (txs == null || txs.isEmpty()) return BigDecimal.ZERO;
+        return txs.stream()
+                .map(tx -> tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /** 净支出 = 支出(type=1) - 退款(type=4)。 */

@@ -18,8 +18,15 @@
 
     <!-- 饼图：分类占比 -->
     <div v-if="hasCategoryData" class="chart-card">
-      <h3 class="chart-title">分类占比</h3>
-      <div ref="pieChartRef" style="width: 100%; height: 260px"></div>
+      <div class="chart-header">
+        <h3 class="chart-title">分类占比</h3>
+        <n-radio-group v-model:value="pieMode" size="small">
+          <n-radio-button value="excludingFixed">不含固定支出</n-radio-button>
+          <n-radio-button value="all">全部支出</n-radio-button>
+        </n-radio-group>
+      </div>
+      <div v-show="pieChartData.length" ref="pieChartRef" style="width: 100%; height: 260px"></div>
+      <n-empty v-if="!pieChartData.length" description="本月无支出数据" style="padding: 40px 0" />
     </div>
 
     <!-- 饼图：商户消费 -->
@@ -28,26 +35,78 @@
       <div ref="merchantPieRef" style="width: 100%; height: 260px"></div>
     </div>
 
-    <!-- 预算进度 -->
-    <div v-if="budgetProgress?.length" class="section-card">
+    <!-- 预算进度：月度 + 年度 -->
+    <div v-if="monthlyBudget || annualBudget" class="section-card">
       <h3 class="section-title">预算进度</h3>
-      <div v-for="item in budgetProgress" :key="item.categoryId" class="budget-item">
-        <div class="budget-header">
-          <span>{{ item.categoryName }}</span>
-          <span class="budget-pct" :class="item.status.toLowerCase()">{{ item.progressPct }}%</span>
+
+      <template v-if="monthlyBudget">
+        <div class="budget-group-title">
+          月度 · {{ monthlyBudget.yearMonth }}
+          <span v-if="monthlyFallback" class="fallback-tag">本月未设置</span>
+        </div>
+        <div class="budget-overall">
+          <span>已花 ¥{{ formatNum(monthlyBudget.totalSpent) }} / ¥{{ formatNum(monthlyBudget.totalBudget) }}</span>
+          <span class="budget-pct" :class="monthlyBudget.progressPct > 100 ? 'exceeded' : 'normal'">{{ monthlyBudget.progressPct }}%</span>
         </div>
         <n-progress
           type="line"
-          :percentage="Math.min(item.progressPct, 100)"
-          :status="getProgressStatus(item.status)"
+          :percentage="Math.min(monthlyBudget.progressPct, 100)"
+          :status="getProgressStatus(monthlyBudget.progressPct > 100 ? 'EXCEEDED' : 'NORMAL')"
           :show-indicator="false"
           :height="6"
+          style="margin-bottom: 12px"
         />
-        <div class="budget-amounts">
-          <span>已花 ¥{{ formatNum(item.spent) }}</span>
-          <span>预算 ¥{{ formatNum(item.budget) }}</span>
+        <div v-for="item in monthlyBudget.items" :key="item.categoryId" class="budget-item">
+          <div class="budget-header">
+            <span>{{ item.categoryName }}</span>
+            <span class="budget-pct" :class="item.status.toLowerCase()">{{ item.progressPct }}%</span>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="Math.min(item.progressPct, 100)"
+            :status="getProgressStatus(item.status)"
+            :show-indicator="false"
+            :height="6"
+          />
+          <div class="budget-amounts">
+            <span>已花 ¥{{ formatNum(item.spent) }}</span>
+            <span>预算 ¥{{ formatNum(item.budget) }}</span>
+          </div>
         </div>
-      </div>
+      </template>
+
+      <template v-if="annualBudget">
+        <div class="budget-group-title" :class="{ spaced: monthlyBudget }">年度 · {{ annualBudget.year }}</div>
+        <div class="budget-overall">
+          <span>已花 ¥{{ formatNum(annualBudget.totalSpent) }} / ¥{{ formatNum(annualBudget.totalBudget) }}</span>
+          <span class="budget-pct" :class="annualBudget.progressPct > 100 ? 'exceeded' : 'normal'">{{ annualBudget.progressPct }}%</span>
+        </div>
+        <n-progress
+          type="line"
+          :percentage="Math.min(annualBudget.progressPct, 100)"
+          :status="getProgressStatus(annualBudget.progressPct > 100 ? 'EXCEEDED' : 'NORMAL')"
+          :show-indicator="false"
+          :height="6"
+          style="margin-bottom: 12px"
+        />
+        <div v-for="item in annualBudget.items" :key="item.categoryId" class="budget-item">
+          <div class="budget-header">
+            <span>{{ item.categoryName }}</span>
+            <span class="budget-pct" :class="item.status.toLowerCase()">{{ item.progressPct }}%</span>
+          </div>
+          <n-progress
+            type="line"
+            :percentage="Math.min(item.progressPct, 100)"
+            :status="getProgressStatus(item.status)"
+            :show-indicator="false"
+            :height="6"
+          />
+          <div class="budget-amounts">
+            <span>已花 ¥{{ formatNum(item.spent) }}</span>
+            <span>预算 ¥{{ formatNum(item.budget) }}</span>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- 最近交易 -->
@@ -73,10 +132,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { reportApi, budgetApi, transactionApi, accountApi } from '@/api'
+import { reportApi, budgetApi, annualBudgetApi, transactionApi, accountApi } from '@/api'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 
@@ -84,25 +143,45 @@ const router = useRouter()
 const message = useMessage()
 const totalAssets = ref(0)
 const summaryCards = ref([])
-const budgetProgress = ref([])
+const monthlyBudget = ref(null)
+const annualBudget = ref(null)
 const recentTransactions = ref([])
-const hasCategoryData = ref(false)
 const hasMerchantData = ref(false)
 const pieChartRef = ref(null)
 const merchantPieRef = ref(null)
 const pieChart = ref(null)
 const merchantPieChart = ref(null)
 
+const currentMonth = dayjs().format('YYYY-MM')
+const monthlyFallback = computed(() => !!monthlyBudget.value && monthlyBudget.value.yearMonth !== currentMonth)
+
+const pieMode = ref('excludingFixed')
+const categorySharesAll = ref([])
+const categorySharesExcludingFixed = ref([])
+const pieChartData = computed(() =>
+  pieMode.value === 'excludingFixed' ? categorySharesExcludingFixed.value : categorySharesAll.value
+)
+const hasCategoryData = computed(() =>
+  categorySharesAll.value.length > 0 || categorySharesExcludingFixed.value.length > 0
+)
+
+watch(pieMode, async () => {
+  await nextTick()
+  renderPieChart()
+})
+
 onMounted(async () => {
-  const month = dayjs().format('YYYY-MM')
+  const now = dayjs()
+  const month = now.format('YYYY-MM')
 
   try {
-    const [summaryRes, budgetRes, txRes, assetsRes, merchantRes] = await Promise.allSettled([
+    const [summaryRes, budgetRes, txRes, assetsRes, merchantRes, annualRes] = await Promise.allSettled([
       reportApi.monthlySummary(month),
-      budgetApi.progress(month),
+      budgetApi.progress(month, true),
       transactionApi.list({ page: 1, size: 10, sort: 'transaction_date,desc' }),
       accountApi.totalAssets(),
-      reportApi.merchantDistribution(month)
+      reportApi.merchantDistribution(month),
+      annualBudgetApi.progress(String(now.year()))
     ])
 
     // 月度概况
@@ -116,28 +195,21 @@ onMounted(async () => {
       ]
 
       // 分类占比饼图
-      if (pieChartRef.value && s.categoryShares?.length) {
-        hasCategoryData.value = true
-        await new Promise(r => setTimeout(r, 100))
-        pieChart.value = echarts.init(pieChartRef.value)
-        pieChart.value.setOption({
-          tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-          series: [{
-            type: 'pie',
-            radius: ['40%', '70%'],
-            data: s.categoryShares.map(c => ({
-              name: c.categoryName,
-              value: Number(c.amount),
-              itemStyle: { color: c.categoryColor || '#3498db' }
-            }))
-          }]
-        })
-      }
+      categorySharesAll.value = s.categoryShares || []
+      categorySharesExcludingFixed.value = s.categorySharesExcludingFixed || []
+      await nextTick()
+      renderPieChart()
     }
 
-    // 预算进度
+    // 预算进度：月度 + 年度
     if (budgetRes.status === 'fulfilled' && budgetRes.value.data) {
-      budgetProgress.value = Array.isArray(budgetRes.value.data.items) ? budgetRes.value.data.items : []
+      monthlyBudget.value = budgetRes.value.data
+      if (!budgetRes.value.data.items?.length) {
+        monthlyBudget.value = null
+      }
+    }
+    if (annualRes.status === 'fulfilled' && annualRes.value.data) {
+      annualBudget.value = annualRes.value.data
     }
 
     // 最近交易
@@ -187,6 +259,32 @@ onBeforeUnmount(() => {
   pieChart.value?.dispose()
   merchantPieChart.value?.dispose()
 })
+
+function renderPieChart() {
+  if (!pieChartRef.value || !pieChartData.value.length) return
+  if (pieChart.value && pieChart.value.getDom() !== pieChartRef.value) {
+    pieChart.value.dispose()
+    pieChart.value = null
+  }
+  if (!pieChart.value) {
+    pieChart.value = echarts.init(pieChartRef.value)
+  }
+  pieChart.value.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    legend: { bottom: 0, type: 'scroll' },
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['50%', '44%'],
+      data: pieChartData.value.map(c => ({
+        name: c.categoryName,
+        value: Number(c.amount),
+        itemStyle: { color: c.categoryColor || '#3498db' }
+      }))
+    }]
+  }, true)
+  pieChart.value.resize()
+}
 
 function getProgressStatus(status) {
   switch (status) {
@@ -279,6 +377,15 @@ function formatNum(n) {
   color: var(--bp-ink);
 }
 
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.chart-header .chart-title { margin-bottom: 0; }
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -287,6 +394,32 @@ function formatNum(n) {
 }
 
 /* 预算进度 */
+.budget-group-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--bp-ink);
+  margin-bottom: 6px;
+}
+.budget-group-title.spaced { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--bp-line); }
+.fallback-tag {
+  font-size: 10px;
+  font-weight: 500;
+  color: #b45309;
+  background: #fef3c7;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+.budget-overall {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--bp-muted);
+  margin-bottom: 4px;
+}
 .budget-item { margin-bottom: 14px; }
 .budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 .budget-pct { font-size: 11px; padding: 2px 6px; border-radius: 8px; color: #fff; }
