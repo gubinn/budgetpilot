@@ -9,8 +9,23 @@ import org.apache.ibatis.annotations.Update;
 import uk.gubin.budgetpilot.entity.Account;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public interface AccountMapper extends BaseMapper<Account> {
+
+    /**
+     * 定时任务没有登录上下文，必须显式忽略租户过滤。
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    @Select("SELECT * FROM t_account WHERE is_active = 1")
+    List<Account> selectAllActive();
+
+    /**
+     * 校准任务只更新余额，绕过租户过滤（定时任务线程没有登录用户）。
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    @Update("UPDATE t_account SET current_balance = #{balance}, updated_at = NOW() WHERE id = #{id}")
+    int updateBalanceForCalibration(@Param("id") Long id, @Param("balance") BigDecimal balance);
 
     @Update("UPDATE t_account SET current_balance = current_balance + #{adjustAmount} WHERE id = #{accountId}")
     int adjustBalance(@Param("accountId") Long accountId, @Param("adjustAmount") BigDecimal adjustAmount);

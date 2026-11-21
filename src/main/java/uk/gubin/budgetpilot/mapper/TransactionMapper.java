@@ -9,9 +9,18 @@ import org.apache.ibatis.annotations.Update;
 import uk.gubin.budgetpilot.dto.MerchantUsageStatDTO;
 import uk.gubin.budgetpilot.entity.Transaction;
 
+import java.time.LocalDate;
 import java.util.List;
 
 public interface TransactionMapper extends BaseMapper<Transaction> {
+
+    /**
+     * 校准任务按账户读取全部已确认交易（含转入），绕过租户过滤。
+     */
+    @InterceptorIgnore(tenantLine = "true")
+    @Select("SELECT * FROM t_transaction WHERE is_confirmed = 1 AND transaction_date >= #{start} " +
+            "AND (account_id = #{accountId} OR target_account_id = #{accountId})")
+    List<Transaction> selectForCalibration(@Param("accountId") Long accountId, @Param("start") LocalDate start);
 
     @InterceptorIgnore(tenantLine = "true")
     @Delete("DELETE FROM t_transaction WHERE user_id = #{userId}")

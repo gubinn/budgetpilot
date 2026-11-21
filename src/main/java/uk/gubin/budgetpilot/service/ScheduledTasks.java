@@ -155,29 +155,22 @@ public class ScheduledTasks {
     @Scheduled(cron = "0 30 2 * * ?")
     @Transactional
     public void calibrateAccountBalances() {
-        log.info("Scheduled: calibrating account balances");
-        LambdaQueryWrapper<Account> query = new LambdaQueryWrapper<>();
-        query.eq(Account::getIsActive, true);
-        List<Account> accounts = accountMapper.selectList(query);
+        // 定时任务线程没有登录用户，必须使用带 @InterceptorIgnore 的 mapper 查询/更新，
+        // 否则租户拦截器会追加 user_id = null，导致查询 0 行、更新 0 行。
+        List<Account> accounts = accountMapper.selectAllActive();
+        log.info("Scheduled: calibrating {} active accounts", accounts.size());
         LocalDate start = LocalDate.of(2000, 1, 1);
 
         for (Account account : accounts) {
-            LambdaQueryWrapper<Transaction> txQuery = new LambdaQueryWrapper<>();
-            txQuery.eq(Transaction::getIsConfirmed, true)
-                    .ge(Transaction::getTransactionDate, start)
-                    .and(w -> w.eq(Transaction::getAccountId, account.getId())
-                            .or().eq(Transaction::getTargetAccountId, account.getId()));
-
-            List<Transaction> txs = transactionMapper.selectList(txQuery);
+            List<Transaction> txs = transactionMapper.selectForCalibration(account.getId(), start);
             BigDecimal calibrated = calculateCalibratedBalance(
                     account.getInitialBalance(), account.getId(), txs);
             BigDecimal old = account.getCurrentBalance();
             if (old == null || old.compareTo(calibrated) != 0) {
                 log.info("Calibrating account {} ({}): {} -> {}",
                         account.getName(), account.getId(), old, calibrated);
+                accountMapper.updateBalanceForCalibration(account.getId(), calibrated);
             }
-            account.setCurrentBalance(calibrated);
-            accountMapper.updateById(account);
         }
     }
 
