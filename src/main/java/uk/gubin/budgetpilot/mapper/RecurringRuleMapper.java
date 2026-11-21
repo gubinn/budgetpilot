@@ -15,4 +15,7 @@ public interface RecurringRuleMapper extends BaseMapper<RecurringRule> {
 
     @Update("UPDATE t_recurring_rule SET merchant_id = #{targetId} WHERE merchant_id = #{sourceId}")
     int reassignMerchant(@Param("sourceId") Long sourceId, @Param("targetId") Long targetId);
+
+    @Update("UPDATE t_recurring_rule SET category_id = #{targetId} WHERE category_id = #{sourceId}")
+    int reassignCategory(@Param("sourceId") Long sourceId, @Param("targetId") Long targetId);
 }

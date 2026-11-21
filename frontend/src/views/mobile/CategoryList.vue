@@ -14,6 +14,13 @@
           <div class="cat-left">
             <span class="color-dot" :style="{ background: cat.color || '#ccc' }"></span>
             <span class="cat-name">{{ cat.name }}</span>
+            <n-tag
+              v-if="cat.type === 1 && cat.budgetType && cat.budgetType !== 'DAILY'"
+              size="tiny"
+              :type="cat.budgetType === 'FIXED' ? 'default' : cat.budgetType === 'SPECIAL' ? 'warning' : 'error'"
+              :bordered="false"
+            >{{ budgetTypeLabels[cat.budgetType] || cat.budgetType }}</n-tag>
+            <n-tag v-if="cat.transactionCount" size="tiny" :bordered="false">{{ cat.transactionCount }} 笔</n-tag>
             <n-tag v-if="cat.isSystem" size="tiny" type="info" :bordered="false">系统</n-tag>
           </div>
           <div class="cat-actions">
@@ -36,6 +43,9 @@
           </n-form-item>
           <n-form-item label="父分类">
             <n-select v-model:value="form.parentId" :options="parentOptions" clearable placeholder="顶级分类" />
+          </n-form-item>
+          <n-form-item v-if="form.type === 1" label="预算属性">
+            <n-select v-model:value="form.budgetType" :options="budgetTypeOptions" />
           </n-form-item>
           <n-form-item label="颜色">
             <n-color-picker v-model:value="form.color" :show-alpha="false" />
@@ -76,12 +86,19 @@ const showCreate = ref(false)
 const editingId = ref(null)
 const submitting = ref(false)
 
-const form = ref({ name: '', type: 1, parentId: 0, color: '#3498db', icon: '' })
+const form = ref({ name: '', type: 1, parentId: 0, budgetType: 'DAILY', color: '#3498db', icon: '' })
 
 const typeOptions = [
   { label: '支出', value: 1 },
   { label: '收入', value: 2 }
 ]
+const budgetTypeOptions = [
+  { label: '日常（月度预算）', value: 'DAILY' },
+  { label: '固定（不预算）', value: 'FIXED' },
+  { label: '专项（年度预算）', value: 'SPECIAL' },
+  { label: '非预算流水', value: 'NONE' }
+]
+const budgetTypeLabels = Object.fromEntries(budgetTypeOptions.map(o => [o.value, o.label]))
 
 const parentOptions = computed(() => {
   const roots = categories.value.filter(c => c.parentId === 0 && c.type === form.value.type)
@@ -111,13 +128,13 @@ const filteredCats = computed(() => {
 
 function openCreate() {
   editingId.value = null
-  form.value = { name: '', type: filterType.value || 1, parentId: 0, color: '#3498db', icon: '' }
+  form.value = { name: '', type: filterType.value || 1, parentId: 0, budgetType: 'DAILY', color: '#3498db', icon: '' }
   showCreate.value = true
 }
 
 function handleEdit(row) {
   editingId.value = row.id
-  form.value = { name: row.name, type: row.type, parentId: row.parentId, color: row.color, icon: row.icon || '' }
+  form.value = { name: row.name, type: row.type, parentId: row.parentId, budgetType: row.budgetType || 'DAILY', color: row.color, icon: row.icon || '' }
   showCreate.value = true
 }
 

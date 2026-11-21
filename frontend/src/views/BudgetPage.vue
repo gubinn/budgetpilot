@@ -37,6 +37,18 @@
       </n-gi>
     </n-grid>
 
+    <n-alert v-if="budgetMode === 'monthly'" type="info" :bordered="false" style="margin-bottom: 12px">
+      月度预算只统计日常分类；固定支出（房租/房贷/保险）和年度专项（旅行/学费/大额购物）不占本预算，但仍计入报表总支出。
+    </n-alert>
+
+    <n-card v-if="budgetMode === 'monthly' && fixedExpenses.length" size="small" title="固定支出（不占预算）" style="margin-bottom: 12px">
+      <n-space>
+        <n-tag v-for="item in fixedExpenses" :key="item.categoryId" :bordered="false" type="default">
+          {{ item.categoryName }}：¥{{ formatNum(item.spent) }}
+        </n-tag>
+      </n-space>
+    </n-card>
+
     <!-- 分类进度 -->
     <div v-if="budget?.items" class="budget-items">
       <div v-for="item in budget.items" :key="item.categoryId" class="budget-item-card">
@@ -113,6 +125,7 @@ const budgetMode = ref('monthly')
 const selectedMonth = ref(dayjs().format('YYYY-MM'))
 const selectedYear = ref(String(dayjs().year()))
 const budget = ref(null)
+const fixedExpenses = ref([])
 const showCreate = ref(false)
 const submitting = ref(false)
 const expenseCategories = ref([])
@@ -169,6 +182,16 @@ async function loadBudget() {
     budget.value = res.data
   } catch (e) {
     budget.value = null
+  }
+  if (budgetMode.value === 'monthly') {
+    try {
+      const fixed = await budgetApi.fixedSummary(selectedMonth.value)
+      fixedExpenses.value = fixed.data || []
+    } catch (e) {
+      fixedExpenses.value = []
+    }
+  } else {
+    fixedExpenses.value = []
   }
 }
 
@@ -294,23 +317,22 @@ onMounted(async () => {
         id: parent.id,
         name: parent.name,
         displayName: parent.name,
-        parentId: 0
+        parentId: 0,
+        budgetType: parent.budgetType
       })
       ;(parent.children || []).forEach(child => {
         flat.push({
           id: child.id,
           name: child.name,
           displayName: `　${child.name}`,
-          parentId: parent.id
+          parentId: parent.id,
+          budgetType: child.budgetType
         })
       })
     })
-    expenseCategories.value = flat
-    const specialParent = flat.find(c => c.parentId === 0 && c.name === '专项支出')
-    annualCategories.value = specialParent
-      ? flat.filter(c => c.parentId === specialParent.id)
-      : []
-    createForm.value.items = flat.map(c => ({
+    expenseCategories.value = flat.filter(c => c.budgetType === 'DAILY')
+    annualCategories.value = flat.filter(c => c.budgetType === 'SPECIAL')
+    createForm.value.items = expenseCategories.value.map(c => ({
       categoryId: c.id,
       categoryName: c.displayName,
       amount: 0

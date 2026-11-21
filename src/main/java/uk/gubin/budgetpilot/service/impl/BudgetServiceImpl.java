@@ -20,6 +20,7 @@ import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 import uk.gubin.budgetpilot.service.BudgetService;
 import uk.gubin.budgetpilot.vo.BudgetProgressVO;
+import uk.gubin.budgetpilot.vo.FixedExpenseVO;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -112,26 +113,14 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         itemQuery.eq(BudgetItem::getBudgetId, budget.getId());
         List<BudgetItem> budgetItems = budgetItemMapper.selectList(itemQuery);
 
-        List<Long> budgetCatIds = new ArrayList<>();
-        for (BudgetItem item : budgetItems) {
-            budgetCatIds.add(item.getCategoryId());
-            budgetCatIds.addAll(getChildCategoryIds(item.getCategoryId()));
-        }
+        Map<Long, Category> allCats = loadAllCategories();
+        Set<Long> budgetCatIds = collectBudgetCategoryIds(budgetItems, "DAILY", allCats);
 
         BigDecimal totalSpent;
         if (budgetCatIds.isEmpty()) {
             totalSpent = BigDecimal.ZERO;
         } else {
-            LambdaQueryWrapper<Transaction> totalQuery = new LambdaQueryWrapper<>();
-            totalQuery.eq(Transaction::getType, 1)
-                    .eq(Transaction::getIsConfirmed, true)
-                    .in(Transaction::getCategoryId, budgetCatIds)
-                    .ge(Transaction::getTransactionDate, start)
-                    .le(Transaction::getTransactionDate, end);
-            List<Transaction> txs = transactionMapper.selectList(totalQuery);
-            totalSpent = txs.stream()
-                    .map(Transaction::getAmountBase)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalSpent = sumNetExpense(budgetCatIds, start, end);
         }
 
         BigDecimal remaining = budget.getTotalAmount().subtract(totalSpent);
@@ -162,6 +151,45 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         vo.setItems(itemProgressList);
 
         return vo;
+    }
+
+    @Override
+    public List<FixedExpenseVO> fixedSummary(String yearMonth) {
+        YearMonth ym = YearMonth.parse(yearMonth);
+        LocalDate start = ym.atDay(1);
+        LocalDate end = ym.atEndOfMonth();
+
+        Map<Long, Category> categories = loadAllCategories();
+        List<Category> fixed = categories.values().stream()
+                .filter(c -> c.getType() != null && c.getType() == 1 && "FIXED".equals(c.getBudgetType()))
+                .sorted(java.util.Comparator.comparing(Category::getSortOrder,
+                        java.util.Comparator.nullsLast(Integer::compareTo)))
+                .toList();
+        Set<Long> fixedIds = fixed.stream().map(Category::getId).collect(Collectors.toSet());
+        if (fixedIds.isEmpty()) return List.of();
+
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.in(Transaction::getType, 1, 4)
+                .eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .in(Transaction::getCategoryId, fixedIds)
+                .ge(Transaction::getTransactionDate, start)
+                .le(Transaction::getTransactionDate, end);
+        Map<Long, BigDecimal> spent = transactionMapper.selectList(query).stream()
+                .collect(Collectors.groupingBy(Transaction::getCategoryId,
+                        Collectors.reducing(BigDecimal.ZERO,
+                                tx -> tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase(),
+                                BigDecimal::add)));
+
+        return fixed.stream().map(category -> {
+            FixedExpenseVO vo = new FixedExpenseVO();
+            vo.setCategoryId(category.getId());
+            vo.setCategoryName(category.getName());
+            vo.setCategoryColor(category.getColor());
+            vo.setCategoryIcon(category.getIcon());
+            vo.setSpent(spent.getOrDefault(category.getId(), BigDecimal.ZERO));
+            return vo;
+        }).toList();
     }
 
     @Override
@@ -285,9 +313,15 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         Budget budget = getBudgetByMonth(yearMonth);
         if (budget == null) return;
 
+        Category source = categoryMapper.selectById(categoryId);
+        // 固定/专项/非预算流水不进入月度预算；专项年度预算按查询实时计算，不维护 denormalized spent。
+        if (source == null || !"DAILY".equals(source.getBudgetType())) return;
+
         // 一笔交易可能同时影响“子分类预算”和“父分类预算”，但预算页会禁止父子同时设置；
-        // 这里仍按分类链逐级更新，兼容历史数据。
+        // 这里仍按分类链逐级更新，兼容历史数据。只更新 DAILY 预算项。
         for (Long id : categoryPathIds(categoryId)) {
+            Category itemCategory = categoryMapper.selectById(id);
+            if (itemCategory == null || !"DAILY".equals(itemCategory.getBudgetType())) continue;
             LambdaQueryWrapper<BudgetItem> query = new LambdaQueryWrapper<>();
             query.eq(BudgetItem::getBudgetId, budget.getId())
                     .eq(BudgetItem::getCategoryId, id);
@@ -335,36 +369,13 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.atEndOfMonth();
 
-        // 批量加载分类，避免 N+1
-        List<Long> catIds = items.stream().map(BudgetItem::getCategoryId).distinct().toList();
-        Map<Long, Category> catMap = catIds.isEmpty() ? Map.of()
-                : categoryMapper.selectBatchIds(catIds).stream().collect(Collectors.toMap(Category::getId, c -> c));
-
-        // 收集所有需要查询的分类 ID（含子分类），一次性查所有交易
-        List<Long> allCatIds = new ArrayList<>(catIds);
-        for (Long catId : catIds) {
-            allCatIds.addAll(getChildCategoryIds(catId));
-        }
-
-        LambdaQueryWrapper<Transaction> spentQuery = new LambdaQueryWrapper<>();
-        spentQuery.eq(Transaction::getType, 1)
-                .eq(Transaction::getIsConfirmed, true)
-                .in(Transaction::getCategoryId, allCatIds)
-                .ge(Transaction::getTransactionDate, start)
-                .le(Transaction::getTransactionDate, end);
-        List<Transaction> allTxs = transactionMapper.selectList(spentQuery);
-        Map<Long, BigDecimal> catSpentMap = allTxs.stream()
-                .collect(Collectors.groupingBy(Transaction::getCategoryId,
-                        Collectors.reducing(BigDecimal.ZERO, Transaction::getAmountBase, BigDecimal::add)));
-
-        // 计算每个分类的已消费（含子分类）
-        Map<Long, BigDecimal> spentByBudgetCat = new HashMap<>();
-        for (Long catId : catIds) {
-            BigDecimal total = catSpentMap.getOrDefault(catId, BigDecimal.ZERO);
-            for (Long childId : getChildCategoryIds(catId)) {
-                total = total.add(catSpentMap.getOrDefault(childId, BigDecimal.ZERO));
-            }
-            spentByBudgetCat.put(catId, total);
+        // 批量加载全部分类，按预算属性过滤
+        Map<Long, Category> catMap = loadAllCategories();
+        Map<Long, BigDecimal> catSpentMap = new HashMap<>();
+        for (BudgetItem item : items) {
+            Set<Long> ids = collectBudgetCategoryIds(List.of(item), "DAILY", catMap);
+            BigDecimal net = sumNetExpense(ids, start, end);
+            catSpentMap.put(item.getCategoryId(), net);
         }
 
         List<BudgetProgressVO.ItemProgress> result = new ArrayList<>();
@@ -373,7 +384,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             ip.setCategoryId(item.getCategoryId());
             ip.setBudget(item.getAmount());
 
-            BigDecimal spent = spentByBudgetCat.getOrDefault(item.getCategoryId(), BigDecimal.ZERO);
+            BigDecimal spent = catSpentMap.getOrDefault(item.getCategoryId(), BigDecimal.ZERO);
             ip.setSpent(spent);
             ip.setRemaining(item.getAmount().subtract(spent));
             ip.setProgressPct(spent.divide(item.getAmount(), 4, RoundingMode.HALF_UP)
@@ -394,10 +405,53 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         return result;
     }
 
-    private List<Long> getChildCategoryIds(Long parentId) {
-        LambdaQueryWrapper<Category> query = new LambdaQueryWrapper<>();
-        query.eq(Category::getParentId, parentId).select(Category::getId);
-        return categoryMapper.selectList(query).stream().map(Category::getId).toList();
+    private Map<Long, Category> loadAllCategories() {
+        return categoryMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+    }
+
+    /**
+     * 收集预算项命中的分类：分类自身 + 后代中预算属性匹配的分类。
+     * 例如“居住”月度预算只包含 DAILY 的水电/物业，不包含 FIXED 的房租/房贷。
+     */
+    private Set<Long> collectBudgetCategoryIds(List<BudgetItem> items, String budgetType,
+                                               Map<Long, Category> categories) {
+        Set<Long> result = new LinkedHashSet<>();
+        for (BudgetItem item : items) {
+            Category root = categories.get(item.getCategoryId());
+            if (root == null || !budgetType.equals(root.getBudgetType())) continue;
+            result.add(root.getId());
+            collectDescendants(root.getId(), budgetType, categories, result);
+        }
+        return result;
+    }
+
+    private void collectDescendants(Long parentId, String budgetType,
+                                    Map<Long, Category> categories, Set<Long> result) {
+        for (Category category : categories.values()) {
+            if (!parentId.equals(category.getParentId())) continue;
+            if (budgetType.equals(category.getBudgetType())) {
+                result.add(category.getId());
+            }
+            collectDescendants(category.getId(), budgetType, categories, result);
+        }
+    }
+
+    /**
+     * 净支出 = 支出(type=1) - 退款(type=4)；只统计已复核且已确认的交易。
+     */
+    private BigDecimal sumNetExpense(Set<Long> categoryIds, LocalDate start, LocalDate end) {
+        if (categoryIds.isEmpty()) return BigDecimal.ZERO;
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.in(Transaction::getType, 1, 4)
+                .eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .in(Transaction::getCategoryId, categoryIds)
+                .ge(Transaction::getTransactionDate, start)
+                .le(Transaction::getTransactionDate, end);
+        return transactionMapper.selectList(query).stream()
+                .map(tx -> tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /**
@@ -422,6 +476,11 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
             if (category.getType() == null || category.getType() != 1) {
                 throw new BizException(ErrorCode.PARAM_ERROR,
                         "预算只能设置在支出分类: " + category.getName());
+            }
+            if (!"DAILY".equals(category.getBudgetType())) {
+                throw new BizException(ErrorCode.PARAM_ERROR,
+                        "月度预算只能设置在日常分类: " + category.getName()
+                                + "（固定/专项请使用对应预算页）");
             }
         }
 

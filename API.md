@@ -107,7 +107,7 @@
 
 ```json
 {
-  "type": "交易类型 (必填, 1-支出 2-收入 3-转账)",
+  "type": "交易类型 (必填, 1-支出 2-收入 3-转账 4-退款)",
   "amount": "金额 (必填, >0)",
   "externalId": "外部幂等ID (可选，同一用户下唯一，重复请求返回已有交易)",
   "currency": "币种 (默认 CNY)",
@@ -123,6 +123,7 @@
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认 (默认 true)",
+  "reviewStatus": "人工复核状态 PENDING/CONFIRMED (默认 CONFIRMED)",
   "isRecurring": "是否周期交易",
   "recurringId": "周期规则ID",
   "extFields": {},
@@ -134,7 +135,8 @@
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
-| `type` | int | 交易类型 (1-支出 2-收入 3-转账) |
+| `type` | int | 交易类型 (1-支出 2-收入 3-转账 4-退款) |
+| `reviewStatus` | string | PENDING-待人工复核 / CONFIRMED-已复核 |
 | `accountId` | long | 账户ID |
 | `categoryId` | long | 分类ID |
 | `startDate` | string | 开始日期 (yyyy-MM-dd) |
@@ -155,7 +157,7 @@
 
 ```json
 {
-  "type": "交易类型 (1-3)",
+  "type": "交易类型 (1-4)",
   "amount": "金额 (>0)",
   "currency": "币种",
   "transactionDate": "交易日期",
@@ -171,6 +173,7 @@
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认",
+  "reviewStatus": "PENDING/CONFIRMED",
   "extFields": {},
   "metadata": {}
 }
@@ -207,7 +210,8 @@
 | GET | `/api/v1/categories/tree` | 获取分类树 | `type` (query, 可选) |
 | GET | `/api/v1/categories/{id}` | 获取分类详情 | - |
 | PUT | `/api/v1/categories/{id}` | 更新分类 | `CategoryUpdateDTO` |
-| DELETE | `/api/v1/categories/{id}` | 删除分类 | - |
+| DELETE | `/api/v1/categories/{id}` | 删除分类（有交易/子分类时拒绝） | - |
+| POST | `/api/v1/categories/{sourceId}/merge/{targetId}` | 合并分类 | - |
 
 #### CategoryCreateDTO
 
@@ -215,7 +219,8 @@
 {
   "parentId": "父分类ID (默认 0)",
   "name": "分类名称 (必填)",
-  "type": "分类类型 (必填, 1-支出 2-收入 3-转账)",
+  "type": "分类类型 (必填, 1-支出 2-收入)",
+  "budgetType": "DAILY / FIXED / SPECIAL / NONE (支出分类，默认 DAILY)",
   "icon": "图标",
   "color": "颜色",
   "sortOrder": "排序 (默认 0)"
@@ -228,11 +233,20 @@
 {
   "parentId": "父分类ID",
   "name": "分类名称 (最长 30)",
-  "type": "分类类型 (1-3)",
+  "type": "分类类型 (1-2)",
+  "budgetType": "DAILY / FIXED / SPECIAL / NONE",
   "icon": "图标",
   "color": "颜色",
   "sortOrder": "排序"
 }
+```
+
+分类树的每个节点额外返回：
+
+- `budgetType`：预算属性；收入分类固定为 `NONE`；
+- `transactionCount`：该分类及其子分类的交易笔数。
+
+合并分类会把交易、月度预算、年度预算、商户默认分类、周期规则重指向目标分类，然后停用源分类；源分类必须是没有子分类的叶子。
 ```
 
 ---
@@ -248,6 +262,9 @@
 | PUT | `/api/v1/budgets/{yearMonth}` | 更新预算 | `BudgetUpdateDTO` |
 | POST | `/api/v1/budgets/{yearMonth}/copy-from/{sourceMonth}` | 复制预算 | - |
 | GET | `/api/v1/budgets/{yearMonth}/progress` | 获取预算进度 | - |
+| GET | `/api/v1/budgets/fixed-summary` | 固定支出实际发生额 | `month` (query) |
+
+月度预算只接受 `budgetType=DAILY` 的分类；固定/专项分类会被拒绝。年度预算只接受 `budgetType=SPECIAL`。
 
 #### BudgetCreateDTO
 

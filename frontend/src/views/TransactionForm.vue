@@ -6,6 +6,7 @@
           <n-radio-button :value="1">支出</n-radio-button>
           <n-radio-button :value="2">收入</n-radio-button>
           <n-radio-button :value="3">转账</n-radio-button>
+          <n-radio-button :value="4">退款</n-radio-button>
         </n-radio-group>
       </n-form-item>
 
@@ -154,7 +155,8 @@ const merchantSearchTimer = ref(null)
 
 // 根据交易类型筛选分类（保持树形结构）
 const categoryTree = computed(() => {
-  return allCategoryTree.value.filter(c => c.type === form.value.type).map(toCascaderOption)
+  const categoryType = form.value.type === 4 ? 1 : form.value.type
+  return allCategoryTree.value.filter(c => c.type === categoryType).map(toCascaderOption)
 })
 
 function toCascaderOption(c) {

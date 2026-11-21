@@ -13,15 +13,17 @@ public interface CategoryMapper extends BaseMapper<Category> {
 
     /**
      * 忽略租户拦截器查询系统预置分类（is_system=true 的分类）
-     * 按 name+type 去重，取最小 id，避免 DataInitializer 多次运行产生重复
+     * 按 parent_id+name+type 去重，取最小 id，避免 DataInitializer 多次运行产生重复；
+     * 不能只按 name+type，否则各大类下同名的“其他”兜底分类会被误删
      */
     @InterceptorIgnore(tenantLine = "true")
     @Select("SELECT c.* FROM t_category c INNER JOIN (" +
-            "  SELECT name, type, MIN(id) AS min_id FROM t_category " +
+            "  SELECT parent_id, name, type, MIN(id) AS min_id FROM t_category " +
             "  WHERE is_system = true AND is_active = true " +
-            "  GROUP BY name, type" +
-            ") d ON c.name = d.name AND c.type = d.type AND c.id = d.min_id " +
-            "ORDER BY c.sort_order")
+            "  GROUP BY parent_id, name, type" +
+            ") d ON c.parent_id = d.parent_id AND c.name = d.name " +
+            "  AND c.type = d.type AND c.id = d.min_id " +
+            "ORDER BY c.parent_id, c.sort_order, c.id")
     List<Category> selectSystemDefaults();
 
     /**

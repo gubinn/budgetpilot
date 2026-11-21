@@ -22,6 +22,11 @@ public class BudgetController {
         return Result.ok(budgetService.create(dto));
     }
 
+    @GetMapping("/fixed-summary")
+    public Result<?> fixedSummary(@RequestParam String month) {
+        return Result.ok(budgetService.fixedSummary(month));
+    }
+
     @GetMapping("/{yearMonth}")
     public Result<BudgetProgressVO> getBudget(@PathVariable String yearMonth) {
         return Result.ok(budgetService.getProgress(yearMonth));

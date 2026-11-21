@@ -42,6 +42,8 @@ public class TransactionVO {
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed;
+    /** PENDING / CONFIRMED */
+    private String reviewStatus;
     private Boolean isRecurring;
     private Long recurringId;
     private Map<String, Object> extFields;

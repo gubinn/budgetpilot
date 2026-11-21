@@ -32,4 +32,11 @@ public interface TransactionMapper extends BaseMapper<Transaction> {
             "WHERE merchant_id = #{merchantId} AND category_id IS NOT NULL " +
             "GROUP BY category_id ORDER BY COUNT(*) DESC, MAX(transaction_date) DESC LIMIT 1")
     Long findDominantCategoryId(@Param("merchantId") Long merchantId);
+
+    @Select("SELECT category_id AS categoryId, COUNT(*) AS txCount FROM t_transaction " +
+            "WHERE category_id IS NOT NULL GROUP BY category_id")
+    List<uk.gubin.budgetpilot.dto.CategoryUsageStatDTO> countGroupedByCategory();
+
+    @Update("UPDATE t_transaction SET category_id = #{targetId} WHERE category_id = #{sourceId}")
+    int reassignCategory(@Param("sourceId") Long sourceId, @Param("targetId") Long targetId);
 }

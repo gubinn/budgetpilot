@@ -10,6 +10,7 @@
       <div class="filter-row">
         <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" size="small" style="flex: 1" clearable />
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="状态" size="small" style="flex: 1" clearable />
+        <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" placeholder="复核" size="small" style="flex: 1" clearable />
       </div>
       <div class="filter-row">
         <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="标签" size="small" style="flex: 1" />
@@ -35,12 +36,13 @@
           </div>
           <div class="tx-tags">
             <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待确认</n-tag>
+            <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
             <n-tag v-for="tag in (tx.tags || [])" :key="tag" size="tiny" type="info" :bordered="false" style="margin-left: 4px">{{ tag }}</n-tag>
           </div>
         </div>
         <div class="tx-right">
-          <div class="tx-amount" :class="tx.type === 1 ? 'expense' : tx.type === 2 ? 'income' : ''">
-            {{ tx.type === 1 ? '-' : tx.type === 2 ? '+' : '' }}¥{{ formatNum(tx.amount) }}
+          <div class="tx-amount" :class="tx.type === 1 ? 'expense' : (tx.type === 2 || tx.type === 4) ? 'income' : ''">
+            {{ tx.type === 1 ? '-' : (tx.type === 2 || tx.type === 4) ? '+' : '' }}¥{{ formatNum(tx.amount) }}
           </div>
           <div v-if="tx.currency !== 'CNY'" class="tx-currency">{{ tx.currency }}</div>
         </div>
@@ -84,17 +86,23 @@ const filters = ref({
   categoryId: null,
   tags: [],
   isConfirmed: null,
+  reviewStatus: null,
   dateRange: null
 })
 
 const typeOptions = [
   { label: '支出', value: 1 },
   { label: '收入', value: 2 },
-  { label: '转账', value: 3 }
+  { label: '转账', value: 3 },
+  { label: '退款', value: 4 }
 ]
 const confirmOptions = [
   { label: '已确认', value: true },
   { label: '待确认', value: false }
+]
+const reviewOptions = [
+  { label: '已复核', value: 'CONFIRMED' },
+  { label: '待复核', value: 'PENDING' }
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
@@ -114,7 +122,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, dateRange: null }
   pagination.value.page = 1
   loadData()
 }
@@ -133,7 +141,8 @@ async function loadData() {
       type: filters.value.type,
       accountId: filters.value.accountId,
       categoryId: filters.value.categoryId,
-      confirmed: filters.value.isConfirmed
+      confirmed: filters.value.isConfirmed,
+      reviewStatus: filters.value.reviewStatus
     }
     if (filters.value.tags?.length) {
       params.tags = filters.value.tags.join(',')

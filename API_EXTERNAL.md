@@ -314,7 +314,9 @@ X-Api-Key: your-api-key
 |------|------|------|
 | `id` | long | 分类 ID |
 | `name` | string | 分类名称 |
-| `type` | int | `1` = 支出，`2` = 收入，`3` = 转账 |
+| `type` | int | `1` = 支出，`2` = 收入 |
+| `budgetType` | string | `DAILY` 月度日常 / `FIXED` 固定不预算 / `SPECIAL` 年度专项 / `NONE` 非预算 |
+| `transactionCount` | long | 该分类及其子分类的交易笔数 |
 | `icon` | string | 图标标识 |
 | `color` | string | 颜色（#RRGGBB） |
 | `children` | array | 子分类数组（递归结构） |
@@ -358,7 +360,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 必填 | 默认值 | 约束 | 说明 |
 |------|------|------|--------|------|------|
-| `type` | int | 是 | - | `1`=支出 / `2`=收入 / `3`=转账 | 交易类型 |
+| `type` | int | 是 | - | `1`=支出 / `2`=收入 / `3`=转账 / `4`=退款 | 交易类型 |
 | `amount` | decimal | 是 | - | 必须 > 0 | 交易金额 |
 | `externalId` | string | 否 | - | 最长 100 字符 | 外部幂等 ID（同一用户下唯一，重复请求返回已有交易） |
 | `currency` | string | 否 | `"CNY"` | - | 币种 |
@@ -366,11 +368,12 @@ Content-Type: application/json
 | `transactionTime` | string | 否 | 当前时间 | `HH:mm:ss` | 交易时间 |
 | `accountId` | long | 是 | - | 账户必须存在且激活 | 源账户 ID |
 | `targetAccountId` | long | 否 | - | 不能与 accountId 相同 | 目标账户 ID（仅 type=3 转账时需要） |
-| `categoryId` | long | 条件必填 | - | 分类必须存在 | 分类 ID（type=1/2 必填，type=3 不需要） |
+| `categoryId` | long | 条件必填 | - | 分类必须存在且类型匹配 | 分类 ID（type=1/2/4 必填，type=3 不需要；type=4 用支出分类） |
 | `merchantId` | long | 否 | - | - | 商户 ID（指定已有商户） |
 | `merchantName` | string | 否 | - | 最长 50 字符 | 商户名称（与 merchantId 二选一，系统会归一化并自动匹配/创建商户） |
 | `autoCreateMerchant` | boolean | 否 | `true` | - | 是否自动创建不存在的商户 |
 | `note` | string | 否 | - | 最长 200 字符 | 备注 |
+| `reviewStatus` | string | 否 | `CONFIRMED` | `PENDING` / `CONFIRMED` | 人工复核状态；PENDING 不计入收支/预算 |
 | `tags` | string[] | 否 | `[]` | - | 标签列表 |
 | `attachmentUrls` | string[] | 否 | `[]` | - | 附件 URL 列表 |
 | `isConfirmed` | boolean | 否 | `true` | - | 是否确认。确认的交易会影响账户余额；`false` 则为待确认状态，不影响余额 |
@@ -409,6 +412,22 @@ Content-Type: application/json
 ```
 
 > 转账不需要 `categoryId`，`targetAccountId` 必填。
+
+**退款交易示例（type=4）:**
+
+```json
+{
+  "type": 4,
+  "amount": 32.90,
+  "categoryId": 200,
+  "accountId": 5,
+  "merchantName": "京东",
+  "transactionDate": "2026-11-03",
+  "note": "退货 京东"
+}
+```
+
+> 退款使用原消费分类（支出分类），金额为正数；报表按“支出 - 退款”计算净支出，并同步冲减预算。不要把退款归到收入分类。
 
 **待确认交易示例:**
 

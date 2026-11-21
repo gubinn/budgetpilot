@@ -114,8 +114,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             if (category == null) {
                 throw new BizException(ErrorCode.TRANSACTION_CATEGORY_NOT_FOUND);
             }
-            // 校验分类类型与交易类型匹配
-            if (category.getType() != null && !category.getType().equals(dto.getType())) {
+            // 校验分类类型与交易类型匹配；退款(type=4)属于支出分类
+            int expectedCategoryType = dto.getType() == 4 ? 1 : dto.getType();
+            if (category.getType() != null && !category.getType().equals(expectedCategoryType)) {
                 throw new BizException(ErrorCode.TRANSACTION_CATEGORY_MISMATCH);
             }
         }
@@ -184,6 +185,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                     }
                 }
                 case 2 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount);           // 收入
+                case 4 -> accountMapper.adjustBalance(entity.getAccountId(), adjustAmount);           // 退款：资金回到账户
                 case 3 -> {                                                                            // 转账
                     // 源账户原子扣减
                     if (needsBalanceCheck) {
@@ -219,6 +221,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
 
         if (dto.getType() != null) query.eq(Transaction::getType, dto.getType());
+        if (dto.getReviewStatus() != null && !dto.getReviewStatus().isBlank()) {
+            query.eq(Transaction::getReviewStatus, dto.getReviewStatus().trim().toUpperCase());
+        }
         if (dto.getAccountId() != null) query.eq(Transaction::getAccountId, dto.getAccountId());
         if (dto.getCategoryId() != null) {
             // 包含子分类
@@ -320,6 +325,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (entity == null) {
             throw new BizException(ErrorCode.TRANSACTION_NOT_FOUND);
         }
+        ensureEditable(entity);
 
         // 记录旧的交易日期和分类，用于跨月预算调整
         LocalDate oldDate = entity.getTransactionDate();
@@ -386,6 +392,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             try { entity.setAttachmentUrls(objectMapper.writeValueAsString(dto.getAttachmentUrls())); } catch (Exception e) { log.warn("Failed to serialize attachmentUrls", e); }
         }
         if (dto.getIsConfirmed() != null) entity.setIsConfirmed(dto.getIsConfirmed());
+        if (dto.getReviewStatus() != null) entity.setReviewStatus(normalizeReviewStatus(dto.getReviewStatus()));
         if (dto.getExtFields() != null) {
             try { entity.setExtFields(objectMapper.writeValueAsString(dto.getExtFields())); } catch (Exception e) { log.warn("Failed to serialize extFields", e); }
         }
@@ -396,6 +403,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         // 重新计算本位币金额
         Account account = accountMapper.selectById(entity.getAccountId());
         Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
+        if (category != null && entity.getType() != null && entity.getType() != 3) {
+            int expectedCategoryType = entity.getType() == 4 ? 1 : entity.getType();
+            if (category.getType() != null && !category.getType().equals(expectedCategoryType)) {
+                throw new BizException(ErrorCode.TRANSACTION_CATEGORY_MISMATCH);
+            }
+        }
         calculateBaseAmount(entity, account);
 
         // 只有确认的交易才应用余额变动
@@ -416,6 +429,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                     }
                 }
                 case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
+                case 4 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount()); // 退款
                 case 3 -> { // 转账
                     if (needsBalanceCheck) {
                         int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), entity.getAmount());
@@ -437,17 +451,19 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             merchantService.incrementUsage(entity.getMerchantId());
         }
 
-        // 跨月调整预算 spent：旧月退回，新月加上
-        if (entity.getIsConfirmed() && entity.getType() == 1) {
+        // 跨月调整预算 spent：旧月退回，新月加上；退款方向相反
+        if (entity.getIsConfirmed() && (entity.getType() == 1 || entity.getType() == 4)) {
             LocalDate newDate = entity.getTransactionDate();
             String oldYearMonth = oldDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
             String newYearMonth = newDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
             if (!oldYearMonth.equals(newYearMonth)) {
+                BigDecimal oldDelta = entity.getType() == 1 ? entity.getAmountBase().negate() : entity.getAmountBase();
+                BigDecimal newDelta = entity.getType() == 1 ? entity.getAmountBase() : entity.getAmountBase().negate();
                 if (oldCategoryId != null) {
-                    budgetService.updateItemSpent(oldCategoryId, oldYearMonth, entity.getAmountBase().negate());
+                    budgetService.updateItemSpent(oldCategoryId, oldYearMonth, oldDelta);
                 }
                 if (entity.getCategoryId() != null) {
-                    budgetService.updateItemSpent(entity.getCategoryId(), newYearMonth, entity.getAmountBase());
+                    budgetService.updateItemSpent(entity.getCategoryId(), newYearMonth, newDelta);
                 }
             }
         }
@@ -464,6 +480,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (entity == null) {
             throw new BizException(ErrorCode.TRANSACTION_NOT_FOUND);
         }
+        ensureEditable(entity);
 
         // 只有已确认的交易才回滚余额（未确认的交易从未影响余额）
         if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
@@ -483,6 +500,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (entity == null) {
             throw new BizException(ErrorCode.TRANSACTION_NOT_FOUND);
         }
+        ensureEditable(entity);
         if (Boolean.TRUE.equals(entity.getIsConfirmed())) {
             throw new BizException(ErrorCode.TRANSACTION_ALREADY_CONFIRMED);
         }
@@ -508,6 +526,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                 }
             }
             case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
+            case 4 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount()); // 退款
             case 3 -> { // 转账
                 if (needsBalanceCheck) {
                     int rows = accountMapper.decreaseBalanceIfSufficient(entity.getAccountId(), entity.getAmount());
@@ -547,7 +566,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             if (category == null) {
                 continue;
             }
-            if (category.getType() != null && !category.getType().equals(entity.getType())) {
+            int expectedCategoryType = entity.getType() == 4 ? 1 : entity.getType();
+            if (category.getType() != null && !category.getType().equals(expectedCategoryType)) {
                 continue;
             }
             if (item.getCategoryId().equals(entity.getCategoryId())) {
@@ -752,6 +772,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         entity.setTransactionTime(dto.getTransactionTime());
         entity.setNote(dto.getNote());
         entity.setIsConfirmed(dto.getIsConfirmed());
+        entity.setReviewStatus(normalizeReviewStatus(dto.getReviewStatus()));
 
         if (dto.getTags() != null) {
             try { entity.setTags(objectMapper.writeValueAsString(dto.getTags())); } catch (Exception e) { log.warn("Failed to serialize tags", e); }
@@ -774,6 +795,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         return entity;
     }
 
+    private String normalizeReviewStatus(String value) {
+        if (value == null || value.isBlank()) return "CONFIRMED";
+        String normalized = value.trim().toUpperCase();
+        return "PENDING".equals(normalized) ? "PENDING" : "CONFIRMED";
+    }
+
     private void calculateBaseAmount(Transaction entity, Account account) {
         if ("CNY".equals(entity.getCurrency())) {
             entity.setAmountBase(entity.getAmount());
@@ -788,10 +815,18 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
     }
 
+    private void ensureEditable(Transaction entity) {
+        if (entity.getType() != null && entity.getType() == 3
+                && entity.getTargetAccountId() == null) {
+            throw new BizException(ErrorCode.TRANSACTION_TARGET_ACCOUNT_REQUIRED);
+        }
+    }
+
     private void rollbackBalance(Transaction entity) {
         switch (entity.getType()) {
             case 1 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());       // 回滚支出
             case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate()); // 回滚收入
+            case 4 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate()); // 回滚退款
             case 3 -> {                                                                               // 回滚转账
                 accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
                 accountMapper.adjustBalance(entity.getTargetAccountId(), entity.getAmount().negate());
@@ -803,6 +838,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         switch (entity.getType()) {
             case 1 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
             case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
+            case 4 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
             case 3 -> {
                 accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
                 accountMapper.adjustBalance(entity.getTargetAccountId(), entity.getAmount());
@@ -940,6 +976,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         vo.setTransactionTime(entity.getTransactionTime());
         vo.setNote(entity.getNote());
         vo.setIsConfirmed(entity.getIsConfirmed());
+        vo.setReviewStatus(entity.getReviewStatus());
         vo.setIsRecurring(entity.getIsRecurring());
         vo.setRecurringId(entity.getRecurringId());
         vo.setCreatedAt(entity.getCreatedAt());

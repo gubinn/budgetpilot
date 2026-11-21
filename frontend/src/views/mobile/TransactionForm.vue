@@ -8,6 +8,7 @@
             <n-radio-button :value="1" class="type-btn">支出</n-radio-button>
             <n-radio-button :value="2" class="type-btn">收入</n-radio-button>
             <n-radio-button :value="3" class="type-btn">转账</n-radio-button>
+            <n-radio-button :value="4" class="type-btn">退款</n-radio-button>
           </n-radio-group>
         </n-form-item>
 
@@ -152,7 +153,8 @@ const merchantLoading = ref(false)
 const merchantSearchTimer = ref(null)
 
 const categoryTree = computed(() => {
-  return allCategoryTree.value.filter(c => c.type === form.value.type).map(toCascaderOption)
+  const categoryType = form.value.type === 4 ? 1 : form.value.type
+  return allCategoryTree.value.filter(c => c.type === categoryType).map(toCascaderOption)
 })
 
 function toCascaderOption(c) {

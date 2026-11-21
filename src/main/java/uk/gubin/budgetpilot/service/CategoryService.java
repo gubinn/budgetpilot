@@ -14,6 +14,7 @@ public interface CategoryService extends IService<Category> {
     CategoryVO getById(Long id);
     CategoryVO update(Long id, CategoryUpdateDTO dto);
     void delete(Long id);
+    CategoryVO merge(Long sourceId, Long targetId);
     List<Category> getChildren(Long parentId);
     boolean hasChildren(Long id);
     boolean hasTransactions(Long id);

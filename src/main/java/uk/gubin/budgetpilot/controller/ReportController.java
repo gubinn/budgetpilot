@@ -103,8 +103,8 @@ public class ReportController {
         if (key == null || key.trim().isEmpty()) {
             throw new BizException(ErrorCode.PARAM_ERROR, "扩展字段 key 不能为空");
         }
-        if (type == null || (type != 1 && type != 2 && type != 3)) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "type 只能为 1、2 或 3");
+        if (type == null || (type != 1 && type != 2 && type != 3 && type != 4)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "type 只能为 1、2、3 或 4");
         }
         return Result.ok(reportService.extFieldDistribution(month, key.trim(), type));
     }

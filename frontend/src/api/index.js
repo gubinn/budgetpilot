@@ -26,7 +26,8 @@ export const categoryApi = {
   get: (id) => api.get(`/categories/${id}`),
   create: (data) => api.post('/categories', data),
   update: (id, data) => api.put(`/categories/${id}`, data),
-  remove: (id) => api.delete(`/categories/${id}`)
+  remove: (id) => api.delete(`/categories/${id}`),
+  merge: (sourceId, targetId) => api.post(`/categories/${sourceId}/merge/${targetId}`)
 }
 
 export const budgetApi = {
@@ -34,7 +35,8 @@ export const budgetApi = {
   create: (data) => api.post('/budgets', data),
   update: (yearMonth, data) => api.put(`/budgets/${yearMonth}`, data),
   copy: (yearMonth, sourceMonth) => api.post(`/budgets/${yearMonth}/copy-from/${sourceMonth}`),
-  progress: (yearMonth) => api.get(`/budgets/${yearMonth}/progress`)
+  progress: (yearMonth) => api.get(`/budgets/${yearMonth}/progress`),
+  fixedSummary: (month) => api.get('/budgets/fixed-summary', { params: { month } })
 }
 
 export const annualBudgetApi = {

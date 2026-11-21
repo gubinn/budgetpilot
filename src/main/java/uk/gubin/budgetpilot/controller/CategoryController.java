@@ -40,6 +40,11 @@ public class CategoryController {
         return Result.ok(categoryService.update(id, dto));
     }
 
+    @PostMapping("/{sourceId}/merge/{targetId}")
+    public Result<CategoryVO> merge(@PathVariable Long sourceId, @PathVariable Long targetId) {
+        return Result.ok(categoryService.merge(sourceId, targetId));
+    }
+
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         categoryService.delete(id);

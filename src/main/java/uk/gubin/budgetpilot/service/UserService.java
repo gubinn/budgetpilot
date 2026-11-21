@@ -237,6 +237,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 newCat.setSortOrder(cat.getSortOrder());
                 newCat.setIsSystem(false);
                 newCat.setIsActive(true);
+                newCat.setBudgetType(cat.getBudgetType() != null ? cat.getBudgetType() : "DAILY");
                 categoryMapper.insert(newCat);
                 idMapping.put(cat.getId(), newCat.getId());
             }
@@ -255,6 +256,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 newCat.setSortOrder(cat.getSortOrder());
                 newCat.setIsSystem(false);
                 newCat.setIsActive(true);
+                newCat.setBudgetType(cat.getBudgetType() != null ? cat.getBudgetType() : "DAILY");
                 categoryMapper.insert(newCat);
             }
         }

@@ -6,6 +6,7 @@ import uk.gubin.budgetpilot.dto.BudgetUpdateDTO;
 import uk.gubin.budgetpilot.entity.Budget;
 import uk.gubin.budgetpilot.entity.BudgetItem;
 import uk.gubin.budgetpilot.vo.BudgetProgressVO;
+import uk.gubin.budgetpilot.vo.FixedExpenseVO;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -17,6 +18,7 @@ public interface BudgetService extends IService<Budget> {
     Budget copyBudget(String yearMonth, String sourceMonth);
     BudgetItem getItem(Long categoryId, String yearMonth);
     void updateItemSpent(Long categoryId, String yearMonth, BigDecimal spentDelta);
+    List<FixedExpenseVO> fixedSummary(String yearMonth);
     boolean exists(String yearMonth);
     void lockPreviousMonth();
 }

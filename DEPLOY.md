@@ -1517,6 +1517,33 @@ mysql -ubudgetpilot -pyour_db_password budgetpilot -e "SHOW COLUMNS FROM t_trans
 sudo systemctl restart budgetpilot
 ```
 
+### 分类预算属性 / 退款 / 人工复核迁移（2026-11-22）
+
+`t_category` 新增 `budget_type`，`t_transaction` 新增 `review_status`，交易类型新增 `4=退款`。**先执行迁移脚本，再部署新代码**。
+
+```bash
+# 1. 备份
+mysqldump -ubudgetpilot -p budgetpilot > budgetpilot-backup-$(date +%F).sql
+
+# 2. 执行迁移
+mysql -ubudgetpilot -p budgetpilot < sql/migrations/20261121_category_budget_review.sql
+
+# 3. 部署新代码并重启
+# 4. 清理报表缓存（否则会看到旧分类名）
+redis-cli --scan --pattern 'report:*' | xargs -r redis-cli del
+```
+
+已有部署还需要执行一次分类数据迁移（合并空分支、移动固定/专项子项、回填父级交易）。分类 ID 尽量保留，交易/预算/商户不需要重建；具体映射见 `CHANGELOG.md`「2026-11-22」。新部署直接使用 `DataInitializer` 的新种子，无需额外操作。
+
+验证：
+
+```sql
+SELECT type, COUNT(*) FROM t_category WHERE user_id=2 AND is_active=1 GROUP BY type;
+SELECT type, review_status, COUNT(*) FROM t_transaction WHERE user_id=2 GROUP BY type, review_status;
+SELECT COUNT(*) FROM t_transaction t JOIN t_category c ON c.id=t.category_id
+WHERE t.user_id=2 AND c.is_active=0; -- 应为 0
+```
+
 ### 商户别名表迁移（旧版本升级）
 
 `t_merchant_alias` 用于保存支付渠道原始商户名，指向归一化后的聚合商户。先执行迁移，再部署新代码。

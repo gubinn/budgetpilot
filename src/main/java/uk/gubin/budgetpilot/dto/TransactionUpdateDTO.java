@@ -14,8 +14,8 @@ import java.util.Map;
 
 @Data
 public class TransactionUpdateDTO {
-    @Min(value = 1, message = "交易类型必须为1-3之间的值")
-    @Max(value = 3, message = "交易类型必须为1-3之间的值")
+    @Min(value = 1, message = "交易类型必须为1-4之间的值")
+    @Max(value = 4, message = "交易类型必须为1-4之间的值")
     private Integer type;
 
     @Positive(message = "金额必须大于0")
@@ -37,6 +37,8 @@ public class TransactionUpdateDTO {
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed;
+    /** PENDING / CONFIRMED */
+    private String reviewStatus;
     private Map<String, Object> extFields;
     private Map<String, Object> metadata;
 }

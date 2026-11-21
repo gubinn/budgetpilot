@@ -31,6 +31,8 @@ public class Transaction extends BaseEntity {
     @TableField("attachment_urls")
     private String attachmentUrls;
     private Boolean isConfirmed;
+    /** PENDING / CONFIRMED —— 人工复核状态，与银行确认 isConfirmed 无关 */
+    private String reviewStatus;
     private Boolean isRecurring;
     private Long recurringId;
     @TableField("ext_fields")

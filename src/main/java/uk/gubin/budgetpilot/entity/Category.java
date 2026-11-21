@@ -18,4 +18,6 @@ public class Category extends BaseEntity {
     private Integer sortOrder;
     private Boolean isSystem;
     private Boolean isActive;
+    /** DAILY / FIXED / SPECIAL / NONE */
+    private String budgetType;
 }

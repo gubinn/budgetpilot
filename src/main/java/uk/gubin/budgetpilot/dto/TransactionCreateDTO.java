@@ -16,8 +16,8 @@ import java.util.Map;
 @Data
 public class TransactionCreateDTO {
     @NotNull(message = "交易类型不能为空")
-    @Min(value = 1, message = "交易类型必须为1-3之间的值")
-    @Max(value = 3, message = "交易类型必须为1-3之间的值")
+    @Min(value = 1, message = "交易类型必须为1-4之间的值")
+    @Max(value = 4, message = "交易类型必须为1-4之间的值")
     private Integer type;
 
     @NotNull(message = "金额不能为空")
@@ -49,6 +49,8 @@ public class TransactionCreateDTO {
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed = true;
+    /** PENDING / CONFIRMED，默认 CONFIRMED */
+    private String reviewStatus;
     private Boolean isRecurring;
     private Long recurringId;
     private Map<String, Object> extFields;

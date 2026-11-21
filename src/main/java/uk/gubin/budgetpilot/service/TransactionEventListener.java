@@ -48,26 +48,35 @@ public class TransactionEventListener {
         // 不再在此清除缓存，由 TransactionServiceImpl 同步执行
         // 这里只处理预算更新和预警检查
 
-        if (!Boolean.TRUE.equals(tx.getIsConfirmed()) || tx.getType() != 1) {
+        if (!Boolean.TRUE.equals(tx.getIsConfirmed())
+                || "PENDING".equals(tx.getReviewStatus())
+                || (tx.getType() != 1 && tx.getType() != 4)) {
             return;
         }
 
         String yearMonth = tx.getTransactionDate().format(MONTH_FMT);
+        BigDecimal delta = tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase();
 
         if (event.getAction() == TransactionEvent.Action.DELETE) {
             if (tx.getCategoryId() != null) {
-                budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, tx.getAmountBase().negate());
+                budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, delta.negate());
             }
             return;
         }
 
         // 1. 更新预算已消费（预算可能设在父分类或子分类，由 service 沿分类链命中）
         if (tx.getCategoryId() != null) {
-            budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, tx.getAmountBase());
+            budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, delta);
         }
 
         // 2. 检查预警规则（使用显式 userId 避免异步线程租户上下文丢失）
-        checkAlerts(event.getUserId(), tx, yearMonth);
+        // 退款只冲减预算，不触发消费预警；固定/专项/非预算也不走月度预算预警
+        if (tx.getType() == 1 && tx.getCategoryId() != null) {
+            Category category = categoryMapper.selectById(tx.getCategoryId());
+            if (category != null && "DAILY".equals(category.getBudgetType())) {
+                checkAlerts(event.getUserId(), tx, yearMonth);
+            }
+        }
     }
 
     /**

@@ -16,6 +16,9 @@
       <n-form-item label="状态">
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable style="width: 100px" />
       </n-form-item>
+      <n-form-item label="复核">
+        <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable style="width: 100px" />
+      </n-form-item>
       <n-form-item label="日期">
         <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 240px" />
       </n-form-item>
@@ -64,17 +67,23 @@ const filters = ref({
   categoryId: null,
   tags: [],
   isConfirmed: null,
+  reviewStatus: null,
   dateRange: null
 })
 
 const typeOptions = [
   { label: '支出', value: 1 },
   { label: '收入', value: 2 },
-  { label: '转账', value: 3 }
+  { label: '转账', value: 3 },
+  { label: '退款', value: 4 }
 ]
 const confirmOptions = [
   { label: '已确认', value: true },
   { label: '待确认', value: false }
+]
+const reviewOptions = [
+  { label: '已复核', value: 'CONFIRMED' },
+  { label: '待复核', value: 'PENDING' }
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
@@ -116,8 +125,8 @@ const columns = [
   {
     title: '金额', key: 'amount', width: 140, align: 'right',
     render: (row) => {
-      const color = row.type === 1 ? '#e74c3c' : row.type === 2 ? '#27ae60' : '#333'
-      const prefix = row.type === 1 ? '-' : row.type === 2 ? '+' : ''
+      const color = row.type === 1 ? '#e74c3c' : row.type === 2 ? '#27ae60' : row.type === 4 ? '#2d98da' : '#333'
+      const prefix = row.type === 1 ? '-' : (row.type === 2 || row.type === 4) ? '+' : ''
       const currency = row.currency !== 'CNY' ? ` ${row.currency}` : ''
       return h('div', { style: { color, fontWeight: 600 } }, [
         `${prefix}¥${formatNum(row.amount)}${currency}`,
@@ -127,12 +136,17 @@ const columns = [
   },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
   {
-    title: '状态', key: 'isConfirmed', width: 80,
-    render: (row) => h(NTag, {
-      size: 'small',
-      type: row.isConfirmed ? 'success' : 'warning',
-      bordered: false
-    }, { default: () => row.isConfirmed ? '已确认' : '待确认' })
+    title: '状态', key: 'isConfirmed', width: 100,
+    render: (row) => h(NSpace, { size: 4 }, [
+      h(NTag, {
+        size: 'small',
+        type: row.isConfirmed ? 'success' : 'warning',
+        bordered: false
+      }, { default: () => row.isConfirmed ? '已确认' : '待确认' }),
+      row.reviewStatus === 'PENDING'
+        ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '待复核' })
+        : null
+    ].filter(Boolean))
   },
   {
     title: '扩展字段', key: 'extFields', width: 180,
@@ -157,6 +171,9 @@ const columns = [
     title: '操作', key: 'actions', width: 160, fixed: 'right',
     render: (row) => h(NSpace, { size: 8 }, [
       row.isConfirmed ? null : h(NButton, { size: 'small', type: 'success', onClick: () => handleConfirm(row.id) }, { default: () => '确认' }),
+      row.reviewStatus === 'PENDING'
+        ? h(NButton, { size: 'small', type: 'warning', onClick: () => handleReview(row.id) }, { default: () => '确认为借出' })
+        : null,
       h(NButton, { size: 'small', type: 'primary', onClick: () => router.push(`/transactions/edit/${row.id}`) }, { default: () => '编辑' }),
       h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
     ].filter(Boolean))
@@ -172,7 +189,8 @@ async function loadData() {
       type: filters.value.type,
       accountId: filters.value.accountId,
       categoryId: filters.value.categoryId,
-      confirmed: filters.value.isConfirmed
+      confirmed: filters.value.isConfirmed,
+      reviewStatus: filters.value.reviewStatus
     }
     if (filters.value.tags?.length) {
       params.tags = filters.value.tags.join(',')
@@ -208,7 +226,7 @@ function onSizeChange(size) {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, dateRange: null }
   loadData()
 }
 
@@ -219,6 +237,16 @@ async function handleConfirm(id) {
     loadData()
   } catch (e) {
     message.error('确认失败: ' + e.message)
+  }
+}
+
+async function handleReview(id) {
+  try {
+    await transactionApi.update(id, { reviewStatus: 'CONFIRMED' })
+    message.success('已确认为借出（不计日常收支）')
+    loadData()
+  } catch (e) {
+    message.error('复核失败: ' + (e.response?.data?.message || e.message))
   }
 }
 

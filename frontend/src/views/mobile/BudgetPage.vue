@@ -284,23 +284,22 @@ onMounted(async () => {
         id: parent.id,
         name: parent.name,
         displayName: parent.name,
-        parentId: 0
+        parentId: 0,
+        budgetType: parent.budgetType
       })
       ;(parent.children || []).forEach(child => {
         flat.push({
           id: child.id,
           name: child.name,
           displayName: `　${child.name}`,
-          parentId: parent.id
+          parentId: parent.id,
+          budgetType: child.budgetType
         })
       })
     })
-    expenseCategories.value = flat
-    const specialParent = flat.find(c => c.parentId === 0 && c.name === '专项支出')
-    annualCategories.value = specialParent
-      ? flat.filter(c => c.parentId === specialParent.id)
-      : []
-    createForm.value.items = flat.map(c => ({ categoryId: c.id, categoryName: c.displayName, amount: 0 }))
+    expenseCategories.value = flat.filter(c => c.budgetType === 'DAILY')
+    annualCategories.value = flat.filter(c => c.budgetType === 'SPECIAL')
+    createForm.value.items = expenseCategories.value.map(c => ({ categoryId: c.id, categoryName: c.displayName, amount: 0 }))
     createForm.value.totalAmount = 0
   } catch (e) {}
 })

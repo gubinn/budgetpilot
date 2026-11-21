@@ -16,6 +16,10 @@ public class CategoryVO {
     private Integer sortOrder;
     private Boolean isSystem;
     private Boolean isActive;
+    /** DAILY / FIXED / SPECIAL / NONE */
+    private String budgetType;
+    /** 当前分类及其子分类的交易笔数 */
+    private Long transactionCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<CategoryVO> children;

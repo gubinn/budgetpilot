@@ -84,18 +84,19 @@ public class DataInitializer {
             return;
         }
 
-        // 支出大类
+        // 支出大类（预算属性见子分类；固定/专项由分类属性控制，不再单列一级）
         String[][] expenseParents = {
                 {"餐饮", "food", "#FF6B6B", "1"},
                 {"交通", "transport", "#4ECDC4", "2"},
-                {"住房", "home", "#45B7D1", "3"},
+                {"居住", "home", "#45B7D1", "3"},
                 {"购物", "shopping", "#96CEB4", "4"},
                 {"医疗", "medical", "#FFEAA7", "5"},
                 {"教育", "education", "#DDA0DD", "6"},
-                {"娱乐", "entertainment", "#98D8C8", "7"},
-                {"社交", "social", "#F7DC6F", "8"},
-                {"金融", "finance", "#BB8FCE", "9"},
-                {"其他支出", "other-expense", "#BDC3C7", "10"},
+                {"休闲", "entertainment", "#98D8C8", "7"},
+                {"通讯订阅", "phone", "#74B9FF", "8"},
+                {"人情往来", "social", "#F7DC6F", "9"},
+                {"保险", "insurance", "#E17055", "10"},
+                {"其他支出", "other-expense", "#BDC3C7", "11"},
         };
 
         Map<String, Long> parentIdMap = new LinkedHashMap<>();
@@ -110,6 +111,7 @@ public class DataInitializer {
             cat.setIsSystem(true);
             cat.setIsActive(true);
             cat.setSortOrder(Integer.parseInt(row[3]));
+            cat.setBudgetType(row[0].equals("保险") ? "FIXED" : "DAILY");
             categoryMapper.insert(cat);
             parentIdMap.put(row[0], cat.getId());
         }
@@ -117,10 +119,9 @@ public class DataInitializer {
         // 收入大类
         String[][] incomeParents = {
                 {"工资", "salary", "#2ECC71", "1"},
-                {"副业", "sidejob", "#27AE60", "2"},
+                {"公积金", "provident-fund", "#27AE60", "2"},
                 {"投资", "investment", "#1ABC9C", "3"},
-                {"报销", "reimburse", "#16A085", "4"},
-                {"其他收入", "other-income", "#BDC3C7", "5"},
+                {"其他收入", "other-income", "#BDC3C7", "4"},
         };
         for (String[] row : incomeParents) {
             Category cat = new Category();
@@ -133,96 +134,109 @@ public class DataInitializer {
             cat.setIsSystem(true);
             cat.setIsActive(true);
             cat.setSortOrder(Integer.parseInt(row[3]));
+            cat.setBudgetType("NONE");
             categoryMapper.insert(cat);
             parentIdMap.put(row[0], cat.getId());
         }
 
-        // 特殊分类
-        Category transfer = new Category();
-        transfer.setUserId(0L);
-        transfer.setParentId(0L);
-        transfer.setName("内部转账");
-        transfer.setType(1);
-        transfer.setIcon("transfer");
-        transfer.setColor("#95A5A6");
-        transfer.setIsSystem(true);
-        transfer.setIsActive(true);
-        transfer.setSortOrder(11);
-        categoryMapper.insert(transfer);
-        parentIdMap.put("内部转账", transfer.getId());
+        // 余额调整（系统项，动态按名称查找，不再硬编码 ID）
+        String[][] adjustments = {
+                {"余额调整收入", "adjust", "#FF9800", "2"},
+                {"余额调整支出", "adjust", "#FF9800", "1"},
+        };
+        for (String[] row : adjustments) {
+            Category cat = new Category();
+            cat.setUserId(0L);
+            cat.setParentId(0L);
+            cat.setName(row[0]);
+            cat.setType(Integer.parseInt(row[3]));
+            cat.setIcon(row[1]);
+            cat.setColor(row[2]);
+            cat.setIsSystem(true);
+            cat.setIsActive(true);
+            cat.setSortOrder(99);
+            cat.setBudgetType("NONE");
+            categoryMapper.insert(cat);
+            parentIdMap.put(row[0], cat.getId());
+        }
 
-        // 余额调整（固定 ID 58/59）
-        Category adjIncome = new Category();
-        adjIncome.setId(58L);
-        adjIncome.setUserId(0L);
-        adjIncome.setParentId(0L);
-        adjIncome.setName("余额调整收入");
-        adjIncome.setType(2);
-        adjIncome.setIcon("adjust");
-        adjIncome.setColor("#FF9800");
-        adjIncome.setIsSystem(true);
-        adjIncome.setIsActive(true);
-        adjIncome.setSortOrder(99);
-        try { categoryMapper.insert(adjIncome); } catch (Exception e) { log.warn("Category 58 already exists"); }
+        // 往来款/借出：不计日常收支，用于待复核的对外转账
+        Category loanParent = new Category();
+        loanParent.setUserId(0L);
+        loanParent.setParentId(0L);
+        loanParent.setName("往来款");
+        loanParent.setType(1);
+        loanParent.setIcon("transfer");
+        loanParent.setColor("#95A5A6");
+        loanParent.setIsSystem(true);
+        loanParent.setIsActive(true);
+        loanParent.setSortOrder(12);
+        loanParent.setBudgetType("NONE");
+        categoryMapper.insert(loanParent);
+        parentIdMap.put("往来款", loanParent.getId());
 
-        Category adjExpense = new Category();
-        adjExpense.setId(59L);
-        adjExpense.setUserId(0L);
-        adjExpense.setParentId(0L);
-        adjExpense.setName("余额调整支出");
-        adjExpense.setType(1);
-        adjExpense.setIcon("adjust");
-        adjExpense.setColor("#FF9800");
-        adjExpense.setIsSystem(true);
-        adjExpense.setIsActive(true);
-        adjExpense.setSortOrder(99);
-        try { categoryMapper.insert(adjExpense); } catch (Exception e) { log.warn("Category 59 already exists"); }
+        Category loan = new Category();
+        loan.setUserId(0L);
+        loan.setParentId(loanParent.getId());
+        loan.setName("借出");
+        loan.setType(1);
+        loan.setIcon("transfer");
+        loan.setColor("#95A5A6");
+        loan.setIsSystem(true);
+        loan.setIsActive(true);
+        loan.setSortOrder(1);
+        loan.setBudgetType("NONE");
+        categoryMapper.insert(loan);
 
-        // 子分类
+        // 子分类: [父分类, 名称, icon, budgetType]
         String[][] subCategories = {
-                // 支出子分类: [父分类, 名称, icon]
-                {"餐饮", "外卖", "takeout"},
-                {"餐饮", "聚餐", "dining"},
-                {"餐饮", "食材", "grocery"},
-                {"餐饮", "饮品", "drink"},
-                {"交通", "公交地铁", "bus"},
-                {"交通", "打车", "taxi"},
-                {"交通", "加油", "fuel"},
-                {"交通", "停车", "parking"},
-                {"住房", "房租/房贷", "rent"},
-                {"住房", "水电燃气", "utility"},
-                {"住房", "物业", "property"},
-                {"住房", "维修", "repair"},
-                {"购物", "日用品", "daily"},
-                {"购物", "服饰", "clothes"},
-                {"购物", "数码", "digital"},
-                {"购物", "家具家电", "furniture"},
-                {"医疗", "门诊", "clinic"},
-                {"医疗", "药品", "medicine"},
-                {"医疗", "体检", "checkup"},
-                {"医疗", "保险", "insurance"},
-                {"教育", "课程", "course"},
-                {"教育", "书籍", "book"},
-                {"教育", "考试", "exam"},
-                {"娱乐", "电影", "movie"},
-                {"娱乐", "游戏", "game"},
-                {"娱乐", "旅行", "travel"},
-                {"娱乐", "运动", "sport"},
-                {"社交", "礼金", "gift"},
-                {"社交", "聚会", "party"},
-                {"金融", "利息", "interest"},
-                {"金融", "手续费", "fee"},
-                {"金融", "投资亏损", "loss"},
+                {"餐饮", "外卖", "takeout", "DAILY"},
+                {"餐饮", "堂食", "dining", "DAILY"},
+                {"餐饮", "食材", "grocery", "DAILY"},
+                {"餐饮", "饮品", "drink", "DAILY"},
+                {"餐饮", "其他", "more", "DAILY"},
+                {"交通", "公交地铁", "bus", "DAILY"},
+                {"交通", "打车", "taxi", "DAILY"},
+                {"交通", "加油", "fuel", "DAILY"},
+                {"交通", "停车", "parking", "DAILY"},
+                {"交通", "其他", "more", "DAILY"},
+                {"居住", "房租", "rent", "FIXED"},
+                {"居住", "房贷", "mortgage", "FIXED"},
+                {"居住", "水电燃气", "utility", "DAILY"},
+                {"居住", "物业维修", "property", "DAILY"},
+                {"居住", "其他", "more", "DAILY"},
+                {"购物", "日用品", "daily", "DAILY"},
+                {"购物", "服饰", "clothes", "DAILY"},
+                {"购物", "数码家电", "digital", "DAILY"},
+                {"购物", "大额购物", "big-shopping", "SPECIAL"},
+                {"购物", "其他", "more", "DAILY"},
+                {"医疗", "门诊", "clinic", "DAILY"},
+                {"医疗", "药品", "medicine", "DAILY"},
+                {"医疗", "体检", "checkup", "DAILY"},
+                {"医疗", "其他", "more", "DAILY"},
+                {"教育", "课程", "course", "DAILY"},
+                {"教育", "书籍", "book", "DAILY"},
+                {"教育", "考试", "exam", "DAILY"},
+                {"教育", "学费", "tuition", "SPECIAL"},
+                {"教育", "其他", "more", "DAILY"},
+                {"休闲", "电影游戏", "movie", "DAILY"},
+                {"休闲", "运动", "sport", "DAILY"},
+                {"休闲", "旅行", "travel", "SPECIAL"},
+                {"休闲", "其他", "more", "DAILY"},
+                {"通讯订阅", "话费宽带", "phone", "DAILY"},
+                {"通讯订阅", "AI订阅", "ai", "DAILY"},
+                {"通讯订阅", "存储订阅", "cloud", "DAILY"},
+                {"通讯订阅", "其他", "more", "DAILY"},
+                {"人情往来", "礼金", "gift", "DAILY"},
+                {"人情往来", "聚会", "party", "DAILY"},
+                {"人情往来", "亲属转账", "transfer", "DAILY"},
+                {"人情往来", "其他", "more", "DAILY"},
                 // 收入子分类
-                {"工资", "基本工资", "base-salary"},
-                {"工资", "奖金", "bonus"},
-                {"工资", "补贴", "allowance"},
-                {"副业", "兼职", "parttime"},
-                {"副业", "稿费", "article"},
-                {"副业", "咨询", "consult"},
-                {"投资", "股息", "dividend"},
-                {"投资", "利息", "interest-income"},
-                {"投资", "理财收益", "wealth"},
+                {"工资", "基本工资", "base-salary", "NONE"},
+                {"工资", "奖金补贴", "bonus", "NONE"},
+                {"投资", "利息", "interest-income", "NONE"},
+                {"投资", "股息", "dividend", "NONE"},
+                {"投资", "理财收益", "wealth", "NONE"},
         };
 
         for (String[] row : subCategories) {
@@ -235,15 +249,16 @@ public class DataInitializer {
             sub.setUserId(0L);
             sub.setParentId(parentId);
             sub.setName(row[1]);
-            sub.setType(row[0].equals("工资") || row[0].equals("副业") || row[0].equals("投资") ? 2 : 1);
+            sub.setType(row[0].equals("工资") || row[0].equals("投资") ? 2 : 1);
             sub.setIcon(row[2]);
             sub.setIsSystem(true);
             sub.setIsActive(true);
             sub.setSortOrder(0);
+            sub.setBudgetType(row[3]);
             categoryMapper.insert(sub);
         }
 
-        log.info("Initialized {} system categories", parentIdMap.size() + subCategories.length + 3);
+        log.info("Initialized {} system categories", parentIdMap.size() + subCategories.length + 1);
     }
 
     /**

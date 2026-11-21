@@ -94,31 +94,14 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
         itemQuery.eq(AnnualBudgetItem::getAnnualBudgetId, budget.getId());
         List<AnnualBudgetItem> items = annualBudgetItemMapper.selectList(itemQuery);
 
-        List<Long> catIds = items.stream().map(AnnualBudgetItem::getCategoryId).distinct().toList();
-        List<Long> allCatIds = new ArrayList<>(catIds);
-        for (Long catId : catIds) {
-            allCatIds.addAll(getChildCategoryIds(catId));
-        }
-
+        Map<Long, Category> allCats = loadAllCategories();
         Map<Long, BigDecimal> catSpentMap = new HashMap<>();
-        if (!allCatIds.isEmpty()) {
-            LambdaQueryWrapper<Transaction> spendQuery = new LambdaQueryWrapper<>();
-            spendQuery.eq(Transaction::getType, 1)
-                    .eq(Transaction::getIsConfirmed, true)
-                    .in(Transaction::getCategoryId, allCatIds)
-                    .ge(Transaction::getTransactionDate, start)
-                    .le(Transaction::getTransactionDate, end);
-            catSpentMap = transactionMapper.selectList(spendQuery).stream()
-                    .collect(Collectors.groupingBy(Transaction::getCategoryId,
-                            Collectors.reducing(BigDecimal.ZERO, Transaction::getAmountBase, BigDecimal::add)));
-        }
-
         BigDecimal totalSpent = BigDecimal.ZERO;
-        for (Long catId : catIds) {
-            totalSpent = totalSpent.add(catSpentMap.getOrDefault(catId, BigDecimal.ZERO));
-            for (Long childId : getChildCategoryIds(catId)) {
-                totalSpent = totalSpent.add(catSpentMap.getOrDefault(childId, BigDecimal.ZERO));
-            }
+        for (AnnualBudgetItem item : items) {
+            Set<Long> ids = collectBudgetCategoryIds(item, "SPECIAL", allCats);
+            BigDecimal net = sumNetExpense(ids, start, end);
+            catSpentMap.put(item.getCategoryId(), net);
+            totalSpent = totalSpent.add(net);
         }
 
         BigDecimal remaining = budget.getTotalAmount().subtract(totalSpent);
@@ -127,9 +110,7 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
                 : totalSpent.divide(budget.getTotalAmount(), 4, RoundingMode.HALF_UP)
                         .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
 
-        Map<Long, Category> catMap = catIds.isEmpty() ? Map.of()
-                : categoryMapper.selectBatchIds(catIds).stream()
-                        .collect(Collectors.toMap(Category::getId, c -> c));
+        Map<Long, Category> catMap = allCats;
 
         AnnualBudgetProgressVO vo = new AnnualBudgetProgressVO();
         vo.setYear(year);
@@ -144,9 +125,6 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
         List<AnnualBudgetProgressVO.ItemProgress> itemProgressList = new ArrayList<>();
         for (AnnualBudgetItem item : items) {
             BigDecimal spent = catSpentMap.getOrDefault(item.getCategoryId(), BigDecimal.ZERO);
-            for (Long childId : getChildCategoryIds(item.getCategoryId())) {
-                spent = spent.add(catSpentMap.getOrDefault(childId, BigDecimal.ZERO));
-            }
 
             AnnualBudgetProgressVO.ItemProgress ip = new AnnualBudgetProgressVO.ItemProgress();
             ip.setCategoryId(item.getCategoryId());
@@ -233,11 +211,44 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
                 .eq(AnnualBudget::getBudgetYear, year));
     }
 
-    private List<Long> getChildCategoryIds(Long parentId) {
-        return categoryMapper.selectList(new LambdaQueryWrapper<Category>()
-                        .eq(Category::getParentId, parentId)
-                        .select(Category::getId))
-                .stream().map(Category::getId).toList();
+    private Map<Long, Category> loadAllCategories() {
+        return categoryMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+    }
+
+    private Set<Long> collectBudgetCategoryIds(AnnualBudgetItem item, String budgetType,
+                                               Map<Long, Category> categories) {
+        Set<Long> result = new LinkedHashSet<>();
+        Category root = categories.get(item.getCategoryId());
+        if (root == null || !budgetType.equals(root.getBudgetType())) return result;
+        result.add(root.getId());
+        collectDescendants(root.getId(), budgetType, categories, result);
+        return result;
+    }
+
+    private void collectDescendants(Long parentId, String budgetType,
+                                    Map<Long, Category> categories, Set<Long> result) {
+        for (Category category : categories.values()) {
+            if (!parentId.equals(category.getParentId())) continue;
+            if (budgetType.equals(category.getBudgetType())) {
+                result.add(category.getId());
+            }
+            collectDescendants(category.getId(), budgetType, categories, result);
+        }
+    }
+
+    private BigDecimal sumNetExpense(Set<Long> categoryIds, LocalDate start, LocalDate end) {
+        if (categoryIds.isEmpty()) return BigDecimal.ZERO;
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.in(Transaction::getType, 1, 4)
+                .eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .in(Transaction::getCategoryId, categoryIds)
+                .ge(Transaction::getTransactionDate, start)
+                .le(Transaction::getTransactionDate, end);
+        return transactionMapper.selectList(query).stream()
+                .map(tx -> tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private void validateYear(String year) {
@@ -273,6 +284,10 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
             if (category.getType() == null || category.getType() != 1) {
                 throw new BizException(ErrorCode.PARAM_ERROR,
                         "预算只能设置在支出分类: " + category.getName());
+            }
+            if (!"SPECIAL".equals(category.getBudgetType())) {
+                throw new BizException(ErrorCode.PARAM_ERROR,
+                        "年度专项预算只能设置在专项分类: " + category.getName());
             }
         }
 

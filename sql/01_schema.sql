@@ -69,6 +69,7 @@ CREATE TABLE t_category (
     sort_order  INT             DEFAULT 0,
     is_system   TINYINT(1)      DEFAULT 0 COMMENT '系统预设，不可删除',
     is_active   TINYINT(1)      DEFAULT 1,
+    budget_type VARCHAR(16)     NOT NULL DEFAULT 'DAILY' COMMENT 'DAILY-月度日常 FIXED-固定不预算 SPECIAL-年度专项 NONE-非预算流水',
     created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user (user_id),
@@ -81,7 +82,7 @@ CREATE TABLE t_transaction (
     id                  BIGINT          PRIMARY KEY AUTO_INCREMENT,
     user_id             BIGINT          NOT NULL COMMENT '所属用户ID',
     external_id         VARCHAR(100)    DEFAULT NULL COMMENT '外部系统幂等ID（同一用户下唯一）',
-    type                TINYINT         NOT NULL COMMENT '1-支出 2-收入 3-转账',
+    type                TINYINT         NOT NULL COMMENT '1-支出 2-收入 3-转账 4-退款',
     amount              DECIMAL(14,2)   NOT NULL COMMENT '原始金额（原始币种，正数）',
     currency            CHAR(3)         DEFAULT 'CNY' COMMENT '原始币种 ISO 4217',
     amount_base         DECIMAL(14,2)   NOT NULL COMMENT '本位币金额（CNY）',
@@ -96,6 +97,7 @@ CREATE TABLE t_transaction (
     tags                JSON            DEFAULT NULL COMMENT '标签数组 ["日常","必要"]',
     attachment_urls     JSON            DEFAULT NULL COMMENT '附件路径数组',
     is_confirmed        TINYINT(1)      DEFAULT 1 COMMENT '0=待确认（周期交易自动生成）',
+    review_status       VARCHAR(16)     NOT NULL DEFAULT 'CONFIRMED' COMMENT 'PENDING-待人工复核 CONFIRMED-已复核',
     is_recurring        TINYINT(1)      DEFAULT 0,
     recurring_id        BIGINT          DEFAULT NULL COMMENT '关联周期规则ID',
     ext_fields          JSON            DEFAULT NULL COMMENT '业务扩展字段',
@@ -108,6 +110,7 @@ CREATE TABLE t_transaction (
     INDEX idx_merchant (merchant_id),
     INDEX idx_type_date (type, transaction_date),
     INDEX idx_confirmed (is_confirmed),
+    INDEX idx_review_status (review_status),
     UNIQUE INDEX uk_user_external (user_id, external_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='交易记录表';
 

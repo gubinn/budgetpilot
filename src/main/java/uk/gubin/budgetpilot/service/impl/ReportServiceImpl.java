@@ -61,26 +61,30 @@ public class ReportServiceImpl implements ReportService {
         LocalDate start = ym.atDay(1);
         LocalDate end = ym.atEndOfMonth();
 
-        // 支出
+        // 支出（含退款冲减；排除非预算流水和待复核）
         LambdaQueryWrapper<Transaction> expenseQuery = new LambdaQueryWrapper<>();
-        expenseQuery.eq(Transaction::getType, 1).eq(Transaction::getIsConfirmed, true)
+        expenseQuery.in(Transaction::getType, 1, 4).eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
-        List<Transaction> expenses = transactionMapper.selectList(expenseQuery);
-        BigDecimal totalExpense = sumBase(expenses);
+        List<Transaction> expenseTxs = transactionMapper.selectList(expenseQuery);
+        Map<Long, Category> catMap = loadCategoryMap();
+        List<Transaction> expenses = expenseTxs.stream()
+                .filter(tx -> isReportableExpense(tx, catMap))
+                .toList();
+        BigDecimal totalExpense = netExpense(expenses);
         summary.setTotalExpense(totalExpense);
         summary.setAvgDailyExpense(totalExpense.divide(BigDecimal.valueOf(ym.lengthOfMonth()), 2, RoundingMode.HALF_UP));
 
         // 收入
         LambdaQueryWrapper<Transaction> incomeQuery = new LambdaQueryWrapper<>();
         incomeQuery.eq(Transaction::getType, 2).eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
         List<Transaction> incomes = transactionMapper.selectList(incomeQuery);
         summary.setTotalIncome(sumBase(incomes));
         summary.setBalance(summary.getTotalIncome().subtract(totalExpense));
 
-        // 分类占比：level=1 归并到父分类；level=2 按实际分类展示
-        Map<Long, Category> catMap = categoryMapper.selectList(new LambdaQueryWrapper<>()).stream()
-                .collect(Collectors.toMap(Category::getId, c -> c));
+        // 分类占比：level=1 归并到父分类；level=2 按实际分类展示；退款冲减原分类
         Map<Long, BigDecimal> categoryAmounts = new HashMap<>();
         for (Transaction tx : expenses) {
             Long catId = tx.getCategoryId();
@@ -90,7 +94,8 @@ public class ReportServiceImpl implements ReportService {
             if (reportLevel == 1 && cat != null && cat.getParentId() != null && cat.getParentId() != 0) {
                 groupId = cat.getParentId();
             }
-            categoryAmounts.merge(groupId, tx.getAmountBase(), BigDecimal::add);
+            BigDecimal delta = tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase();
+            categoryAmounts.merge(groupId, delta, BigDecimal::add);
         }
 
         List<ReportVO.MonthlySummary.CategoryShareItem> shares = new ArrayList<>();
@@ -128,7 +133,7 @@ public class ReportServiceImpl implements ReportService {
         Map<String, BigDecimal> tagAmounts = new LinkedHashMap<>();
         Map<String, Integer> tagCounts = new LinkedHashMap<>();
         for (Transaction tx : expenses) {
-            if (tx.getTags() == null) continue;
+            if (tx.getType() != 1 || tx.getTags() == null) continue;
             try {
                 List<String> tags = objectMapper.readValue(tx.getTags(), new TypeReference<List<String>>() {});
                 Set<String> distinct = new LinkedHashSet<>();
@@ -173,6 +178,8 @@ public class ReportServiceImpl implements ReportService {
 
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .in(Transaction::getType, 1, 4)
                 .in(Transaction::getCategoryId, catIds)
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth())
@@ -222,16 +229,20 @@ public class ReportServiceImpl implements ReportService {
 
             LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
             query.eq(Transaction::getIsConfirmed, true)
+                    .eq(Transaction::getReviewStatus, "CONFIRMED")
                     .ge(Transaction::getTransactionDate, start)
                     .le(Transaction::getTransactionDate, end);
-            if (type != null) query.eq(Transaction::getType, type);
+            if (type != null && type == 1) {
+                query.in(Transaction::getType, 1, 4);
+            } else if (type != null) {
+                query.eq(Transaction::getType, type);
+            }
 
             List<Transaction> txs = transactionMapper.selectList(query);
 
             BigDecimal income = txs.stream().filter(t -> t.getType() == 2)
                     .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal expense = txs.stream().filter(t -> t.getType() == 1)
-                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal expense = netExpense(txs);
 
             ReportVO.TrendItem item = new ReportVO.TrendItem();
             item.setMonth(month);
@@ -296,14 +307,16 @@ public class ReportServiceImpl implements ReportService {
             LambdaQueryWrapper<Transaction> incomeQ = new LambdaQueryWrapper<>();
             incomeQ.eq(Transaction::getType, 2).eq(Transaction::getAccountId, acc.getId())
                     .eq(Transaction::getIsConfirmed, true)
+                    .eq(Transaction::getReviewStatus, "CONFIRMED")
                     .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
             item.setMonthIncome(sumBase(transactionMapper.selectList(incomeQ)));
 
             LambdaQueryWrapper<Transaction> expenseQ = new LambdaQueryWrapper<>();
-            expenseQ.eq(Transaction::getType, 1).eq(Transaction::getAccountId, acc.getId())
+            expenseQ.in(Transaction::getType, 1, 4).eq(Transaction::getAccountId, acc.getId())
                     .eq(Transaction::getIsConfirmed, true)
+                    .eq(Transaction::getReviewStatus, "CONFIRMED")
                     .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
-            item.setMonthExpense(sumBase(transactionMapper.selectList(expenseQ)));
+            item.setMonthExpense(netExpense(transactionMapper.selectList(expenseQ)));
 
             items.add(item);
         }
@@ -318,10 +331,14 @@ public class ReportServiceImpl implements ReportService {
         LocalDate end = LocalDate.of(year, 12, 31);
 
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getType, 1).eq(Transaction::getIsConfirmed, true)
+        query.in(Transaction::getType, 1, 4).eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
 
-        List<Transaction> txs = transactionMapper.selectList(query);
+        Map<Long, Category> heatmapCats = loadCategoryMap();
+        List<Transaction> txs = transactionMapper.selectList(query).stream()
+                .filter(tx -> isReportableExpense(tx, heatmapCats))
+                .toList();
         Map<LocalDate, List<Transaction>> byDate = txs.stream()
                 .collect(Collectors.groupingBy(Transaction::getTransactionDate));
 
@@ -329,7 +346,7 @@ public class ReportServiceImpl implements ReportService {
         for (Map.Entry<LocalDate, List<Transaction>> entry : byDate.entrySet()) {
             ReportVO.HeatmapItem item = new ReportVO.HeatmapItem();
             item.setDate(entry.getKey().format(DateTimeFormatter.ISO_LOCAL_DATE));
-            item.setAmount(sumBase(entry.getValue()));
+            item.setAmount(netExpense(entry.getValue()));
             item.setCount(entry.getValue().size());
             items.add(item);
         }
@@ -351,22 +368,27 @@ public class ReportServiceImpl implements ReportService {
 
         YearMonth ym = YearMonth.parse(month);
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getType, 1).eq(Transaction::getIsConfirmed, true)
+        query.in(Transaction::getType, 1, 4).eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
 
-        List<Transaction> txs = transactionMapper.selectList(query);
+        Map<Long, Category> catMap = loadCategoryMap();
+        List<Transaction> txs = transactionMapper.selectList(query).stream()
+                .filter(tx -> isReportableExpense(tx, catMap))
+                .toList();
         Map<String, List<Transaction>> byCurrency = txs.stream()
                 .collect(Collectors.groupingBy(Transaction::getCurrency));
 
-        BigDecimal grandTotal = sumBase(txs);
+        BigDecimal grandTotal = netExpense(txs);
         List<ReportVO.CurrencyItem> items = new ArrayList<>();
         for (Map.Entry<String, List<Transaction>> entry : byCurrency.entrySet()) {
             ReportVO.CurrencyItem item = new ReportVO.CurrencyItem();
             item.setCurrency(entry.getKey());
             BigDecimal totalOriginal = entry.getValue().stream()
-                    .map(Transaction::getAmount).reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal totalBase = sumBase(entry.getValue());
+                    .map(tx -> tx.getType() == 4 ? tx.getAmount().negate() : tx.getAmount())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totalBase = netExpense(entry.getValue());
             item.setTotalAmount(totalOriginal);
             item.setTotalBase(totalBase);
             item.setPercentage(grandTotal.compareTo(BigDecimal.ZERO) > 0
@@ -383,6 +405,7 @@ public class ReportServiceImpl implements ReportService {
         YearMonth ym = YearMonth.parse(month);
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .eq(Transaction::getType, type)
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
@@ -434,27 +457,31 @@ public class ReportServiceImpl implements ReportService {
 
         // 查询当月支出交易（商户维度）
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getType, 1)
+        query.in(Transaction::getType, 1, 4)
                 .eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, start)
                 .le(Transaction::getTransactionDate, end)
                 .isNotNull(Transaction::getMerchantId);
 
-        List<Transaction> txs = transactionMapper.selectList(query);
+        Map<Long, Category> catMap = loadCategoryMap();
+        List<Transaction> txs = transactionMapper.selectList(query).stream()
+                .filter(tx -> isReportableExpense(tx, catMap))
+                .toList();
 
         // 按商户聚合
         Map<Long, List<Transaction>> byMerchant = txs.stream()
                 .filter(t -> t.getMerchantId() != null)
                 .collect(Collectors.groupingBy(Transaction::getMerchantId));
 
-        BigDecimal grandTotal = sumBase(txs);
+        BigDecimal grandTotal = netExpense(txs);
         List<ReportVO.MerchantShareItem> items = new ArrayList<>();
 
         for (Map.Entry<Long, List<Transaction>> entry : byMerchant.entrySet()) {
             ReportVO.MerchantShareItem item = new ReportVO.MerchantShareItem();
             item.setMerchantId(entry.getKey());
 
-            BigDecimal merchantTotal = sumBase(entry.getValue());
+            BigDecimal merchantTotal = netExpense(entry.getValue());
             item.setAmount(merchantTotal);
             item.setTransactionCount(entry.getValue().size());
 
@@ -498,12 +525,39 @@ public class ReportServiceImpl implements ReportService {
         YearMonth ym = YearMonth.parse(month);
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
         List<Transaction> txs = transactionMapper.selectList(query);
         BigDecimal income = txs.stream().filter(t -> t.getType() == 2).map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal expense = txs.stream().filter(t -> t.getType() == 1).map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal expense = netExpense(txs);
         return new MonthData(income, expense);
+    }
+
+    private Map<Long, Category> loadCategoryMap() {
+        return categoryMapper.selectList(new LambdaQueryWrapper<>()).stream()
+                .collect(Collectors.toMap(Category::getId, c -> c));
+    }
+
+    /**
+     * 只统计真实支出分类：排除“往来款/借出”等 budgetType=NONE 的流水。
+     * 收入分类的 budgetType 也是 NONE，但不会进入支出统计。
+     */
+    private boolean isReportableExpense(Transaction tx, Map<Long, Category> categories) {
+        if (tx.getCategoryId() == null) return false;
+        Category category = categories.get(tx.getCategoryId());
+        return category != null && category.getType() != null && category.getType() == 1
+                && !"NONE".equals(category.getBudgetType());
+    }
+
+    /** 净支出 = 支出(type=1) - 退款(type=4)。 */
+    private BigDecimal netExpense(List<Transaction> txs) {
+        if (txs == null || txs.isEmpty()) return BigDecimal.ZERO;
+        Map<Long, Category> categories = loadCategoryMap();
+        return txs.stream()
+                .filter(tx -> isReportableExpense(tx, categories))
+                .map(tx -> tx.getType() == 4 ? tx.getAmountBase().negate() : tx.getAmountBase())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     private BigDecimal sumBase(List<Transaction> txs) {

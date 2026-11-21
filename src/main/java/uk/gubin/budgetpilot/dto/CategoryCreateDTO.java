@@ -16,9 +16,12 @@ public class CategoryCreateDTO {
     private String name;
 
     @NotNull(message = "分类类型不能为空")
-    @Min(value = 1, message = "分类类型必须为1-3之间的值")
-    @Max(value = 3, message = "分类类型必须为1-3之间的值")
+    @Min(value = 1, message = "分类类型必须为1-2之间的值")
+    @Max(value = 2, message = "分类类型必须为1-2之间的值")
     private Integer type;
+
+    /** DAILY / FIXED / SPECIAL / NONE，默认 DAILY */
+    private String budgetType;
 
     private String icon;
     private String color;

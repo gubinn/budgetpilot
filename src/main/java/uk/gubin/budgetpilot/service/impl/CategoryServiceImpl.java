@@ -11,15 +11,22 @@ import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.CategoryCreateDTO;
 import uk.gubin.budgetpilot.dto.CategoryUpdateDTO;
+import uk.gubin.budgetpilot.entity.AnnualBudgetItem;
+import uk.gubin.budgetpilot.entity.BudgetItem;
 import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.Transaction;
+import uk.gubin.budgetpilot.mapper.AnnualBudgetItemMapper;
+import uk.gubin.budgetpilot.mapper.BudgetItemMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
+import uk.gubin.budgetpilot.mapper.MerchantMapper;
+import uk.gubin.budgetpilot.mapper.RecurringRuleMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 import uk.gubin.budgetpilot.service.CategoryService;
 import uk.gubin.budgetpilot.vo.CategoryVO;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -29,6 +36,10 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
 
     private final TransactionMapper transactionMapper;
     private final CategoryMapper categoryMapper;
+    private final MerchantMapper merchantMapper;
+    private final RecurringRuleMapper recurringRuleMapper;
+    private final BudgetItemMapper budgetItemMapper;
+    private final AnnualBudgetItemMapper annualBudgetItemMapper;
     private final StringRedisTemplate redisTemplate;
 
     /**
@@ -85,6 +96,8 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         entity.setSortOrder(dto.getSortOrder());
         entity.setIsSystem(false);
         entity.setIsActive(true);
+        entity.setBudgetType(normalizeBudgetType(dto.getBudgetType(),
+                dto.getType() != null && dto.getType() == 1));
         save(entity);
         log.info("Created category: {}", entity.getName());
         return toVO(entity);
@@ -104,7 +117,26 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         // 循环引用检测
         detectCircularReference(all);
 
-        return buildTree(all, 0L);
+        List<CategoryVO> tree = buildTree(all, 0L);
+        Map<Long, Long> directCounts = new java.util.HashMap<>();
+        for (var stat : transactionMapper.countGroupedByCategory()) {
+            directCounts.put(stat.getCategoryId(), stat.getTxCount());
+        }
+        for (CategoryVO root : tree) {
+            populateTransactionCount(root, directCounts);
+        }
+        return tree;
+    }
+
+    private long populateTransactionCount(CategoryVO vo, Map<Long, Long> directCounts) {
+        long total = directCounts.getOrDefault(vo.getId(), 0L);
+        if (vo.getChildren() != null) {
+            for (CategoryVO child : vo.getChildren()) {
+                total += populateTransactionCount(child, directCounts);
+            }
+        }
+        vo.setTransactionCount(total);
+        return total;
     }
 
     /**
@@ -175,6 +207,21 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         if (dto.getIcon() != null) entity.setIcon(dto.getIcon());
         if (dto.getColor() != null) entity.setColor(dto.getColor());
         if (dto.getSortOrder() != null) entity.setSortOrder(dto.getSortOrder());
+        if (dto.getBudgetType() != null) {
+            String newBudgetType = normalizeBudgetType(dto.getBudgetType(),
+                    entity.getType() != null && entity.getType() == 1);
+            if (!newBudgetType.equals(entity.getBudgetType())) {
+                boolean hasBudget = budgetItemMapper.selectCount(
+                        new LambdaQueryWrapper<BudgetItem>().eq(BudgetItem::getCategoryId, id)) > 0
+                        || annualBudgetItemMapper.selectCount(
+                        new LambdaQueryWrapper<AnnualBudgetItem>().eq(AnnualBudgetItem::getCategoryId, id)) > 0;
+                if (hasBudget) {
+                    throw new BizException(ErrorCode.PARAM_ERROR,
+                            "该分类已有预算，不能直接修改预算属性；请先合并或删除预算项");
+                }
+            }
+            entity.setBudgetType(newBudgetType);
+        }
 
         // 处理 parentId 修改
         if (dto.getParentId() != null && !dto.getParentId().equals(entity.getParentId())) {
@@ -259,6 +306,70 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     }
 
     @Override
+    @Transactional
+    public CategoryVO merge(Long sourceId, Long targetId) {
+        if (sourceId == null || targetId == null || sourceId.equals(targetId)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "源分类和目标分类不能相同");
+        }
+        Category source = baseMapper.selectById(sourceId);
+        Category target = baseMapper.selectById(targetId);
+        if (source == null || target == null) {
+            throw new BizException(ErrorCode.CATEGORY_NOT_FOUND);
+        }
+        if (!source.getType().equals(target.getType())) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "只能合并同类型分类");
+        }
+        if (isDescendant(sourceId, targetId)) {
+            throw new BizException(ErrorCode.CATEGORY_CIRCULAR_REFERENCE, "不能合并到自己的子分类");
+        }
+        if (hasChildren(sourceId)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "请先合并子分类，再合并当前分类");
+        }
+
+        transactionMapper.reassignCategory(sourceId, targetId);
+        merchantMapper.reassignCategory(sourceId, targetId);
+        recurringRuleMapper.reassignCategory(sourceId, targetId);
+
+        List<BudgetItem> sourceBudgetItems = budgetItemMapper.selectList(
+                new LambdaQueryWrapper<BudgetItem>().eq(BudgetItem::getCategoryId, sourceId));
+        for (BudgetItem item : sourceBudgetItems) {
+            BudgetItem existing = budgetItemMapper.selectOne(new LambdaQueryWrapper<BudgetItem>()
+                    .eq(BudgetItem::getBudgetId, item.getBudgetId())
+                    .eq(BudgetItem::getCategoryId, targetId));
+            if (existing == null) {
+                item.setCategoryId(targetId);
+                budgetItemMapper.updateById(item);
+            } else {
+                existing.setAmount(existing.getAmount().add(item.getAmount()));
+                budgetItemMapper.updateById(existing);
+                budgetItemMapper.deleteById(item.getId());
+            }
+        }
+
+        List<AnnualBudgetItem> sourceAnnualItems = annualBudgetItemMapper.selectList(
+                new LambdaQueryWrapper<AnnualBudgetItem>().eq(AnnualBudgetItem::getCategoryId, sourceId));
+        for (AnnualBudgetItem item : sourceAnnualItems) {
+            AnnualBudgetItem existing = annualBudgetItemMapper.selectOne(new LambdaQueryWrapper<AnnualBudgetItem>()
+                    .eq(AnnualBudgetItem::getAnnualBudgetId, item.getAnnualBudgetId())
+                    .eq(AnnualBudgetItem::getCategoryId, targetId));
+            if (existing == null) {
+                item.setCategoryId(targetId);
+                annualBudgetItemMapper.updateById(item);
+            } else {
+                existing.setAmount(existing.getAmount().add(item.getAmount()));
+                annualBudgetItemMapper.updateById(existing);
+                annualBudgetItemMapper.deleteById(item.getId());
+            }
+        }
+
+        source.setIsActive(false);
+        baseMapper.updateById(source);
+        clearAllReportCache();
+        log.info("Merged category {} into {}", sourceId, targetId);
+        return toVO(target);
+    }
+
+    @Override
     public boolean hasChildren(Long id) {
         LambdaQueryWrapper<Category> query = new LambdaQueryWrapper<>();
         query.eq(Category::getParentId, id);
@@ -272,6 +383,16 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         return transactionMapper.selectCount(query) > 0;
     }
 
+    private String normalizeBudgetType(String value, boolean expense) {
+        if (!expense) return "NONE";
+        if (value == null || value.isBlank()) return "DAILY";
+        String normalized = value.trim().toUpperCase();
+        return switch (normalized) {
+            case "DAILY", "FIXED", "SPECIAL", "NONE" -> normalized;
+            default -> "DAILY";
+        };
+    }
+
     private CategoryVO toVO(Category entity) {
         CategoryVO vo = new CategoryVO();
         vo.setId(entity.getId());
@@ -283,6 +404,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         vo.setSortOrder(entity.getSortOrder());
         vo.setIsSystem(entity.getIsSystem());
         vo.setIsActive(entity.getIsActive());
+        vo.setBudgetType(entity.getBudgetType());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setUpdatedAt(entity.getUpdatedAt());
         vo.setChildren(new ArrayList<>());

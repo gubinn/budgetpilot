@@ -22,6 +22,9 @@ public interface MerchantMapper extends BaseMapper<Merchant> {
     @Update("UPDATE t_merchant SET usage_count = usage_count + 1, last_used_at = #{lastUsedAt} WHERE id = #{merchantId}")
     int incrementUsage(@Param("merchantId") Long merchantId, @Param("lastUsedAt") LocalDate lastUsedAt);
 
+    @Update("UPDATE t_merchant SET category_id = #{targetId} WHERE category_id = #{sourceId}")
+    int reassignCategory(@Param("sourceId") Long sourceId, @Param("targetId") Long targetId);
+
     @InterceptorIgnore(tenantLine = "true")
     @Delete("DELETE FROM t_merchant WHERE user_id = #{userId}")
     int deleteByUserId(@Param("userId") Long userId);

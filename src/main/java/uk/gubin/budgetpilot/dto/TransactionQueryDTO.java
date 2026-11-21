@@ -22,6 +22,8 @@ public class TransactionQueryDTO {
     private String keyword;
     private List<String> tags;
     private Boolean confirmed;
+    /** PENDING / CONFIRMED */
+    private String reviewStatus;
     /** 扩展字段查询：按 key-value 匹配 */
     private String extKey;
     private String extValue;
