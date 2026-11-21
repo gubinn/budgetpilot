@@ -46,7 +46,6 @@
             <n-button @click="testWhatsApp" style="margin-left: 8px">推送测试</n-button>
           </n-form-item>
         </n-form>
-        <div class="config-hint">API Key 决定以哪个 Agent 身份发送，接收者 ID 决定发给谁。官方只允许发给创建 Agent 的本人，ID 可在 OpenClaw 配置的 creatorId 或收到的消息事件中查看。</div>
       </n-card>
     </n-gi>
 
