@@ -20,4 +20,6 @@ public class Category extends BaseEntity {
     private Boolean isActive;
     /** DAILY / FIXED / SPECIAL / NONE */
     private String budgetType;
+    /** 1=不计入收支报表（往来款、余额调整） */
+    private Boolean excludeFromReports;
 }

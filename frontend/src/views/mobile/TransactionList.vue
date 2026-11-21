@@ -37,6 +37,7 @@
           <div class="tx-tags">
             <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待确认</n-tag>
             <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
+            <n-button v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" secondary style="margin-left: 4px" @click.stop="openReview(tx)">复核</n-button>
             <n-tag v-for="tag in (tx.tags || [])" :key="tag" size="tiny" type="info" :bordered="false" style="margin-left: 4px">{{ tag }}</n-tag>
           </div>
         </div>
@@ -49,6 +50,33 @@
       </div>
     </div>
     <n-empty v-else description="暂无交易" />
+
+    <n-modal v-model:show="showReview" preset="card" title="复核交易" style="width: 92vw; max-width: 520px">
+      <div v-if="reviewRow" class="review-summary">
+        <div>{{ reviewRow.transactionDate }} · {{ reviewRow.type === 1 ? '-' : '+' }}¥{{ formatNum(reviewRow.amount) }}</div>
+        <div class="review-note">{{ reviewRow.note || '-' }}</div>
+      </div>
+      <n-radio-group v-model:value="reviewAction" style="margin-top: 12px">
+        <n-space vertical>
+          <n-radio v-for="opt in reviewActions" :key="opt.value" :value="opt.value">{{ opt.label }}</n-radio>
+        </n-space>
+      </n-radio-group>
+      <n-tree-select
+        v-if="reviewAction === 'EXPENSE' || reviewAction === 'INCOME'"
+        v-model:value="reviewCategoryId"
+        :options="reviewCategoryOptions"
+        placeholder="选择分类"
+        filterable
+        clearable
+        style="margin-top: 12px"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showReview = false">取消</n-button>
+          <n-button type="primary" :loading="reviewSubmitting" @click="submitReview">保存复核</n-button>
+        </n-space>
+      </template>
+    </n-modal>
 
     <!-- 分页 -->
     <div v-if="pagination.itemCount > pagination.pageSize" class="pagination">
@@ -106,7 +134,109 @@ const reviewOptions = [
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
+const categories = ref([])
 const tagOptions = ref([])
+
+const showReview = ref(false)
+const reviewRow = ref(null)
+const reviewAction = ref(null)
+const reviewCategoryId = ref(null)
+const reviewSubmitting = ref(false)
+
+const reviewActions = computed(() => {
+  if (reviewRow.value?.type === 2) {
+    return [
+      { value: 'COLLECT_LOAN', label: '收回借款（别人还我，不计收入）' },
+      { value: 'LOAN_IN', label: '借入（我向别人借，不计收入）' },
+      { value: 'SELF_IN', label: '本人账户转入（不计收入）' },
+      { value: 'INCOME', label: '实际收入（选择收入分类）' },
+      { value: 'KEEP', label: '保持待复核' }
+    ]
+  }
+  return [
+    { value: 'LOAN_OUT', label: '借出（我借给别人，不计收支）' },
+    { value: 'REPAY_LOAN', label: '归还借款（我还别人，不计收支）' },
+    { value: 'SELF_OUT', label: '本人账户转出（不计收支）' },
+    { value: 'EXPENSE', label: '实际支出（选择支出分类）' },
+    { value: 'KEEP', label: '保持待复核' }
+  ]
+})
+
+const reviewCategoryOptions = computed(() => {
+  const type = reviewAction.value === 'INCOME' ? 2 : 1
+  function build(nodes) {
+    return (nodes || [])
+      .filter(c => c.type === type && !c.excludeFromReports
+        && (type === 2 || c.budgetType !== 'NONE'))
+      .map(c => ({ label: c.name, value: c.id, children: build(c.children) }))
+  }
+  return build(categories.value)
+})
+
+const REVIEW_CATEGORY_PATHS = {
+  LOAN_OUT: '往来款/借出',
+  REPAY_LOAN: '往来款/还款',
+  SELF_OUT: '往来款/本人转出',
+  COLLECT_LOAN: '往来款收入/收回借款',
+  LOAN_IN: '往来款收入/借入',
+  SELF_IN: '往来款收入/本人转入'
+}
+
+function findCategoryByPath(path) {
+  const parts = path.split('/')
+  let list = categories.value
+  let found = null
+  for (const part of parts) {
+    found = (list || []).find(c => c.name === part)
+    if (!found) return null
+    list = found.children
+  }
+  return found
+}
+
+function openReview(row) {
+  reviewRow.value = row
+  reviewAction.value = null
+  reviewCategoryId.value = null
+  showReview.value = true
+}
+
+async function submitReview() {
+  if (!reviewAction.value) {
+    message.warning('请选择处理方式')
+    return
+  }
+  if (reviewAction.value === 'KEEP') {
+    showReview.value = false
+    return
+  }
+  let categoryId = null
+  if (reviewAction.value === 'EXPENSE' || reviewAction.value === 'INCOME') {
+    if (!reviewCategoryId.value) {
+      message.warning('请选择分类')
+      return
+    }
+    categoryId = reviewCategoryId.value
+  } else {
+    const category = findCategoryByPath(REVIEW_CATEGORY_PATHS[reviewAction.value])
+    if (!category) {
+      message.error('分类不存在：' + REVIEW_CATEGORY_PATHS[reviewAction.value])
+      return
+    }
+    categoryId = category.id
+  }
+  reviewSubmitting.value = true
+  try {
+    await transactionApi.update(reviewRow.value.id, { categoryId, reviewStatus: 'CONFIRMED' })
+    message.success('复核完成')
+    showReview.value = false
+    loadData()
+  } catch (e) {
+    message.error('复核失败: ' + (e.response?.data?.message || e.message))
+  } finally {
+    reviewSubmitting.value = false
+  }
+}
 
 const pagination = ref({
   page: 1,
@@ -175,6 +305,7 @@ onMounted(async () => {
     ])
     tagOptions.value = (tagRes.data || []).map(t => ({ label: t, value: t }))
     accountOptions.value = accRes.data.map(a => ({ label: a.name, value: a.id }))
+    categories.value = catRes.data || []
 
     function toTreeOption(c) {
       const opt = { label: c.name, value: c.id }
@@ -251,4 +382,8 @@ onMounted(async () => {
   right: 16px;
   z-index: 50;
 }
+
+/* 复核弹窗 */
+.review-summary { font-size: 14px; color: #333; }
+.review-note { margin-top: 4px; font-size: 12px; color: #888; }
 </style>

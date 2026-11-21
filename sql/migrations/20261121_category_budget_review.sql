@@ -13,6 +13,14 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 't_category' AND COLUMN_NAME = 'exclude_from_reports') = 0,
+    'ALTER TABLE t_category ADD COLUMN exclude_from_reports TINYINT(1) NOT NULL DEFAULT 0 COMMENT ''1=不计入收支报表'' AFTER budget_type',
+    'SELECT 1'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @sql = IF(
+    (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 't_transaction' AND COLUMN_NAME = 'review_status') = 0,
     'ALTER TABLE t_transaction ADD COLUMN review_status VARCHAR(16) NOT NULL DEFAULT ''CONFIRMED'' COMMENT ''PENDING-待人工复核 CONFIRMED-已复核'' AFTER is_confirmed',
     'SELECT 1'

@@ -22,6 +22,8 @@ public class CategoryCreateDTO {
 
     /** DAILY / FIXED / SPECIAL / NONE，默认 DAILY */
     private String budgetType;
+    /** 1=不计入收支报表 */
+    private Boolean excludeFromReports;
 
     private String icon;
     private String color;

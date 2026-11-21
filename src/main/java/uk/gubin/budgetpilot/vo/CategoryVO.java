@@ -18,6 +18,8 @@ public class CategoryVO {
     private Boolean isActive;
     /** DAILY / FIXED / SPECIAL / NONE */
     private String budgetType;
+    /** 1=不计入收支报表 */
+    private Boolean excludeFromReports;
     /** 当前分类及其子分类的交易笔数 */
     private Long transactionCount;
     private LocalDateTime createdAt;

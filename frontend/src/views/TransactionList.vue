@@ -42,11 +42,51 @@
     <n-space style="margin-top: 16px; justify-content: flex-end">
       <n-button type="primary" @click="router.push('/transactions/add')">新增交易</n-button>
     </n-space>
+
+    <!-- 复核弹窗 -->
+    <n-modal v-model:show="showReview" preset="card" title="复核交易" style="width: 560px">
+      <n-descriptions v-if="reviewRow" :column="1" size="small" bordered>
+        <n-descriptions-item label="日期">{{ reviewRow.transactionDate }}</n-descriptions-item>
+        <n-descriptions-item label="金额">
+          {{ reviewRow.type === 1 ? '-' : '+' }}¥{{ reviewRow.amount }}
+        </n-descriptions-item>
+        <n-descriptions-item label="账户">{{ reviewRow.accountName || '-' }}</n-descriptions-item>
+        <n-descriptions-item label="摘要">{{ reviewRow.note || '-' }}</n-descriptions-item>
+      </n-descriptions>
+
+      <n-form label-placement="left" label-width="90" style="margin-top: 16px">
+        <n-form-item label="处理方式">
+          <n-radio-group v-model:value="reviewAction">
+            <n-space vertical>
+              <n-radio v-for="opt in reviewActions" :key="opt.value" :value="opt.value">
+                {{ opt.label }}
+              </n-radio>
+            </n-space>
+          </n-radio-group>
+        </n-form-item>
+        <n-form-item v-if="reviewAction === 'EXPENSE' || reviewAction === 'INCOME'" label="分类">
+          <n-tree-select
+            v-model:value="reviewCategoryId"
+            :options="reviewCategoryOptions"
+            placeholder="选择分类"
+            filterable
+            clearable
+          />
+        </n-form-item>
+      </n-form>
+
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showReview = false">取消</n-button>
+          <n-button type="primary" :loading="reviewSubmitting" @click="submitReview">保存复核</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
 <script setup>
-import { ref, onMounted, h } from 'vue'
+import { ref, computed, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
 import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
@@ -88,6 +128,67 @@ const reviewOptions = [
 const accountOptions = ref([])
 const categoryOptions = ref([])
 const tagOptions = ref([])
+
+const showReview = ref(false)
+const reviewRow = ref(null)
+const reviewAction = ref(null)
+const reviewCategoryId = ref(null)
+const reviewSubmitting = ref(false)
+
+const reviewActions = computed(() => {
+  if (reviewRow.value?.type === 2) {
+    return [
+      { value: 'COLLECT_LOAN', label: '收回借款（别人还我，不计收入）' },
+      { value: 'LOAN_IN', label: '借入（我向别人借，不计收入）' },
+      { value: 'SELF_IN', label: '本人账户转入（不计收入）' },
+      { value: 'INCOME', label: '实际收入（选择收入分类）' },
+      { value: 'KEEP', label: '保持待复核' }
+    ]
+  }
+  return [
+    { value: 'LOAN_OUT', label: '借出（我借给别人，不计收支）' },
+    { value: 'REPAY_LOAN', label: '归还借款（我还别人，不计收支）' },
+    { value: 'SELF_OUT', label: '本人账户转出（不计收支）' },
+    { value: 'EXPENSE', label: '实际支出（选择支出分类）' },
+    { value: 'KEEP', label: '保持待复核' }
+  ]
+})
+
+const reviewCategoryOptions = computed(() => {
+  const type = reviewAction.value === 'INCOME' ? 2 : 1
+  function build(nodes) {
+    return (nodes || [])
+      .filter(c => c.type === type && !c.excludeFromReports
+        && (type === 2 || c.budgetType !== 'NONE'))
+      .map(c => ({
+        label: c.name,
+        value: c.id,
+        children: build(c.children)
+      }))
+  }
+  return build(categories.value)
+})
+
+const REVIEW_CATEGORY_PATHS = {
+  LOAN_OUT: '往来款/借出',
+  REPAY_LOAN: '往来款/还款',
+  SELF_OUT: '往来款/本人转出',
+  COLLECT_LOAN: '往来款收入/收回借款',
+  LOAN_IN: '往来款收入/借入',
+  SELF_IN: '往来款收入/本人转入'
+}
+
+function findCategoryByPath(path) {
+  const parts = path.split('/')
+  let list = categories.value
+  let found = null
+  for (const part of parts) {
+    found = (list || []).find(c => c.name === part)
+    if (!found) return null
+    list = found.children
+  }
+  return found
+}
 
 const pagination = ref({
   page: 1,
@@ -172,7 +273,7 @@ const columns = [
     render: (row) => h(NSpace, { size: 8 }, [
       row.isConfirmed ? null : h(NButton, { size: 'small', type: 'success', onClick: () => handleConfirm(row.id) }, { default: () => '确认' }),
       row.reviewStatus === 'PENDING'
-        ? h(NButton, { size: 'small', type: 'warning', onClick: () => handleReview(row.id) }, { default: () => '确认为借出' })
+        ? h(NButton, { size: 'small', type: 'warning', onClick: () => openReview(row) }, { default: () => '复核' })
         : null,
       h(NButton, { size: 'small', type: 'primary', onClick: () => router.push(`/transactions/edit/${row.id}`) }, { default: () => '编辑' }),
       h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
@@ -240,13 +341,52 @@ async function handleConfirm(id) {
   }
 }
 
-async function handleReview(id) {
+function openReview(row) {
+  reviewRow.value = row
+  reviewAction.value = null
+  reviewCategoryId.value = null
+  showReview.value = true
+}
+
+async function submitReview() {
+  if (!reviewAction.value) {
+    message.warning('请选择处理方式')
+    return
+  }
+  if (reviewAction.value === 'KEEP') {
+    showReview.value = false
+    return
+  }
+
+  let categoryId = null
+  if (reviewAction.value === 'EXPENSE' || reviewAction.value === 'INCOME') {
+    if (!reviewCategoryId.value) {
+      message.warning('请选择分类')
+      return
+    }
+    categoryId = reviewCategoryId.value
+  } else {
+    const category = findCategoryByPath(REVIEW_CATEGORY_PATHS[reviewAction.value])
+    if (!category) {
+      message.error(`分类不存在：${REVIEW_CATEGORY_PATHS[reviewAction.value]}`)
+      return
+    }
+    categoryId = category.id
+  }
+
+  reviewSubmitting.value = true
   try {
-    await transactionApi.update(id, { reviewStatus: 'CONFIRMED' })
-    message.success('已确认为借出（不计日常收支）')
+    await transactionApi.update(reviewRow.value.id, {
+      categoryId,
+      reviewStatus: 'CONFIRMED'
+    })
+    message.success('复核完成')
+    showReview.value = false
     loadData()
   } catch (e) {
     message.error('复核失败: ' + (e.response?.data?.message || e.message))
+  } finally {
+    reviewSubmitting.value = false
   }
 }
 

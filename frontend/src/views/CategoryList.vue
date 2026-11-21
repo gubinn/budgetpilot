@@ -88,7 +88,7 @@ const editingId = ref(null)
 const submitting = ref(false)
 
 const mergeOptions = computed(() => categories.value
-  .filter(c => !c.isSystem)
+  .filter(c => !c.isSystem && !categories.value.some(child => child.parentId === c.id))
   .map(c => ({ label: `${c.parentId ? '　' : ''}${c.name}${c.budgetType && c.type === 1 ? `（${budgetTypeLabels[c.budgetType] || c.budgetType}）` : ''}`, value: c.id })))
 
 const form = ref({

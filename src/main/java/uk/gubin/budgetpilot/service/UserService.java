@@ -238,6 +238,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 newCat.setIsSystem(false);
                 newCat.setIsActive(true);
                 newCat.setBudgetType(cat.getBudgetType() != null ? cat.getBudgetType() : "DAILY");
+                newCat.setExcludeFromReports(Boolean.TRUE.equals(cat.getExcludeFromReports()));
                 categoryMapper.insert(newCat);
                 idMapping.put(cat.getId(), newCat.getId());
             }
@@ -257,6 +258,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 newCat.setIsSystem(false);
                 newCat.setIsActive(true);
                 newCat.setBudgetType(cat.getBudgetType() != null ? cat.getBudgetType() : "DAILY");
+                newCat.setExcludeFromReports(Boolean.TRUE.equals(cat.getExcludeFromReports()));
                 categoryMapper.insert(newCat);
             }
         }

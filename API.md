@@ -221,6 +221,7 @@
   "name": "分类名称 (必填)",
   "type": "分类类型 (必填, 1-支出 2-收入)",
   "budgetType": "DAILY / FIXED / SPECIAL / NONE (支出分类，默认 DAILY)",
+  "excludeFromReports": "是否不计入收支报表（往来款/余额调整用）",
   "icon": "图标",
   "color": "颜色",
   "sortOrder": "排序 (默认 0)"
@@ -235,6 +236,7 @@
   "name": "分类名称 (最长 30)",
   "type": "分类类型 (1-2)",
   "budgetType": "DAILY / FIXED / SPECIAL / NONE",
+  "excludeFromReports": "是否不计入收支报表",
   "icon": "图标",
   "color": "颜色",
   "sortOrder": "排序"
@@ -244,6 +246,7 @@
 分类树的每个节点额外返回：
 
 - `budgetType`：预算属性；收入分类固定为 `NONE`；
+- `excludeFromReports`：为 `true` 时该分类的交易只影响账户余额，不进收支报表/预算（往来款、余额调整）；
 - `transactionCount`：该分类及其子分类的交易笔数。
 
 合并分类会把交易、月度预算、年度预算、商户默认分类、周期规则重指向目标分类，然后停用源分类；源分类必须是没有子分类的叶子。

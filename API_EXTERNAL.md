@@ -316,6 +316,7 @@ X-Api-Key: your-api-key
 | `name` | string | 分类名称 |
 | `type` | int | `1` = 支出，`2` = 收入 |
 | `budgetType` | string | `DAILY` 月度日常 / `FIXED` 固定不预算 / `SPECIAL` 年度专项 / `NONE` 非预算 |
+| `excludeFromReports` | boolean | `true` 时只影响账户余额，不进收支报表/预算（往来款、余额调整） |
 | `transactionCount` | long | 该分类及其子分类的交易笔数 |
 | `icon` | string | 图标标识 |
 | `color` | string | 颜色（#RRGGBB） |

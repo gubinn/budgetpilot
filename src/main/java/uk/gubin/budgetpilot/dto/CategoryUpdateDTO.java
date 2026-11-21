@@ -18,6 +18,8 @@ public class CategoryUpdateDTO {
 
     /** DAILY / FIXED / SPECIAL / NONE */
     private String budgetType;
+    /** 1=不计入收支报表 */
+    private Boolean excludeFromReports;
 
     private String icon;
     private String color;

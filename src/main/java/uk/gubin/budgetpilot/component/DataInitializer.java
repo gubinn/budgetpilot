@@ -156,6 +156,7 @@ public class DataInitializer {
             cat.setIsActive(true);
             cat.setSortOrder(99);
             cat.setBudgetType("NONE");
+            cat.setExcludeFromReports(true);
             categoryMapper.insert(cat);
             parentIdMap.put(row[0], cat.getId());
         }
@@ -172,21 +173,62 @@ public class DataInitializer {
         loanParent.setIsActive(true);
         loanParent.setSortOrder(12);
         loanParent.setBudgetType("NONE");
+        loanParent.setExcludeFromReports(true);
         categoryMapper.insert(loanParent);
         parentIdMap.put("往来款", loanParent.getId());
 
-        Category loan = new Category();
-        loan.setUserId(0L);
-        loan.setParentId(loanParent.getId());
-        loan.setName("借出");
-        loan.setType(1);
-        loan.setIcon("transfer");
-        loan.setColor("#95A5A6");
-        loan.setIsSystem(true);
-        loan.setIsActive(true);
-        loan.setSortOrder(1);
-        loan.setBudgetType("NONE");
-        categoryMapper.insert(loan);
+        String[][] loanChildren = {
+                {"借出", "1"}, {"还款", "2"}, {"本人转出", "3"},
+        };
+        for (String[] row : loanChildren) {
+            Category loan = new Category();
+            loan.setUserId(0L);
+            loan.setParentId(loanParent.getId());
+            loan.setName(row[0]);
+            loan.setType(1);
+            loan.setIcon("transfer");
+            loan.setColor("#95A5A6");
+            loan.setIsSystem(true);
+            loan.setIsActive(true);
+            loan.setSortOrder(Integer.parseInt(row[1]));
+            loan.setBudgetType("NONE");
+            loan.setExcludeFromReports(true);
+            categoryMapper.insert(loan);
+        }
+
+        Category loanIncomeParent = new Category();
+        loanIncomeParent.setUserId(0L);
+        loanIncomeParent.setParentId(0L);
+        loanIncomeParent.setName("往来款收入");
+        loanIncomeParent.setType(2);
+        loanIncomeParent.setIcon("transfer");
+        loanIncomeParent.setColor("#95A5A6");
+        loanIncomeParent.setIsSystem(true);
+        loanIncomeParent.setIsActive(true);
+        loanIncomeParent.setSortOrder(5);
+        loanIncomeParent.setBudgetType("NONE");
+        loanIncomeParent.setExcludeFromReports(true);
+        categoryMapper.insert(loanIncomeParent);
+        parentIdMap.put("往来款收入", loanIncomeParent.getId());
+
+        String[][] loanIncomeChildren = {
+                {"收回借款", "1"}, {"借入", "2"}, {"本人转入", "3"},
+        };
+        for (String[] row : loanIncomeChildren) {
+            Category loan = new Category();
+            loan.setUserId(0L);
+            loan.setParentId(loanIncomeParent.getId());
+            loan.setName(row[0]);
+            loan.setType(2);
+            loan.setIcon("transfer");
+            loan.setColor("#95A5A6");
+            loan.setIsSystem(true);
+            loan.setIsActive(true);
+            loan.setSortOrder(Integer.parseInt(row[1]));
+            loan.setBudgetType("NONE");
+            loan.setExcludeFromReports(true);
+            categoryMapper.insert(loan);
+        }
 
         // 子分类: [父分类, 名称, icon, budgetType]
         String[][] subCategories = {
@@ -258,7 +300,7 @@ public class DataInitializer {
             categoryMapper.insert(sub);
         }
 
-        log.info("Initialized {} system categories", parentIdMap.size() + subCategories.length + 1);
+        log.info("Initialized {} system categories", parentIdMap.size() + subCategories.length + 6);
     }
 
     /**

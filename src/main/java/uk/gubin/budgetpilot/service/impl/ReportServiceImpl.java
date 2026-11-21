@@ -80,7 +80,9 @@ public class ReportServiceImpl implements ReportService {
         incomeQuery.eq(Transaction::getType, 2).eq(Transaction::getIsConfirmed, true)
                 .eq(Transaction::getReviewStatus, "CONFIRMED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
-        List<Transaction> incomes = transactionMapper.selectList(incomeQuery);
+        List<Transaction> incomes = transactionMapper.selectList(incomeQuery).stream()
+                .filter(tx -> isReportableIncome(tx, catMap))
+                .toList();
         summary.setTotalIncome(sumBase(incomes));
         summary.setBalance(summary.getTotalIncome().subtract(totalExpense));
 
@@ -240,7 +242,9 @@ public class ReportServiceImpl implements ReportService {
 
             List<Transaction> txs = transactionMapper.selectList(query);
 
+            Map<Long, Category> trendCats = loadCategoryMap();
             BigDecimal income = txs.stream().filter(t -> t.getType() == 2)
+                    .filter(t -> isReportableIncome(t, trendCats))
                     .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
             BigDecimal expense = netExpense(txs);
 
@@ -309,7 +313,11 @@ public class ReportServiceImpl implements ReportService {
                     .eq(Transaction::getIsConfirmed, true)
                     .eq(Transaction::getReviewStatus, "CONFIRMED")
                     .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
-            item.setMonthIncome(sumBase(transactionMapper.selectList(incomeQ)));
+            Map<Long, Category> accountCats = loadCategoryMap();
+            item.setMonthIncome(transactionMapper.selectList(incomeQ).stream()
+                    .filter(tx -> isReportableIncome(tx, accountCats))
+                    .map(Transaction::getAmountBase)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add));
 
             LambdaQueryWrapper<Transaction> expenseQ = new LambdaQueryWrapper<>();
             expenseQ.in(Transaction::getType, 1, 4).eq(Transaction::getAccountId, acc.getId())
@@ -409,7 +417,10 @@ public class ReportServiceImpl implements ReportService {
                 .eq(Transaction::getType, type)
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
-        List<Transaction> txs = transactionMapper.selectList(query);
+        Map<Long, Category> extCats = loadCategoryMap();
+        List<Transaction> txs = transactionMapper.selectList(query).stream()
+                .filter(tx -> type != 2 || isReportableIncome(tx, extCats))
+                .toList();
         BigDecimal total = sumBase(txs);
 
         Map<String, BigDecimal> amounts = new LinkedHashMap<>();
@@ -529,7 +540,10 @@ public class ReportServiceImpl implements ReportService {
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
         List<Transaction> txs = transactionMapper.selectList(query);
-        BigDecimal income = txs.stream().filter(t -> t.getType() == 2).map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<Long, Category> cats = loadCategoryMap();
+        BigDecimal income = txs.stream().filter(t -> t.getType() == 2)
+                .filter(t -> isReportableIncome(t, cats))
+                .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
         BigDecimal expense = netExpense(txs);
         return new MonthData(income, expense);
     }
@@ -547,7 +561,15 @@ public class ReportServiceImpl implements ReportService {
         if (tx.getCategoryId() == null) return false;
         Category category = categories.get(tx.getCategoryId());
         return category != null && category.getType() != null && category.getType() == 1
-                && !"NONE".equals(category.getBudgetType());
+                && !"NONE".equals(category.getBudgetType())
+                && !Boolean.TRUE.equals(category.getExcludeFromReports());
+    }
+
+    /** 收入默认计入，但“往来款收入/余额调整”等分类只走账户余额，不进收支报表。 */
+    private boolean isReportableIncome(Transaction tx, Map<Long, Category> categories) {
+        if (tx.getCategoryId() == null) return true;
+        Category category = categories.get(tx.getCategoryId());
+        return category == null || !Boolean.TRUE.equals(category.getExcludeFromReports());
     }
 
     /** 净支出 = 支出(type=1) - 退款(type=4)。 */

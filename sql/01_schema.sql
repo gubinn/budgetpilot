@@ -70,6 +70,7 @@ CREATE TABLE t_category (
     is_system   TINYINT(1)      DEFAULT 0 COMMENT '系统预设，不可删除',
     is_active   TINYINT(1)      DEFAULT 1,
     budget_type VARCHAR(16)     NOT NULL DEFAULT 'DAILY' COMMENT 'DAILY-月度日常 FIXED-固定不预算 SPECIAL-年度专项 NONE-非预算流水',
+    exclude_from_reports TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=不计入收支报表（往来款、余额调整）',
     created_at  DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user (user_id),

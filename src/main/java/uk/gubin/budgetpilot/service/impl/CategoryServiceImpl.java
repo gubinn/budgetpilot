@@ -98,6 +98,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         entity.setIsActive(true);
         entity.setBudgetType(normalizeBudgetType(dto.getBudgetType(),
                 dto.getType() != null && dto.getType() == 1));
+        entity.setExcludeFromReports(Boolean.TRUE.equals(dto.getExcludeFromReports()));
         save(entity);
         log.info("Created category: {}", entity.getName());
         return toVO(entity);
@@ -207,6 +208,9 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         if (dto.getIcon() != null) entity.setIcon(dto.getIcon());
         if (dto.getColor() != null) entity.setColor(dto.getColor());
         if (dto.getSortOrder() != null) entity.setSortOrder(dto.getSortOrder());
+        if (dto.getExcludeFromReports() != null) {
+            entity.setExcludeFromReports(dto.getExcludeFromReports());
+        }
         if (dto.getBudgetType() != null) {
             String newBudgetType = normalizeBudgetType(dto.getBudgetType(),
                     entity.getType() != null && entity.getType() == 1);
@@ -325,6 +329,9 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         if (hasChildren(sourceId)) {
             throw new BizException(ErrorCode.PARAM_ERROR, "请先合并子分类，再合并当前分类");
         }
+        if (hasChildren(targetId)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "目标分类必须是没有子分类的叶子");
+        }
 
         transactionMapper.reassignCategory(sourceId, targetId);
         merchantMapper.reassignCategory(sourceId, targetId);
@@ -405,6 +412,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         vo.setIsSystem(entity.getIsSystem());
         vo.setIsActive(entity.getIsActive());
         vo.setBudgetType(entity.getBudgetType());
+        vo.setExcludeFromReports(entity.getExcludeFromReports());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setUpdatedAt(entity.getUpdatedAt());
         vo.setChildren(new ArrayList<>());
