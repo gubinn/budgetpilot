@@ -22,7 +22,7 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 SET @sql = IF(
     (SELECT COUNT(*) FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 't_transaction' AND COLUMN_NAME = 'review_status') = 0,
-    'ALTER TABLE t_transaction ADD COLUMN review_status VARCHAR(16) NOT NULL DEFAULT ''CONFIRMED'' COMMENT ''PENDING-待人工复核 CONFIRMED-已复核'' AFTER is_confirmed',
+    'ALTER TABLE t_transaction ADD COLUMN review_status VARCHAR(16) NOT NULL DEFAULT ''REVIEWED'' COMMENT ''PENDING-待人工复核 REVIEWED-已复核'' AFTER is_confirmed',
     'SELECT 1'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
@@ -39,6 +39,11 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 UPDATE t_category SET budget_type = 'NONE' WHERE type = 2;
 UPDATE t_category SET budget_type = 'NONE'
 WHERE type = 1 AND name IN ('余额调整支出');
+
+-- 复核状态不与入账确认 is_confirmed 共用“CONFIRMED”命名
+UPDATE t_transaction SET review_status = 'REVIEWED' WHERE review_status = 'CONFIRMED';
+ALTER TABLE t_transaction MODIFY COLUMN review_status VARCHAR(16) NOT NULL DEFAULT 'REVIEWED'
+    COMMENT 'PENDING-待人工复核 REVIEWED-已复核';
 
 -- 交易类型注释更新（仅元数据）
 ALTER TABLE t_transaction MODIFY COLUMN type TINYINT NOT NULL COMMENT '1-支出 2-收入 3-转账 4-退款';

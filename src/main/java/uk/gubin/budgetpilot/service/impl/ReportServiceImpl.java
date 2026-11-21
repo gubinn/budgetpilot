@@ -64,7 +64,7 @@ public class ReportServiceImpl implements ReportService {
         // 支出（含退款冲减；排除非预算流水和待复核）
         LambdaQueryWrapper<Transaction> expenseQuery = new LambdaQueryWrapper<>();
         expenseQuery.in(Transaction::getType, 1, 4).eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
         List<Transaction> expenseTxs = transactionMapper.selectList(expenseQuery);
         Map<Long, Category> catMap = loadCategoryMap();
@@ -78,7 +78,7 @@ public class ReportServiceImpl implements ReportService {
         // 收入
         LambdaQueryWrapper<Transaction> incomeQuery = new LambdaQueryWrapper<>();
         incomeQuery.eq(Transaction::getType, 2).eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
         List<Transaction> incomes = transactionMapper.selectList(incomeQuery).stream()
                 .filter(tx -> isReportableIncome(tx, catMap))
@@ -180,7 +180,7 @@ public class ReportServiceImpl implements ReportService {
 
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .in(Transaction::getType, 1, 4)
                 .in(Transaction::getCategoryId, catIds)
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
@@ -231,7 +231,7 @@ public class ReportServiceImpl implements ReportService {
 
             LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
             query.eq(Transaction::getIsConfirmed, true)
-                    .eq(Transaction::getReviewStatus, "CONFIRMED")
+                    .eq(Transaction::getReviewStatus, "REVIEWED")
                     .ge(Transaction::getTransactionDate, start)
                     .le(Transaction::getTransactionDate, end);
             if (type != null && type == 1) {
@@ -311,7 +311,7 @@ public class ReportServiceImpl implements ReportService {
             LambdaQueryWrapper<Transaction> incomeQ = new LambdaQueryWrapper<>();
             incomeQ.eq(Transaction::getType, 2).eq(Transaction::getAccountId, acc.getId())
                     .eq(Transaction::getIsConfirmed, true)
-                    .eq(Transaction::getReviewStatus, "CONFIRMED")
+                    .eq(Transaction::getReviewStatus, "REVIEWED")
                     .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
             Map<Long, Category> accountCats = loadCategoryMap();
             item.setMonthIncome(transactionMapper.selectList(incomeQ).stream()
@@ -322,7 +322,7 @@ public class ReportServiceImpl implements ReportService {
             LambdaQueryWrapper<Transaction> expenseQ = new LambdaQueryWrapper<>();
             expenseQ.in(Transaction::getType, 1, 4).eq(Transaction::getAccountId, acc.getId())
                     .eq(Transaction::getIsConfirmed, true)
-                    .eq(Transaction::getReviewStatus, "CONFIRMED")
+                    .eq(Transaction::getReviewStatus, "REVIEWED")
                     .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
             item.setMonthExpense(netExpense(transactionMapper.selectList(expenseQ)));
 
@@ -340,7 +340,7 @@ public class ReportServiceImpl implements ReportService {
 
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.in(Transaction::getType, 1, 4).eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
 
         Map<Long, Category> heatmapCats = loadCategoryMap();
@@ -377,7 +377,7 @@ public class ReportServiceImpl implements ReportService {
         YearMonth ym = YearMonth.parse(month);
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.in(Transaction::getType, 1, 4).eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
 
@@ -413,7 +413,7 @@ public class ReportServiceImpl implements ReportService {
         YearMonth ym = YearMonth.parse(month);
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .eq(Transaction::getType, type)
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
@@ -470,7 +470,7 @@ public class ReportServiceImpl implements ReportService {
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.in(Transaction::getType, 1, 4)
                 .eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .ge(Transaction::getTransactionDate, start)
                 .le(Transaction::getTransactionDate, end)
                 .isNotNull(Transaction::getMerchantId);
@@ -536,7 +536,7 @@ public class ReportServiceImpl implements ReportService {
         YearMonth ym = YearMonth.parse(month);
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .ge(Transaction::getTransactionDate, ym.atDay(1))
                 .le(Transaction::getTransactionDate, ym.atEndOfMonth());
         List<Transaction> txs = transactionMapper.selectList(query);

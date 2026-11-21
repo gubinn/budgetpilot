@@ -49,7 +49,7 @@ public class TransactionCreateDTO {
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed = true;
-    /** PENDING / CONFIRMED，默认 CONFIRMED */
+    /** PENDING / REVIEWED，默认 REVIEWED */
     private String reviewStatus;
     private Boolean isRecurring;
     private Long recurringId;

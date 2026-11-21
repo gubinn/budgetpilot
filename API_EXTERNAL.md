@@ -374,11 +374,13 @@ Content-Type: application/json
 | `merchantName` | string | 否 | - | 最长 50 字符 | 商户名称（与 merchantId 二选一，系统会归一化并自动匹配/创建商户） |
 | `autoCreateMerchant` | boolean | 否 | `true` | - | 是否自动创建不存在的商户 |
 | `note` | string | 否 | - | 最长 200 字符 | 备注 |
-| `reviewStatus` | string | 否 | `CONFIRMED` | `PENDING` / `CONFIRMED` | 人工复核状态；PENDING 不计入收支/预算 |
+| `reviewStatus` | string | 否 | `REVIEWED` | `PENDING` / `REVIEWED` | 人工复核状态；PENDING 余额已记，但不计入收支/预算 |
 | `tags` | string[] | 否 | `[]` | - | 标签列表 |
 | `attachmentUrls` | string[] | 否 | `[]` | - | 附件 URL 列表 |
-| `isConfirmed` | boolean | 否 | `true` | - | 是否确认。确认的交易会影响账户余额；`false` 则为待确认状态，不影响余额 |
+| `isConfirmed` | boolean | 否 | `true` | - | 账务入账确认。确认的交易会影响账户余额；`false` 为待入账，不影响余额 |
 | `extFields` | object | 否 | `{}` | - | 扩展字段，任意键值对 |
+
+> `isConfirmed`（入账确认）与 `reviewStatus`（人工复核）是两件事：前者决定余额是否变动，后者决定是否进入收支报表/预算。对外转账可以 `isConfirmed=true` 且 `reviewStatus=PENDING`。
 
 > **`merchantId` 与 `merchantName` 的关系**: 传入 `merchantId` 则直接使用指定商户；传入 `merchantName` 则系统会查找同名商户，找不到则自动创建（前提 `autoCreateMerchant=true`）。两者都不传则交易不关联商户。
 

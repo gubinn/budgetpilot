@@ -33,7 +33,8 @@
 
 ### 4. 人工复核（`t_transaction.review_status`）
 
-- 新增 `review_status`：`PENDING` / `CONFIRMED`，默认 `CONFIRMED`。
+- 新增 `review_status`：`PENDING`（待复核）/ `REVIEWED`（已复核），默认 `REVIEWED`。复核状态不再使用 `CONFIRMED`，避免和入账确认 `is_confirmed` 撞名。
+- 两者独立：`is_confirmed` 决定余额是否变动；`review_status=PENDING` 时余额已记，但不进报表/预算/预警。
 - 对外转账/用途不明时先写 `PENDING`，分类暂放“往来款/借出”；待复核期间不计入收支、预算、预警。
 - 交易列表支持按复核状态筛选；“复核”弹窗按方向给出选项，不再预设为借出：
   - 转出：借出、归还借款、本人账户转出、实际支出（选分类）、保持待复核。

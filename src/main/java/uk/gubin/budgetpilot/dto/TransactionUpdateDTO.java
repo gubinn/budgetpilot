@@ -37,7 +37,7 @@ public class TransactionUpdateDTO {
     private List<String> tags;
     private List<String> attachmentUrls;
     private Boolean isConfirmed;
-    /** PENDING / CONFIRMED */
+    /** PENDING / REVIEWED */
     private String reviewStatus;
     private Map<String, Object> extFields;
     private Map<String, Object> metadata;

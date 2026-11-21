@@ -98,7 +98,7 @@ CREATE TABLE t_transaction (
     tags                JSON            DEFAULT NULL COMMENT '标签数组 ["日常","必要"]',
     attachment_urls     JSON            DEFAULT NULL COMMENT '附件路径数组',
     is_confirmed        TINYINT(1)      DEFAULT 1 COMMENT '0=待确认（周期交易自动生成）',
-    review_status       VARCHAR(16)     NOT NULL DEFAULT 'CONFIRMED' COMMENT 'PENDING-待人工复核 CONFIRMED-已复核',
+    review_status       VARCHAR(16)     NOT NULL DEFAULT 'REVIEWED' COMMENT 'PENDING-待人工复核 REVIEWED-已复核',
     is_recurring        TINYINT(1)      DEFAULT 0,
     recurring_id        BIGINT          DEFAULT NULL COMMENT '关联周期规则ID',
     ext_fields          JSON            DEFAULT NULL COMMENT '业务扩展字段',

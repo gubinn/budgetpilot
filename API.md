@@ -123,7 +123,7 @@
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认 (默认 true)",
-  "reviewStatus": "人工复核状态 PENDING/CONFIRMED (默认 CONFIRMED)",
+  "reviewStatus": "人工复核状态 PENDING/REVIEWED (默认 REVIEWED)",
   "isRecurring": "是否周期交易",
   "recurringId": "周期规则ID",
   "extFields": {},
@@ -131,12 +131,14 @@
 }
 ```
 
+> `isConfirmed` 是账务入账确认：`false` 时不影响账户余额。`reviewStatus` 是人工语义复核：`PENDING` 时余额已记，但不计入收支报表、预算和预警。两者互不影响。
+
 #### TransactionQueryDTO (Query Parameters)
 
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `type` | int | 交易类型 (1-支出 2-收入 3-转账 4-退款) |
-| `reviewStatus` | string | PENDING-待人工复核 / CONFIRMED-已复核 |
+| `reviewStatus` | string | PENDING-待人工复核 / REVIEWED-已复核 |
 | `accountId` | long | 账户ID |
 | `categoryId` | long | 分类ID |
 | `startDate` | string | 开始日期 (yyyy-MM-dd) |
@@ -173,7 +175,7 @@
   "tags": ["标签列表"],
   "attachmentUrls": ["附件URL列表"],
   "isConfirmed": "是否确认",
-  "reviewStatus": "PENDING/CONFIRMED",
+  "reviewStatus": "PENDING/REVIEWED",
   "extFields": {},
   "metadata": {}
 }

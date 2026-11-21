@@ -796,9 +796,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     }
 
     private String normalizeReviewStatus(String value) {
-        if (value == null || value.isBlank()) return "CONFIRMED";
+        if (value == null || value.isBlank()) return "REVIEWED";
         String normalized = value.trim().toUpperCase();
-        return "PENDING".equals(normalized) ? "PENDING" : "CONFIRMED";
+        return "PENDING".equals(normalized) ? "PENDING" : "REVIEWED";
     }
 
     private void calculateBaseAmount(Transaction entity, Account account) {

@@ -9,8 +9,8 @@
       </div>
       <div class="filter-row">
         <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" size="small" style="flex: 1" clearable />
-        <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="状态" size="small" style="flex: 1" clearable />
-        <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" placeholder="复核" size="small" style="flex: 1" clearable />
+        <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="入账状态" size="small" style="flex: 1" clearable />
+        <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" placeholder="复核状态" size="small" style="flex: 1" clearable />
       </div>
       <div class="filter-row">
         <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="标签" size="small" style="flex: 1" />
@@ -35,7 +35,7 @@
             <span v-if="tx.merchantName">{{ tx.merchantName }}</span>
           </div>
           <div class="tx-tags">
-            <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待确认</n-tag>
+            <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待入账</n-tag>
             <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
             <n-button v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" secondary style="margin-left: 4px" @click.stop="openReview(tx)">复核</n-button>
             <n-tag v-for="tag in (tx.tags || [])" :key="tag" size="tiny" type="info" :bordered="false" style="margin-left: 4px">{{ tag }}</n-tag>
@@ -125,11 +125,11 @@ const typeOptions = [
   { label: '退款', value: 4 }
 ]
 const confirmOptions = [
-  { label: '已确认', value: true },
-  { label: '待确认', value: false }
+  { label: '已入账', value: true },
+  { label: '待入账', value: false }
 ]
 const reviewOptions = [
-  { label: '已复核', value: 'CONFIRMED' },
+  { label: '已复核', value: 'REVIEWED' },
   { label: '待复核', value: 'PENDING' }
 ]
 const accountOptions = ref([])
@@ -227,7 +227,7 @@ async function submitReview() {
   }
   reviewSubmitting.value = true
   try {
-    await transactionApi.update(reviewRow.value.id, { categoryId, reviewStatus: 'CONFIRMED' })
+    await transactionApi.update(reviewRow.value.id, { categoryId, reviewStatus: 'REVIEWED' })
     message.success('复核完成')
     showReview.value = false
     loadData()

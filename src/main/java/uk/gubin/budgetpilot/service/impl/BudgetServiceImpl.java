@@ -171,7 +171,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.in(Transaction::getType, 1, 4)
                 .eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .in(Transaction::getCategoryId, fixedIds)
                 .ge(Transaction::getTransactionDate, start)
                 .le(Transaction::getTransactionDate, end);
@@ -445,7 +445,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.in(Transaction::getType, 1, 4)
                 .eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .in(Transaction::getCategoryId, categoryIds)
                 .ge(Transaction::getTransactionDate, start)
                 .le(Transaction::getTransactionDate, end);

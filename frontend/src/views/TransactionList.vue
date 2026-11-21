@@ -13,10 +13,10 @@
       <n-form-item label="标签">
         <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="选择标签" style="width: 180px" />
       </n-form-item>
-      <n-form-item label="状态">
+      <n-form-item label="入账状态">
         <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable style="width: 100px" />
       </n-form-item>
-      <n-form-item label="复核">
+      <n-form-item label="复核状态">
         <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable style="width: 100px" />
       </n-form-item>
       <n-form-item label="日期">
@@ -118,11 +118,11 @@ const typeOptions = [
   { label: '退款', value: 4 }
 ]
 const confirmOptions = [
-  { label: '已确认', value: true },
-  { label: '待确认', value: false }
+  { label: '已入账', value: true },
+  { label: '待入账', value: false }
 ]
 const reviewOptions = [
-  { label: '已复核', value: 'CONFIRMED' },
+  { label: '已复核', value: 'REVIEWED' },
   { label: '待复核', value: 'PENDING' }
 ]
 const accountOptions = ref([])
@@ -243,7 +243,7 @@ const columns = [
         size: 'small',
         type: row.isConfirmed ? 'success' : 'warning',
         bordered: false
-      }, { default: () => row.isConfirmed ? '已确认' : '待确认' }),
+      }, { default: () => row.isConfirmed ? '已入账' : '待入账' }),
       row.reviewStatus === 'PENDING'
         ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '待复核' })
         : null
@@ -378,7 +378,7 @@ async function submitReview() {
   try {
     await transactionApi.update(reviewRow.value.id, {
       categoryId,
-      reviewStatus: 'CONFIRMED'
+      reviewStatus: 'REVIEWED'
     })
     message.success('复核完成')
     showReview.value = false

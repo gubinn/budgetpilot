@@ -242,7 +242,7 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         query.in(Transaction::getType, 1, 4)
                 .eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getReviewStatus, "CONFIRMED")
+                .eq(Transaction::getReviewStatus, "REVIEWED")
                 .in(Transaction::getCategoryId, categoryIds)
                 .ge(Transaction::getTransactionDate, start)
                 .le(Transaction::getTransactionDate, end);

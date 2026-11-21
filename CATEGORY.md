@@ -59,7 +59,21 @@
 
 ## 5. 人工复核
 
-- 字段：`t_transaction.review_status`，`PENDING` / `CONFIRMED`，默认 `CONFIRMED`。
+`is_confirmed` 与 `review_status` 是两个独立维度：
+
+| 字段 | 含义 | 未完成时的影响 |
+|---|---|---|
+| `is_confirmed` | 账务入账确认 | `false` 时不计入账户余额 |
+| `review_status` | 人工语义复核 | `PENDING` 时余额已记，但不进收支报表/预算/预警 |
+
+常见组合：
+
+- 普通交易：`is_confirmed=true` + `review_status=REVIEWED`。
+- 周期规则生成但仍待入账：`is_confirmed=false` + `review_status=REVIEWED`。
+- 对外转账用途不明：`is_confirmed=true` + `review_status=PENDING`（钱已转出，余额已扣；先不进支出报表）。
+- 两者都未完成：`false` + `PENDING`。
+
+- 字段：`t_transaction.review_status`，`PENDING`（待复核）/ `REVIEWED`（已复核），默认 `REVIEWED`。
 - 对外转账/用途不明：先写 `PENDING`，分类暂放“往来款/借出”。
 - `PENDING` 不计入收支、预算、预警，但账户余额仍按实际交易变动。
 - 网页交易列表提供“复核”弹窗，按交易方向给出选项，不再预设为借出：
