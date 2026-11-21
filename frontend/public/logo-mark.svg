@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="BudgetPilot">
+  <defs>
+    <linearGradient id="bp-bg" x1="64" y1="32" x2="448" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="0.52" stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#0EA5A4"/>
+    </linearGradient>
+    <linearGradient id="bp-left" x1="152" y1="96" x2="256" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DBEAFE"/>
+    </linearGradient>
+    <linearGradient id="bp-right" x1="256" y1="96" x2="360" y2="352" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#A7F3D0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="116" fill="url(#bp-bg)"/>
+  <circle cx="256" cy="258" r="156" fill="none" stroke="#FFFFFF" stroke-opacity="0.16" stroke-width="10"/>
+  <path d="M256 92 360 352 256 300Z" fill="url(#bp-right)"/>
+  <path d="M256 92 152 352 256 300Z" fill="url(#bp-left)"/>
+  <circle cx="392" cy="392" r="44" fill="none" stroke="#FBBF24" stroke-width="14" stroke-opacity="0.95"/>
+</svg>

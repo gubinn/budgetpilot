@@ -1,16 +1,22 @@
 <template>
   <div class="dashboard">
     <!-- 总资产卡片 -->
-    <n-card title="总资产" hoverable style="margin-bottom: 16px">
-      <div class="total-assets">
-        <div class="assets-value">¥ {{ formatNum(totalAssets) }}</div>
-        <div class="assets-sub">所有 CNY 账户余额合计</div>
+    <n-card class="hero-card" :bordered="false" style="margin-bottom: 18px">
+      <div class="hero-inner">
+        <div>
+          <div class="hero-eyebrow">TOTAL BALANCE</div>
+          <div class="assets-value">¥ {{ formatNum(totalAssets) }}</div>
+          <div class="assets-sub">所有 CNY 账户余额合计</div>
+        </div>
+        <div class="hero-mark">
+          <img src="/logo-mark.svg" alt="" />
+        </div>
       </div>
     </n-card>
 
     <n-grid :cols="4" :x-gap="16" :y-gap="16">
       <n-gi v-for="card in summaryCards" :key="card.label">
-        <n-card :title="card.label" hoverable>
+        <n-card class="stat-card-box" :title="card.label" hoverable>
           <div class="stat-card">
             <div class="stat-value" :class="card.color">{{ card.value }}</div>
             <div class="stat-sub">{{ card.sub }}</div>
@@ -222,23 +228,97 @@ function formatNum(n) {
 </script>
 
 <style scoped>
-.stat-value { font-size: 28px; font-weight: 700; }
-.stat-sub { font-size: 13px; color: #888; margin-top: 4px; }
-.green { color: #27ae60; }
-.red { color: #e74c3c; }
-.blue { color: #3498db; }
-
-.total-assets { text-align: center; padding: 12px 0; }
-.assets-value { font-size: 36px; font-weight: 700; color: #2c3e50; }
-.assets-sub { font-size: 14px; color: #888; margin-top: 8px; }
+.hero-card {
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(135deg, #0b1220 0%, #1d4ed8 62%, #0ea5a4 100%) !important;
+  border: none !important;
+  box-shadow: 0 22px 50px -22px rgba(29, 78, 216, 0.65);
+}
+.hero-card::before,
+.hero-card::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hero-card::before {
+  width: 260px;
+  height: 260px;
+  right: -60px;
+  top: -120px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.hero-card::after {
+  width: 180px;
+  height: 180px;
+  right: 90px;
+  bottom: -110px;
+  background: rgba(167, 243, 208, 0.16);
+}
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.hero-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.assets-value {
+  margin-top: 10px;
+  font-size: 38px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+.assets-sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.66);
+}
+.hero-mark img {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  opacity: 0.92;
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.65);
+}
+.stat-card-box {
+  height: 100%;
+}
+.stat-value {
+  font-size: 27px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+.stat-sub {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--bp-muted);
+}
+.green { color: #10b981; }
+.red { color: #ef4444; }
+.blue { color: #2563eb; }
 
 .budget-list { max-height: 300px; overflow-y: auto; }
-.budget-item { margin-bottom: 16px; }
-.budget-header { display: flex; justify-content: space-between; align-items: center; }
-.badge { font-size: 12px; padding: 2px 8px; border-radius: 10px; color: #fff; }
-.badge.exceeded { background: #e74c3c; }
-.badge.warning { background: #f39c12; }
-.badge.caution { background: #e67e22; }
-.badge.normal { background: #27ae60; }
-.budget-amounts { display: flex; justify-content: space-between; font-size: 12px; color: #888; margin-top: 4px; }
+.budget-item { margin-bottom: 18px; }
+.budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+.badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; color: #fff; font-weight: 600; }
+.badge.exceeded { background: #ef4444; }
+.badge.warning { background: #f59e0b; }
+.badge.caution { background: #f97316; }
+.badge.normal { background: #10b981; }
+.budget-amounts { display: flex; justify-content: space-between; font-size: 11px; color: var(--bp-muted); margin-top: 6px; }
+
+@media (max-width: 640px) {
+  .assets-value { font-size: 30px; }
+  .hero-mark img { width: 54px; height: 54px; border-radius: 14px; }
+}
 </style>

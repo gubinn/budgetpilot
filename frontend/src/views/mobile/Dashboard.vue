@@ -2,6 +2,7 @@
   <div class="mobile-dashboard">
     <!-- 总资产卡片 -->
     <div class="asset-card">
+      <img src="/logo-mark.svg" class="asset-mark" alt="" />
       <div class="asset-label">总资产</div>
       <div class="asset-value">¥ {{ formatNum(totalAssets) }}</div>
       <div class="asset-sub">所有 CNY 账户余额合计</div>
@@ -211,15 +212,36 @@ function formatNum(n) {
 
 /* 总资产卡片 */
 .asset-card {
-  background: linear-gradient(135deg, #2c3e50, #34495e);
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0b1220 0%, #1d4ed8 62%, #0ea5a4 100%);
   color: #fff;
-  border-radius: 12px;
-  padding: 20px 16px;
-  text-align: center;
+  border-radius: 18px;
+  padding: 22px 18px;
+  box-shadow: 0 20px 40px -22px rgba(29, 78, 216, 0.7);
 }
-
-.asset-label { font-size: 13px; opacity: 0.8; }
-.asset-value { font-size: 32px; font-weight: 700; margin: 8px 0; }
+.asset-card::after {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -70px;
+  bottom: -100px;
+  border-radius: 50%;
+  background: rgba(167, 243, 208, 0.16);
+}
+.asset-mark {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  opacity: 0.9;
+  box-shadow: 0 12px 26px -14px rgba(0, 0, 0, 0.8);
+}
+.asset-label { font-size: 12px; opacity: 0.66; letter-spacing: 0.08em; }
+.asset-value { font-size: 34px; font-weight: 750; margin: 8px 0; letter-spacing: -0.02em; }
 .asset-sub { font-size: 12px; opacity: 0.6; }
 
 /* 概况 2x2 网格 */
@@ -231,28 +253,30 @@ function formatNum(n) {
 
 .summary-item {
   background: #fff;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: 14px;
+  padding: 14px;
+  box-shadow: var(--bp-shadow);
 }
 
-.summary-label { font-size: 12px; color: #888; margin-bottom: 4px; }
-.summary-value { font-size: 18px; font-weight: 700; }
-.summary-value.green { color: #27ae60; }
-.summary-value.red { color: #e74c3c; }
-.summary-value.blue { color: #3498db; }
+.summary-label { font-size: 12px; color: var(--bp-muted); margin-bottom: 4px; }
+.summary-value { font-size: 19px; font-weight: 750; letter-spacing: -0.01em; }
+.summary-value.green { color: #10b981; }
+.summary-value.red { color: #ef4444; }
+.summary-value.blue { color: #2563eb; }
 
 /* 图表卡片 */
 .chart-card, .section-card {
   background: #fff;
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: var(--bp-shadow);
 }
 
 .chart-title, .section-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 650;
   margin: 0 0 10px;
-  color: #333;
+  color: var(--bp-ink);
 }
 
 .section-header {
@@ -266,10 +290,10 @@ function formatNum(n) {
 .budget-item { margin-bottom: 14px; }
 .budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
 .budget-pct { font-size: 11px; padding: 2px 6px; border-radius: 8px; color: #fff; }
-.budget-pct.exceeded { background: #e74c3c; }
-.budget-pct.warning { background: #f39c12; }
-.budget-pct.caution { background: #e67e22; }
-.budget-pct.normal { background: #27ae60; }
+.budget-pct.exceeded { background: #ef4444; }
+.budget-pct.warning { background: #f59e0b; }
+.budget-pct.caution { background: #f97316; }
+.budget-pct.normal { background: #10b981; }
 .budget-amounts { display: flex; justify-content: space-between; font-size: 11px; color: #999; margin-top: 4px; }
 
 /* 交易列表 */

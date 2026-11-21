@@ -3,7 +3,8 @@
     <!-- 顶部 Header -->
     <header class="mobile-header">
       <div class="header-left">
-        <img src="/budgetpilot-logo.png" alt="BudgetPilot" class="logo" />
+        <img src="/logo-mark.svg" alt="BudgetPilot" class="logo" />
+        <span class="logo-word">BudgetPilot</span>
       </div>
       <div class="header-right">
         <n-badge :value="alertCount" :show="alertCount > 0">
@@ -123,7 +124,7 @@ async function handleUserSelect(key) {
 .mobile-layout {
   min-height: 100vh;
   min-height: 100dvh;
-  background: #f5f7fa;
+  background: transparent;
   padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -135,12 +136,27 @@ async function handleUserSelect(key) {
   align-items: center;
   justify-content: space-between;
   padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
-  background: #fff;
-  border-bottom: 1px solid #eee;
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--bp-line);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .logo {
-  height: 22px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.logo-word {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--bp-ink);
+  letter-spacing: -0.01em;
 }
 
 .header-right {
@@ -150,19 +166,21 @@ async function handleUserSelect(key) {
 }
 
 .page-title-bar {
-  padding: 8px 16px;
-  background: #fff;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 14px 16px 2px;
+  background: transparent;
+  border: none;
 }
 
 .page-title-bar h3 {
   margin: 0;
-  font-size: 16px;
-  color: #333;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--bp-ink);
+  letter-spacing: -0.01em;
 }
 
 .mobile-content {
-  padding: 12px;
+  padding: 12px 16px 20px;
 }
 
 .tab-bar {
@@ -172,8 +190,9 @@ async function handleUserSelect(key) {
   right: 0;
   z-index: 100;
   display: flex;
-  background: #fff;
-  border-top: 1px solid #eee;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--bp-line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -184,13 +203,17 @@ async function handleUserSelect(key) {
   align-items: center;
   justify-content: center;
   padding: 8px 0;
-  color: #888;
-  transition: color 0.2s;
+  color: #94a3b8;
+  transition: color 0.2s, transform 0.2s;
   -webkit-tap-highlight-color: transparent;
 }
 
 .tab-item.active {
-  color: #2c3e50;
+  color: #2563eb;
+}
+
+.tab-item.active .n-icon {
+  transform: translateY(-1px);
 }
 
 .tab-label {

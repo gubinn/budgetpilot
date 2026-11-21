@@ -1,9 +1,8 @@
 <template>
   <n-layout has-sider style="height: 100vh" :native-scrollbar="false">
     <n-layout-sider
-      bordered
       :collapsed="collapsed"
-      :width="220"
+      :width="232"
       :collapsed-width="0"
       show-trigger="bar"
       collapse-mode="transform"
@@ -11,11 +10,18 @@
       @expand="collapsed = false"
       :native-scrollbar="false"
       class="sider-wrapper"
+      style="background: #0b1220"
     >
       <div class="logo">
-        <img src="/budgetpilot-logo.png" alt="BudgetPilot" class="logo-img" v-if="!collapsed" />
+        <img src="/logo-mark.svg" alt="BudgetPilot" class="logo-mark" v-if="!collapsed" />
+        <div class="logo-text" v-if="!collapsed">
+          <span class="logo-name">BudgetPilot</span>
+          <span class="logo-sub">PERSONAL FINANCE</span>
+        </div>
       </div>
       <n-menu
+        inverted
+        class="side-menu"
         :collapsed="collapsed"
         :collapsed-width="0"
         :collapsed-icon-size="22"
@@ -25,14 +31,17 @@
       />
     </n-layout-sider>
     <n-layout style="height: 100vh" :native-scrollbar="false">
-      <n-layout-header bordered style="padding: 12px 16px; background: #fff; display: flex; justify-content: space-between; align-items: center;">
-        <n-space :size="12" align="center">
+      <n-layout-header class="topbar">
+        <div class="topbar-left">
           <n-button quaternary circle size="small" @click="collapsed = !collapsed" class="menu-toggle">
             <template #icon><n-icon><menu-outline /></n-icon></template>
           </n-button>
-          <h3 style="font-size: 16px">{{ pageTitle }}</h3>
-        </n-space>
-        <n-space :size="8" align="center">
+          <div class="page-heading">
+            <h1>{{ pageTitle }}</h1>
+            <span>让每一笔钱，都有方向</span>
+          </div>
+        </div>
+        <div class="topbar-right">
           <n-badge :value="alertCount" :show="alertCount > 0">
             <n-button quaternary circle size="small" @click="router.push('/alerts')">
               <template #icon><n-icon><notifications-outline /></n-icon></template>
@@ -43,13 +52,13 @@
             <span class="add-text">记一笔</span>
           </n-button>
           <n-dropdown :options="userDropdownOptions" @select="handleUserSelect" trigger="click">
-            <n-button quaternary circle size="small">
-              <template #icon><n-icon><person-outline /></n-icon></template>
-            </n-button>
+            <button class="avatar-trigger" type="button" :aria-label="auth.nickname || '账户'">
+              {{ userInitial }}
+            </button>
           </n-dropdown>
-        </n-space>
+        </div>
       </n-layout-header>
-      <n-layout-content content-style="padding: 16px;">
+      <n-layout-content class="content">
         <router-view />
       </n-layout-content>
     </n-layout>
@@ -131,6 +140,11 @@ const menuOptions = computed(() => {
 
 const currentRoute = computed(() => route.name || 'Dashboard')
 
+const userInitial = computed(() => {
+  const name = auth.nickname || auth.user?.username || 'U'
+  return name.slice(0, 1).toUpperCase()
+})
+
 const pageTitle = computed(() => {
   const map = {
     Dashboard: '首页',
@@ -182,20 +196,112 @@ async function handleUserSelect(key) {
 </script>
 
 <style scoped>
-.logo {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
-}
-.logo-img {
-  width: 140px;
-  display: block;
-  margin: 0 auto;
-}
-.add-btn {
-  box-shadow: 0 2px 8px rgba(44, 62, 80, 0.2);
-}
 .sider-wrapper {
   z-index: 100;
+  background: #0b1220 !important;
+}
+.sider-wrapper :deep(.n-layout-sider-scroll-container) {
+  background: #0b1220;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 20px 18px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+.logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px -6px rgba(37, 99, 235, 0.8);
+}
+.logo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.logo-name {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.logo-sub {
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+.side-menu {
+  padding: 12px 10px;
+}
+.side-menu :deep(.n-menu-item-content) {
+  border-radius: 10px;
+}
+.side-menu :deep(.n-menu-item-content-header) {
+  font-weight: 500;
+}
+.topbar {
+  height: 64px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--bp-line);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.page-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.page-heading h1 {
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+.page-heading span {
+  font-size: 11px;
+  color: var(--bp-muted);
+  white-space: nowrap;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.add-btn {
+  background: linear-gradient(135deg, #2563eb, #0ea5a4) !important;
+  border: none !important;
+  box-shadow: 0 8px 18px -8px rgba(37, 99, 235, 0.7);
+}
+.avatar-trigger {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #2563eb, #0ea5a4);
+  box-shadow: 0 6px 14px -6px rgba(37, 99, 235, 0.8);
+}
+.content {
+  padding: 24px;
 }
 @media (max-width: 768px) {
   .sider-wrapper {
@@ -204,10 +310,16 @@ async function handleUserSelect(key) {
     top: 0;
     height: 100vh;
   }
+  .topbar {
+    padding: 0 12px;
+  }
+  .page-heading span {
+    display: none;
+  }
   .add-text {
     display: none;
   }
-  .n-layout-content {
+  .content {
     padding: 12px !important;
   }
 }
