@@ -7,6 +7,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.dto.ChangePasswordDTO;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.dto.LoginDTO;
 import uk.gubin.budgetpilot.dto.OtpResendDTO;
 import uk.gubin.budgetpilot.dto.OtpVerifyDTO;
@@ -44,6 +46,9 @@ public class AuthController {
     public uk.gubin.budgetpilot.common.Result<?> login(@Valid @RequestBody LoginDTO dto, HttpServletRequest request) {
         IngressInfo ingress = IngressContext.get(request);
         User user = userService.authenticate(dto, ingress.clientIp());
+        if (ingress.isPublic() && "ADMIN".equalsIgnoreCase(user.getRole())) {
+            throw new BizException(ErrorCode.AUTH_ADMIN_PUBLIC_FORBIDDEN);
+        }
         if (ingress.isPublic()) {
             return uk.gubin.budgetpilot.common.Result.ok(loginOtpService.start(user, ingress));
         }
@@ -55,8 +60,13 @@ public class AuthController {
      * 校验公网登录验证码并创建会话。
      */
     @PostMapping("/verify")
-    public uk.gubin.budgetpilot.common.Result<LoginVO> verify(@Valid @RequestBody OtpVerifyDTO dto) {
+    public uk.gubin.budgetpilot.common.Result<LoginVO> verify(@Valid @RequestBody OtpVerifyDTO dto,
+                                                              HttpServletRequest request) {
         User user = loginOtpService.verify(dto.getChallengeId(), dto.getCode());
+        IngressInfo ingress = IngressContext.get(request);
+        if (ingress.isPublic() && "ADMIN".equalsIgnoreCase(user.getRole())) {
+            throw new BizException(ErrorCode.AUTH_ADMIN_PUBLIC_FORBIDDEN);
+        }
         return uk.gubin.budgetpilot.common.Result.ok(userService.createSession(
                 user,
                 ingressProperties.getPublicSessionTimeout(),
