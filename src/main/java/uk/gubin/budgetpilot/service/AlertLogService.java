@@ -17,6 +17,7 @@ import java.util.List;
 public class AlertLogService extends ServiceImpl<AlertLogMapper, AlertLog> {
 
     private final TelegramNotifyService telegramNotifyService;
+    private final WhatsAppNotifyService whatsAppNotifyService;
 
     /**
      * 记录预警日志并尝试推送
@@ -31,11 +32,15 @@ public class AlertLogService extends ServiceImpl<AlertLogMapper, AlertLog> {
         alertLog.setIsRead(false);
         alertLog.setIsSent(false);
 
-        // 尝试 Telegram 推送
-        if ("TELEGRAM".equalsIgnoreCase(channel)) {
-            boolean sent = telegramNotifyService.send(title, content);
-            alertLog.setIsSent(sent);
+        // 按渠道推送：TELEGRAM / WHATSAPP / BOTH（APP 仅记录站内日志）
+        boolean sent = false;
+        if ("TELEGRAM".equalsIgnoreCase(channel) || "BOTH".equalsIgnoreCase(channel)) {
+            sent = telegramNotifyService.send(title, content) || sent;
         }
+        if ("WHATSAPP".equalsIgnoreCase(channel) || "BOTH".equalsIgnoreCase(channel)) {
+            sent = whatsAppNotifyService.send(title, content) || sent;
+        }
+        alertLog.setIsSent(sent);
 
         baseMapper.insert(alertLog);
         log.info("Alert logged: {} - {} (sent={})", title, channel, alertLog.getIsSent());

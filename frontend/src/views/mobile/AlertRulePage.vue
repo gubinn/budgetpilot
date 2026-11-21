@@ -10,7 +10,7 @@
         </div>
         <div class="rule-type">{{ rule.typeName }}</div>
         <div class="rule-config">{{ rule.config }}</div>
-        <div class="rule-channel">通知: {{ rule.notifyChannel }}</div>
+        <div class="rule-channel">通知: {{ channelLabel(rule.notifyChannel) }}</div>
         <div class="rule-actions">
           <n-button size="small" secondary :type="rule.isActive ? 'warning' : 'success'" @click="handleToggle(rule)">
             {{ rule.isActive ? '停用' : '启用' }}
@@ -105,8 +105,16 @@ const typeOptions = [
 
 const channelOptions = [
   { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' },
   { label: '应用内通知', value: 'APP' }
 ]
+const channelLabel = (value) => ({
+  TELEGRAM: 'Telegram',
+  WHATSAPP: 'WhatsApp',
+  BOTH: '两者都发',
+  APP: '应用内'
+}[value] || value || '-')
 
 const loadRules = async () => {
   loading.value = true

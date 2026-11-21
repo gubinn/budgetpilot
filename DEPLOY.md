@@ -7,7 +7,7 @@ BudgetPilot 是一个个人预算管理系统，替代 Actual Budget，部署于
 ### 技术栈
 - **后端**: Spring Boot 3.3 + Java 21 + MyBatis-Plus + MySQL 8.0 + Redis 7
 - **前端**: Vue 3 + Vite + Naive UI + ECharts + PWA（桌面端 + 移动端双端适配）
-- **通知**: Telegram Bot API
+- **通知**: Telegram Bot API / WhatsApp Agent Platform API
 - **部署**: Docker Compose + Nginx 反向代理（也支持裸机部署，见「二点五」）
 
 ### 端口规划
@@ -165,6 +165,8 @@ DB_ROOT_PASS=your_secure_root_password
 DB_PASS=your_budgetpilot_db_password
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+BUDGETPILOT_WHATSAPP_API_KEY=
+BUDGETPILOT_WHATSAPP_TO=
 EXCHANGE_RATE_API_KEY=
 EOF
 
@@ -180,6 +182,8 @@ chmod 600 .env
 | `DB_PASS` | 是 | budgetpilot 数据库用户密码 |
 | `TELEGRAM_BOT_TOKEN` | 否 | Telegram Bot Token，用于推送通知 |
 | `TELEGRAM_CHAT_ID` | 否 | 接收通知的 Telegram Chat ID |
+| `BUDGETPILOT_WHATSAPP_API_KEY` | 否 | WhatsApp Agent Platform API Key |
+| `BUDGETPILOT_WHATSAPP_TO` | 否 | WhatsApp 接收者，格式 `user:<id>` |
 | `EXCHANGE_RATE_API_KEY` | 否 | 汇率 API Key，用于多币种换算 |
 
 ### 2.4 构建后端 JAR
@@ -758,7 +762,7 @@ curl -k https://localhost/api/v1/accounts
 
 ---
 
-## 四、Telegram Bot 配置
+## 四、通知配置（Telegram / WhatsApp）
 
 ### 4.1 创建 Bot
 
@@ -825,6 +829,25 @@ sudo systemctl restart budgetpilot
 curl -X POST http://127.0.0.1:6060/api/v1/system/telegram/test
 
 # 成功应返回: {"code":0,"message":"ok","data":"测试消息已发送"}
+```
+
+### 4.5 WhatsApp Agent Platform 配置
+
+WhatsApp 渠道使用官方 **Agent Platform API**（`https://api.whatsapp.com/agent/v1`），无需扫码登录，也不会触发封号风险。
+
+1. 在 WhatsApp App 中进入 **设置 → Agents（智能体）**，创建一个 Agent
+2. 打开该 Agent 的聊天，进入 **聊天信息 → API key**，复制密钥
+3. 在「系统设置 → WhatsApp 通知」中填入 API Key 与接收者（`user:<id>`，纯数字会自动补前缀）
+4. 点击「保存配置」后点「推送测试」
+
+> 该 API 只能给创建 Agent 的本人发送消息；出站频率限制为每分钟 12 条。
+> 定时提醒的默认渠道可在同一张卡片选择 Telegram / WhatsApp / 两者都发；单条预警规则也可在「预警规则」页单独指定。
+
+也可以写入环境变量（`BUDGETPILOT_WHATSAPP_API_KEY`、`BUDGETPILOT_WHATSAPP_TO`），数据库配置优先。
+
+```bash
+# 测试 WhatsApp 推送
+curl -X POST http://127.0.0.1:6060/api/v1/system/whatsapp/test
 ```
 
 ---
@@ -1758,6 +1781,8 @@ DB_ROOT_PASS=your_root_password
 DB_PASS=your_db_password
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+BUDGETPILOT_WHATSAPP_API_KEY=
+BUDGETPILOT_WHATSAPP_TO=
 EXCHANGE_RATE_API_KEY=
 ENVEOF
 chmod 600 .env

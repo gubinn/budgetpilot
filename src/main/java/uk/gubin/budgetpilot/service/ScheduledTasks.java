@@ -35,6 +35,7 @@ public class ScheduledTasks {
     private final TransactionMapper transactionMapper;
     private final CategoryMapper categoryMapper;
     private final AlertLogService alertLogService;
+    private final ConfigService configService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
 
@@ -111,7 +112,7 @@ public class ScheduledTasks {
                         card.getCurrentBalance() != null ? card.getCurrentBalance().toPlainString() : "0",
                         daysUntil,
                         LocalDate.now());
-                alertLogService.logAndNotify(5L, 5, title, content, "TELEGRAM");
+                alertLogService.logAndNotify(5L, 5, title, content, defaultChannel());
             }
         }
     }
@@ -144,7 +145,7 @@ public class ScheduledTasks {
                     """,
                     rule.getName(), rule.getAmount().toPlainString(),
                     LocalDate.now());
-            alertLogService.logAndNotify(6L, 6, title, content, "TELEGRAM");
+            alertLogService.logAndNotify(6L, 6, title, content, defaultChannel());
         }
     }
 
@@ -216,7 +217,7 @@ public class ScheduledTasks {
                         progress.getTotalSpent().toPlainString(),
                         progress.getTotalSpent().subtract(progress.getTotalBudget()).toPlainString(),
                         LocalDate.now());
-                alertLogService.logAndNotify(1L, 1, title, content, "TELEGRAM");
+                alertLogService.logAndNotify(1L, 1, title, content, defaultChannel());
             }
         } catch (Exception e) {
             log.warn("Budget progress check failed", e);
@@ -266,7 +267,7 @@ public class ScheduledTasks {
                     """,
                     thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(), threshold,
                     LocalDate.now());
-            alertLogService.logAndNotify(4L, 4, title, content, "TELEGRAM");
+            alertLogService.logAndNotify(4L, 4, title, content, defaultChannel());
         } else if (deviation.abs().compareTo(BigDecimal.valueOf(threshold)) > 0 && deviation.compareTo(BigDecimal.ZERO) < 0) {
             String title = "📉 周消费偏低";
             String content = String.format("""
@@ -281,7 +282,7 @@ public class ScheduledTasks {
                     """,
                     thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(),
                     LocalDate.now());
-            alertLogService.logAndNotify(4L, 4, title, content, "TELEGRAM");
+            alertLogService.logAndNotify(4L, 4, title, content, defaultChannel());
         }
     }
 
@@ -315,7 +316,7 @@ public class ScheduledTasks {
                     progress.getRemaining().toPlainString(),
                     progress.getProgressPct().toPlainString(),
                     LocalDate.now());
-            alertLogService.logAndNotify(7L, 7, title, content, "TELEGRAM");
+            alertLogService.logAndNotify(7L, 7, title, content, defaultChannel());
         } catch (Exception e) {
             log.error("Failed to generate monthly summary", e);
         }
@@ -341,7 +342,7 @@ public class ScheduledTasks {
                     """,
                     nextMonth,
                     LocalDate.now());
-            alertLogService.logAndNotify(7L, 7, title, content, "TELEGRAM");
+            alertLogService.logAndNotify(7L, 7, title, content, defaultChannel());
         }
     }
 
@@ -428,6 +429,15 @@ public class ScheduledTasks {
     }
 
     // ==================== Internal Methods ====================
+
+    /**
+     * 定时提醒使用全局默认渠道（t_config.notify_channel），未配置时为 TELEGRAM。
+     * 单条预警规则仍可在规则中单独指定渠道。
+     */
+    private String defaultChannel() {
+        String channel = configService.get("notify_channel");
+        return (channel == null || channel.isBlank()) ? "TELEGRAM" : channel;
+    }
 
     private BigDecimal getWeekExpense(LocalDate start, LocalDate end) {
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();

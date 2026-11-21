@@ -53,6 +53,12 @@ budgetpilot:
   telegram:
     bot-token: ${TELEGRAM_BOT_TOKEN:}
     chat-id: ${TELEGRAM_CHAT_ID:}
+  whatsapp:
+    # WhatsApp Agent Platform（Settings > Agents 创建 Agent 后获取 API Key）
+    api-key: ${BUDGETPILOT_WHATSAPP_API_KEY:}
+    # 接收者，格式 user:<id>；纯数字会自动补 user: 前缀
+    to: ${BUDGETPILOT_WHATSAPP_TO:}
+    base-url: ${BUDGETPILOT_WHATSAPP_BASE_URL:https://api.whatsapp.com/agent/v1}
   exchange-rate-api:
     key: ${EXCHANGE_RATE_API_KEY:}
     url: https://v6.exchangerate-api.com/v6

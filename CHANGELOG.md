@@ -1,5 +1,27 @@
 # 变更记录
 
+## 2026-11-22（通知）— 新增 WhatsApp 推送渠道
+
+### 1. WhatsApp 通知服务
+
+- 新增 `WhatsAppNotifyService`，通过 WhatsApp 官方 **Agent Platform API**（`https://api.whatsapp.com/agent/v1/messages`）推送文本消息。
+- 配置项：`whatsapp_api_key`、`whatsapp_to`、`whatsapp_base_url`；数据库优先，未配置时回退到环境变量 `BUDGETPILOT_WHATSAPP_API_KEY` / `BUDGETPILOT_WHATSAPP_TO` / `BUDGETPILOT_WHATSAPP_BASE_URL`。
+- 接收者支持 `user:<id>` 格式，纯数字自动补全前缀；消息体超过 4000 字自动截断。
+- 新增 `POST /api/v1/system/whatsapp/test` 测试推送接口。
+
+### 2. 多渠道分发
+
+- 预警规则的通知渠道新增 `WHATSAPP` 和 `BOTH`（Telegram + WhatsApp 同时发送），桌面端与移动端规则页同步支持，列表显示中文渠道名。
+- `AlertLogService` 按渠道分发；`BOTH` 时任一渠道成功即记为已推送。
+- 定时提醒（信用卡还款、周期账单、预算超支、周异常、月度总结、预算未设定）不再硬编码 Telegram，改用全局配置 `notify_channel`（默认 `TELEGRAM`）。
+
+### 3. 设置页
+
+- 桌面端与移动端设置页新增「WhatsApp 通知」卡片：API Key、接收者、定时提醒渠道、保存与推送测试。
+- 部署文档与 `docker-compose.yml` 补充 WhatsApp 环境变量透传；建表与初始化 SQL 增加对应配置项。
+
+---
+
 ## 2026-11-22（交易记录）— 查询条件布局与下拉宽度
 
 ### 1. 查询条件统一排版

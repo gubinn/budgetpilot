@@ -122,6 +122,10 @@ INSERT INTO t_config (config_key, config_value, description) VALUES
 ('month_start_day', '1', '月度统计起始日'),
 ('telegram_bot_token', '', 'Telegram Bot Token'),
 ('telegram_chat_id', '', '接收通知的 Chat ID'),
+('whatsapp_api_key', '', 'WhatsApp Agent Platform API Key'),
+('whatsapp_to', '', 'WhatsApp 接收者（user:<id>）'),
+('whatsapp_base_url', 'https://api.whatsapp.com/agent/v1', 'WhatsApp Agent Platform API 地址'),
+('notify_channel', 'TELEGRAM', '定时提醒默认推送渠道（TELEGRAM/WHATSAPP/BOTH/APP）'),
 ('exchange_rate_api_key', '', 'ExchangeRate-API Key'),
 ('backup_cron', '0 3 * * *', '自动备份 cron'),
 ('data_retention_months', '0', '数据保留月数，0=永久');

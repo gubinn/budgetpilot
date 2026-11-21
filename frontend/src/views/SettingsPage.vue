@@ -20,6 +20,28 @@
       </n-card>
     </n-gi>
 
+    <!-- WhatsApp 配置 -->
+    <n-gi>
+      <n-card title="WhatsApp 通知" hoverable>
+        <n-form label-placement="left" label-width="96">
+          <n-form-item label="API Key">
+            <n-input v-model:value="config.whatsapp_api_key" type="password" show-password-on="click" placeholder="Agent API Key（留空则使用环境变量）" />
+          </n-form-item>
+          <n-form-item label="接收者">
+            <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>，纯数字会自动补前缀" />
+          </n-form-item>
+          <n-form-item label="定时提醒渠道">
+            <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" style="width: 100%" />
+          </n-form-item>
+          <n-form-item>
+            <n-button type="primary" @click="saveWhatsApp">保存配置</n-button>
+            <n-button @click="testWhatsApp" style="margin-left: 8px">推送测试</n-button>
+          </n-form-item>
+        </n-form>
+        <div class="config-hint">使用 WhatsApp 官方 Agent Platform，消息只能发给创建该 Agent 的本人。</div>
+      </n-card>
+    </n-gi>
+
     <!-- 汇率配置 -->
     <n-gi>
       <n-card title="汇率设置" hoverable>
@@ -105,8 +127,17 @@ const message = useMessage()
 const config = ref({
   telegram_bot_token: '',
   telegram_chat_id: '',
+  whatsapp_api_key: '',
+  whatsapp_to: '',
+  notify_channel: 'TELEGRAM',
   exchange_rate_api_key: ''
 })
+const notifyChannelOptions = [
+  { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' },
+  { label: '仅应用内', value: 'APP' }
+]
 const supportedCurrencies = ref([])
 const rates = ref([])
 const alerts = ref([])
@@ -119,6 +150,9 @@ async function loadConfig() {
     const res = await systemApi.config()
     config.value.telegram_bot_token = res.data.telegram_bot_token || ''
     config.value.telegram_chat_id = res.data.telegram_chat_id || ''
+    config.value.whatsapp_api_key = res.data.whatsapp_api_key || ''
+    config.value.whatsapp_to = res.data.whatsapp_to || ''
+    config.value.notify_channel = res.data.notify_channel || 'TELEGRAM'
     config.value.exchange_rate_api_key = res.data.exchange_rate_api_key || ''
     const csv = res.data.supported_currencies || 'CNY,USD,EUR,GBP,JPY,HKD,SGD,THB,KRW'
     supportedCurrencies.value = csv.split(',').map(s => s.trim()).filter(Boolean)
@@ -135,6 +169,22 @@ async function saveConfig(key, value) {
 async function testTelegram() {
   try {
     const res = await systemApi.testTelegram()
+    message.success(res.message || '推送成功')
+  } catch (e) { message.error('推送失败') }
+}
+
+async function saveWhatsApp() {
+  try {
+    await systemApi.setConfig('whatsapp_api_key', config.value.whatsapp_api_key || '')
+    await systemApi.setConfig('whatsapp_to', config.value.whatsapp_to || '')
+    await systemApi.setConfig('notify_channel', config.value.notify_channel || 'TELEGRAM')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function testWhatsApp() {
+  try {
+    const res = await systemApi.testWhatsApp()
     message.success(res.message || '推送成功')
   } catch (e) { message.error('推送失败') }
 }
@@ -207,3 +257,11 @@ onMounted(() => {
   loadApiKey()
 })
 </script>
+
+<style scoped>
+.config-hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--bp-muted, #888);
+}
+</style>

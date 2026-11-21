@@ -88,7 +88,8 @@ export const systemApi = {
   refreshRates: () => api.post('/system/rates/refresh'),
   alerts: () => api.get('/system/alerts'),
   markAlertRead: (id) => api.put(`/system/alerts/${id}/read`),
-  testTelegram: () => api.post('/system/telegram/test')
+  testTelegram: () => api.post('/system/telegram/test'),
+  testWhatsApp: () => api.post('/system/whatsapp/test')
 }
 
 export const userApi = {

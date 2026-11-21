@@ -216,7 +216,7 @@ CREATE TABLE t_alert_rule (
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
     type            TINYINT         NOT NULL COMMENT '类型：1-预算阈值 2-单笔大额 3-日消费上限 4-周异常 5-信用卡还款 6-周期账单 7-预算未设定',
     config          JSON            NOT NULL COMMENT '规则配置',
-    notify_channel  VARCHAR(50)     DEFAULT 'TELEGRAM' COMMENT 'TELEGRAM/APP',
+    notify_channel  VARCHAR(50)     DEFAULT 'TELEGRAM' COMMENT 'TELEGRAM/WHATSAPP/BOTH/APP',
     is_active       TINYINT(1)      DEFAULT 1,
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -231,7 +231,7 @@ CREATE TABLE t_alert_log (
     title           VARCHAR(100)    NOT NULL,
     content         VARCHAR(500)    NOT NULL,
     notify_channel  VARCHAR(50)     NOT NULL COMMENT '实际推送渠道',
-    is_sent         TINYINT(1)      DEFAULT 0 COMMENT 'Telegram 是否发送成功',
+    is_sent         TINYINT(1)      DEFAULT 0 COMMENT '外部渠道是否发送成功',
     is_read         TINYINT(1)      DEFAULT 0,
     triggered_at    DATETIME        DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_unread (is_read, triggered_at),

@@ -505,6 +505,7 @@
 | GET | `/api/v1/system/alerts` | 获取未读告警 | - |
 | PUT | `/api/v1/system/alerts/{id}/read` | 标记告警已读 | - |
 | POST | `/api/v1/system/telegram/test` | 测试 Telegram 推送 | - |
+| POST | `/api/v1/system/whatsapp/test` | 测试 WhatsApp 推送 | - |
 | DELETE | `/api/v1/system/test-data` | 清空测试数据 | - |
 | POST | `/api/v1/system/check-unconfirmed` | 手动触发待确认交易检查 | - |
 
@@ -543,6 +544,28 @@ Telegram 推送服务的配置读取优先级为：
 ```
 PUT /api/v1/system/config/telegram_bot_token
 { "value": "123456:ABC-xxx" }
+```
+
+#### WhatsApp 配置说明
+
+WhatsApp 推送走官方 **Agent Platform API**（`https://api.whatsapp.com/agent/v1`），消息只能发送给创建该 Agent 的本人。配置读取优先级：
+
+1. 数据库 `t_config` 表中的 `whatsapp_api_key`、`whatsapp_to`、`whatsapp_base_url`
+2. 回退到 `application.yml` 中的 `budgetpilot.whatsapp.api-key` / `.to` / `.base-url`（对应环境变量 `BUDGETPILOT_WHATSAPP_API_KEY`、`BUDGETPILOT_WHATSAPP_TO`、`BUDGETPILOT_WHATSAPP_BASE_URL`）
+
+`whatsapp_to` 使用 Agent Platform 的接收者格式 `user:<id>`，纯数字会自动补全 `user:` 前缀。
+
+定时提醒的默认渠道由 `t_config.notify_channel` 决定（`TELEGRAM` / `WHATSAPP` / `BOTH` / `APP`，默认 `TELEGRAM`）；单条预警规则可在规则中单独指定渠道。
+
+```
+PUT /api/v1/system/config/whatsapp_api_key
+{ "value": "<Agent API Key>" }
+
+PUT /api/v1/system/config/whatsapp_to
+{ "value": "user:12345678901234" }
+
+PUT /api/v1/system/config/notify_channel
+{ "value": "WHATSAPP" }
 ```
 
 ---
@@ -920,8 +943,9 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 值 | 说明 |
 |----|------|
 | TELEGRAM | Telegram 消息 |
-| EMAIL | 邮件 |
-| IN_APP | 应用内通知 |
+| WHATSAPP | WhatsApp（Agent Platform）消息 |
+| BOTH | Telegram + WhatsApp 同时发送 |
+| APP | 仅应用内通知，不推送外部渠道 |
 
 ---
 

@@ -17,6 +17,26 @@
       </n-form>
     </div>
 
+    <!-- WhatsApp -->
+    <div class="section-card">
+      <h3 class="section-title">WhatsApp 通知</h3>
+      <n-form label-placement="top" label-width="auto">
+        <n-form-item label="API Key">
+          <n-input v-model:value="config.whatsapp_api_key" type="password" show-password-on="click" placeholder="Agent API Key（留空则使用环境变量）" />
+        </n-form-item>
+        <n-form-item label="接收者">
+          <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>，纯数字自动补前缀" />
+        </n-form-item>
+        <n-form-item label="定时提醒渠道">
+          <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" />
+        </n-form-item>
+        <n-space>
+          <n-button type="primary" size="small" @click="saveWhatsApp">保存</n-button>
+          <n-button size="small" @click="testWhatsApp">推送测试</n-button>
+        </n-space>
+      </n-form>
+    </div>
+
     <!-- 汇率 -->
     <div class="section-card">
       <h3 class="section-title">汇率设置</h3>
@@ -83,7 +103,20 @@ import { useMessage } from 'naive-ui'
 import { systemApi, authApi } from '@/api'
 
 const message = useMessage()
-const config = ref({ telegram_bot_token: '', telegram_chat_id: '', exchange_rate_api_key: '' })
+const config = ref({
+  telegram_bot_token: '',
+  telegram_chat_id: '',
+  whatsapp_api_key: '',
+  whatsapp_to: '',
+  notify_channel: 'TELEGRAM',
+  exchange_rate_api_key: ''
+})
+const notifyChannelOptions = [
+  { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' },
+  { label: '仅应用内', value: 'APP' }
+]
 const supportedCurrencies = ref([])
 const rates = ref([])
 const alerts = ref([])
@@ -96,6 +129,9 @@ async function loadConfig() {
     const res = await systemApi.config()
     config.value.telegram_bot_token = res.data.telegram_bot_token || ''
     config.value.telegram_chat_id = res.data.telegram_chat_id || ''
+    config.value.whatsapp_api_key = res.data.whatsapp_api_key || ''
+    config.value.whatsapp_to = res.data.whatsapp_to || ''
+    config.value.notify_channel = res.data.notify_channel || 'TELEGRAM'
     config.value.exchange_rate_api_key = res.data.exchange_rate_api_key || ''
     const csv = res.data.supported_currencies || 'CNY,USD,EUR,GBP,JPY,HKD,SGD,THB,KRW'
     supportedCurrencies.value = csv.split(',').map(s => s.trim()).filter(Boolean)
@@ -112,6 +148,22 @@ async function saveConfig(key, value) {
 async function testTelegram() {
   try {
     const res = await systemApi.testTelegram()
+    message.success(res.message || '推送成功')
+  } catch (e) { message.error('推送失败') }
+}
+
+async function saveWhatsApp() {
+  try {
+    await systemApi.setConfig('whatsapp_api_key', config.value.whatsapp_api_key || '')
+    await systemApi.setConfig('whatsapp_to', config.value.whatsapp_to || '')
+    await systemApi.setConfig('notify_channel', config.value.notify_channel || 'TELEGRAM')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function testWhatsApp() {
+  try {
+    const res = await systemApi.testWhatsApp()
     message.success(res.message || '推送成功')
   } catch (e) { message.error('推送失败') }
 }

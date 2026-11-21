@@ -108,8 +108,16 @@ const typeOptions = [
 
 const channelOptions = [
   { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' },
   { label: '应用内通知', value: 'APP' }
 ]
+const channelLabel = (value) => ({
+  TELEGRAM: 'Telegram',
+  WHATSAPP: 'WhatsApp',
+  BOTH: '两者都发',
+  APP: '应用内'
+}[value] || value || '-')
 
 const columns = [
   { title: 'ID', key: 'id', width: 60 },
@@ -135,7 +143,7 @@ const columns = [
       }
     }
   },
-  { title: '通知渠道', key: 'notifyChannel' },
+  { title: '通知渠道', key: 'notifyChannel', render: row => channelLabel(row.notifyChannel) },
   {
     title: '状态',
     key: 'isActive',

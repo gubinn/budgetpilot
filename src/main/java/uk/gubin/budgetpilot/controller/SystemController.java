@@ -14,6 +14,7 @@ import uk.gubin.budgetpilot.service.ConfigService;
 import uk.gubin.budgetpilot.service.CurrencyRateService;
 import uk.gubin.budgetpilot.service.AlertLogService;
 import uk.gubin.budgetpilot.service.TelegramNotifyService;
+import uk.gubin.budgetpilot.service.WhatsAppNotifyService;
 import uk.gubin.budgetpilot.service.ScheduledTasks;
 
 import java.time.LocalDate;
@@ -31,6 +32,7 @@ public class SystemController {
     private final CurrencyRateService currencyRateService;
     private final AlertLogService alertLogService;
     private final TelegramNotifyService telegramNotifyService;
+    private final WhatsAppNotifyService whatsAppNotifyService;
     private final CurrencyRateMapper currencyRateMapper;
     private final TransactionMapper transactionMapper;
     private final MerchantAliasMapper merchantAliasMapper;
@@ -107,6 +109,12 @@ public class SystemController {
     public Result<String> testTelegram() {
         boolean success = telegramNotifyService.testSend();
         return success ? Result.ok("Telegram 推送成功") : Result.fail(10003, "Telegram 推送失败");
+    }
+
+    @PostMapping("/whatsapp/test")
+    public Result<String> testWhatsApp() {
+        boolean success = whatsAppNotifyService.testSend();
+        return success ? Result.ok("WhatsApp 推送成功") : Result.fail(10003, "WhatsApp 推送失败");
     }
 
     @SaCheckRole("ADMIN")
