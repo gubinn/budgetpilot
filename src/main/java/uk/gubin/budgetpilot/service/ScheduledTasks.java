@@ -159,31 +159,55 @@ public class ScheduledTasks {
         LambdaQueryWrapper<Account> query = new LambdaQueryWrapper<>();
         query.eq(Account::getIsActive, true);
         List<Account> accounts = accountMapper.selectList(query);
+        LocalDate start = LocalDate.of(2000, 1, 1);
 
         for (Account account : accounts) {
-            LocalDate start = LocalDate.of(2000, 1, 1);
             LambdaQueryWrapper<Transaction> txQuery = new LambdaQueryWrapper<>();
-            txQuery.eq(Transaction::getAccountId, account.getId())
-                    .eq(Transaction::getIsConfirmed, true)
-                    .ge(Transaction::getTransactionDate, start);
+            txQuery.eq(Transaction::getIsConfirmed, true)
+                    .ge(Transaction::getTransactionDate, start)
+                    .and(w -> w.eq(Transaction::getAccountId, account.getId())
+                            .or().eq(Transaction::getTargetAccountId, account.getId()));
 
             List<Transaction> txs = transactionMapper.selectList(txQuery);
-            BigDecimal income = txs.stream().filter(t -> t.getType() == 2)
-                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal expense = txs.stream().filter(t -> t.getType() == 1)
-                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal transferOut = txs.stream().filter(t -> t.getType() == 3)
-                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-            BigDecimal transferIn = txs.stream()
-                    .filter(t -> t.getType() == 3 && account.getId().equals(t.getTargetAccountId()))
-                    .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            BigDecimal calibrated = account.getInitialBalance()
-                    .add(income).subtract(expense)
-                    .subtract(transferOut).add(transferIn);
+            BigDecimal calibrated = calculateCalibratedBalance(
+                    account.getInitialBalance(), account.getId(), txs);
+            BigDecimal old = account.getCurrentBalance();
+            if (old == null || old.compareTo(calibrated) != 0) {
+                log.info("Calibrating account {} ({}): {} -> {}",
+                        account.getName(), account.getId(), old, calibrated);
+            }
             account.setCurrentBalance(calibrated);
             accountMapper.updateById(account);
         }
+    }
+
+    /**
+     * 按账户币种口径重算余额。
+     *
+     * <p>交易表的 {@code amount} 是账户币种金额，{@code amountBase} 是 CNY 金额；
+     * 账户余额必须用 {@code amount}。收入/退款增加余额，支出/转出减少余额；
+     * 作为转账目标账户时增加转入金额。</p>
+     */
+    static BigDecimal calculateCalibratedBalance(BigDecimal initialBalance, Long accountId, List<Transaction> txs) {
+        BigDecimal balance = initialBalance == null ? BigDecimal.ZERO : initialBalance;
+        for (Transaction tx : txs) {
+            if (tx.getAmount() == null || tx.getType() == null) {
+                continue;
+            }
+            boolean outgoing = accountId.equals(tx.getAccountId());
+            if (outgoing) {
+                switch (tx.getType()) {
+                    case 1 -> balance = balance.subtract(tx.getAmount()); // 支出
+                    case 2 -> balance = balance.add(tx.getAmount());      // 收入
+                    case 3 -> balance = balance.subtract(tx.getAmount()); // 转出
+                    case 4 -> balance = balance.add(tx.getAmount());      // 退款
+                    default -> { }
+                }
+            } else if (tx.getType() == 3 && accountId.equals(tx.getTargetAccountId())) {
+                balance = balance.add(tx.getAmount()); // 转入
+            }
+        }
+        return balance;
     }
 
     /**

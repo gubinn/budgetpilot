@@ -1,5 +1,15 @@
 # 变更记录
 
+## 2026-11-22（账户）— 修复每日余额校准任务
+
+- 校准改用 `amount`（账户币种）而不是 `amountBase`（CNY），避免多币种账户把 CNY 金额加到账户币种余额上。
+- 修正转入：交易查询同时包含 `target_account_id = 当前账户` 的转账，目标账户会正确加回转入金额。
+- 补上退款（`type=4`）：退款不再在每日 02:30 校准中被抹掉。
+- 新增 `ScheduledTasksBalanceTest`，覆盖收入、支出、转出、转入、退款、自转账不重复计算。
+- 校准只在余额变化时打印 `old -> new` 日志，便于审计。
+
+---
+
 ## 2026-11-22（通知）— 按用户隔离 Telegram / WhatsApp 配置
 
 - 公网登录验证码改为**只使用当前用户自己的配置**（`t_user_config`：`telegram_bot_token` / `telegram_chat_id` / `whatsapp_api_key` / `whatsapp_to` / `whatsapp_base_url`），不再回退到系统全局配置。
