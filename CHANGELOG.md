@@ -1,5 +1,42 @@
 # 变更记录
 
+## 2026-11-22（安全）— 公网访问来源识别与登录验证码
+
+### 1. 来源识别
+
+- 新增 `ingress` 包与 `IngressFilter`，按 **TCP 对端地址 + Cloudflare 头** 区分请求来源，而不是域名：
+  - `CLOUDFLARE`：可信隧道 connector（Tailscale IP）或 Tailscale 节点发来的请求，且带 `CF-Ray` + `CF-Connecting-IP`；
+  - `TAILSCALE`：对端在 `100.64.0.0/10` 或 `fd7a:115c:a1e0::/48`；
+  - `LAN` / `LOOPBACK`：私有网段 / 本机；
+  - `UNKNOWN`：默认 403。
+- 只有可信代理发来的 CF 头才会被采信；Tailscale 节点伪造 CF 头也只会进入验证码流程，不会绕过校验。
+- 响应头增加 `X-BudgetPilot-Ingress`，新增诊断接口 `GET /api/v1/auth/ingress`。
+- 新增配置 `budgetpilot.ingress.*`，可信代理列表可通过 `BUDGETPILOT_INGRESS_TRUSTED_PROXIES` 覆盖。
+
+### 2. 公网登录验证码
+
+- 登录流程拆成「密码校验 → 创建会话」，公网来源在密码正确后不直接发 token，而是生成 6 位验证码并通过该用户配置的通知渠道发送。
+- 验证码 5 分钟有效、最多尝试 5 次、一次性使用；同一用户 60 秒内不可重发，同一 IP 10 分钟内最多 10 次。
+- 新增 `POST /api/v1/auth/verify`、`POST /api/v1/auth/otp/resend`。
+- 公网会话 12 小时绝对有效、1 小时无操作过期；Tailscale / 局域网仍使用默认 7 天会话。
+- 验证码接收渠道按用户配置（`t_user_config.notify_channel` / `telegram_chat_id` / `whatsapp_to`），未配置时回退到全局通知配置。
+
+### 3. 访问策略与设置页
+
+- 公网来源禁止使用 `X-Api-Key`（返回 403），本机 / 局域网 / Tailscale 不受影响。
+- 全局配置读写、通知测试、汇率刷新等接口限制为 **ADMIN**；普通用户只能读写自己的 `/users/config`。
+- 桌面端与移动端设置页新增「登录验证（公网访问）」卡片，每个用户可配置自己的验证码渠道；全局通知与汇率配置仅 ADMIN 可见。
+- 登录页增加第二步验证码输入、重新发送倒计时与返回重新登录。
+- 新增 `IngressResolverTest`，覆盖 Tailscale、公网、局域网、未知来源、CF 头伪造与 IPv4-mapped IPv6 场景。
+
+### 4. 部署
+
+- `application.yml` 增加 `budgetpilot.ingress` 配置；隧道 connector 的 Tailscale IP 通过 `BUDGETPILOT_INGRESS_TRUSTED_PROXIES` 配置，不写入仓库。
+- `RestTemplate` 增加 5 秒连接 / 10 秒读取超时，避免通知渠道异常拖死登录请求。
+- `DEPLOY.md` 补充隧道回源拓扑、来源识别验证方法与每用户验证码配置步骤。
+
+---
+
 ## 2026-11-22（通知）— 新增 WhatsApp 推送渠道
 
 ### 1. WhatsApp 通知服务

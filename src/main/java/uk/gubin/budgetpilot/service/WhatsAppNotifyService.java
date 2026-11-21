@@ -45,8 +45,17 @@ public class WhatsAppNotifyService {
      * 发送 WhatsApp 文本消息
      */
     public boolean send(String title, String content) {
-        String apiKey = resolveConfig("whatsapp_api_key", defaultApiKey);
         String to = resolveConfig("whatsapp_to", defaultTo);
+        return sendToRecipient(to, content);
+    }
+
+    /**
+     * 发送到指定接收者（复用全局 Agent API Key），用于按用户投递登录验证码。
+     *
+     * <p>注意：Agent Platform 只允许向 Agent 创建者发送消息。</p>
+     */
+    public boolean sendToRecipient(String to, String content) {
+        String apiKey = resolveConfig("whatsapp_api_key", defaultApiKey);
         String baseUrl = resolveConfig("whatsapp_base_url", defaultBaseUrl);
 
         if (apiKey == null || apiKey.isBlank() || to == null || to.isBlank()) {
@@ -97,6 +106,13 @@ public class WhatsAppNotifyService {
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")),
                 LocalDate.now());
         return send("BudgetPilot Test", content);
+    }
+
+    /**
+     * 当前生效的全局接收者（数据库优先，环境变量兜底）。
+     */
+    public String resolveRecipient() {
+        return resolveConfig("whatsapp_to", defaultTo);
     }
 
     /**

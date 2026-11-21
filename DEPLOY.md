@@ -167,6 +167,8 @@ TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
 BUDGETPILOT_WHATSAPP_API_KEY=
 BUDGETPILOT_WHATSAPP_TO=
+# 可选：Cloudflare Tunnel connector 的 Tailscale IP，逗号分隔
+BUDGETPILOT_INGRESS_TRUSTED_PROXIES=
 EXCHANGE_RATE_API_KEY=
 EOF
 
@@ -184,6 +186,7 @@ chmod 600 .env
 | `TELEGRAM_CHAT_ID` | 否 | 接收通知的 Telegram Chat ID |
 | `BUDGETPILOT_WHATSAPP_API_KEY` | 否 | WhatsApp Agent Platform API Key |
 | `BUDGETPILOT_WHATSAPP_TO` | 否 | WhatsApp 接收者，格式 `user:<id>` |
+| `BUDGETPILOT_INGRESS_TRUSTED_PROXIES` | 否 | Cloudflare Tunnel connector 的 Tailscale IP（逗号分隔）；不填使用 `application.yml` 默认值 |
 | `EXCHANGE_RATE_API_KEY` | 否 | 汇率 API Key，用于多币种换算 |
 
 ### 2.4 构建后端 JAR
@@ -849,6 +852,84 @@ WhatsApp 渠道使用官方 **Agent Platform API**（`https://api.whatsapp.com/a
 # 测试 WhatsApp 推送
 curl -X POST http://127.0.0.1:6060/api/v1/system/whatsapp/test
 ```
+
+### 4.6 公网访问与登录验证码
+
+#### 拓扑
+
+```
+浏览器 ──https──> Cloudflare ──tunnel──> 海外 VPS (cloudflared)
+                                             │
+                                       Tailscale 内网
+                                             ▼
+                                  本机 127.0.0.1 / 100.64.x.x:6060
+```
+
+应用不依赖 Host 或域名判断来源，而是看 **TCP 对端地址 + Cloudflare 头**：
+
+- 对端是隧道 connector 的 Tailscale IP（通过 `BUDGETPILOT_INGRESS_TRUSTED_PROXIES` 配置）且带 `CF-Ray` + `CF-Connecting-IP` → 公网，需要验证码；
+- 对端在 `100.64.0.0/10` 或 `fd7a:115c:a1e0::/48` → Tailscale，直接登录；
+- 其他未知来源 → 403。
+
+#### 验证来源识别
+
+```bash
+# 本机
+curl http://127.0.0.1:6060/api/v1/auth/ingress
+# {"code":0,"data":{"ingress":"LOOPBACK",...}}
+
+# Tailscale（在另一台 tailnet 设备上）
+curl http://100.64.196.104:6060/api/v1/auth/ingress
+# {"code":0,"data":{"ingress":"TAILSCALE",...}}
+
+# 公网域名
+curl https://<你的域名>/api/v1/auth/ingress
+# {"code":0,"data":{"ingress":"CLOUDFLARE",...}}
+```
+
+如果公网返回 `UNKNOWN` / 403，说明 connector 的 Tailscale IP 不在可信列表里。查看日志中的 `peer=`：
+
+```bash
+journalctl --user -u budgetpilot.service -f | grep '公网请求'
+```
+
+把该 IP 加入 `BUDGETPILOT_INGRESS_TRUSTED_PROXIES`（逗号分隔，IPv4/IPv6 均可）后重启。例如：
+
+```bash
+BUDGETPILOT_INGRESS_TRUSTED_PROXIES=100.64.1.2,fd7a:115c:a1e0::1
+```
+
+不配置时仍会按公网处理（fail-secure），只是日志会提示来源不在可信列表。
+
+#### 公网登录流程
+
+1. 用户名 + 密码校验通过；
+2. 服务端生成 6 位验证码，通过该用户的验证码渠道发送；
+3. 前端输入验证码，`POST /api/v1/auth/verify` 换取 token；
+4. 公网 token 12 小时有效、1 小时无操作过期；Tailscale / 局域网仍是 7 天。
+
+验证码规则：5 分钟有效、最多错 5 次、一次性使用；同一用户 60 秒内不可重发，同一 IP 10 分钟内最多 10 次。
+
+#### 配置每个用户的接收渠道
+
+登录后进入 **设置 → 登录验证（公网访问）**：
+
+- 验证码接收渠道：跟随全局 / Telegram / WhatsApp / 两者都发；
+- Telegram Chat ID、WhatsApp 接收者（`user:<id>`）留空则使用全局配置。
+
+新用户第一次从公网登录时还没有个人渠道，验证码会发到全局通知渠道；登录后应及时改成自己的渠道。
+
+> WhatsApp Agent Platform 只能给 Agent 创建者本人发消息，家人建议统一用 Telegram（每个家人先给 Bot 发一条消息，再用 `getUpdates` 获取各自 Chat ID）。
+
+#### 权限变化
+
+全局配置读写、通知测试、汇率刷新等接口现在仅 **ADMIN** 可用；普通用户只能读写自己的 `/users/config`。如果日常账号是 `USER`，需要管理全局通知/汇率时请用 ADMIN 账号登录。
+
+#### 额外加固建议
+
+- 确认路由器没有把 `6060` 端口映射到公网；即使误映射，未知来源也会被 403。
+- 公网来源禁止使用 `X-Api-Key`，脚本调用请走本机 / Tailscale。
+- 隧道 token 若曾出现在 shell 历史或聊天记录中，建议在 Cloudflare Zero Trust 中轮换。
 
 ---
 

@@ -29,26 +29,59 @@
             <span>BudgetPilot</span>
           </div>
 
-          <h2>欢迎回来</h2>
-          <p class="form-sub">登录你的账本，继续掌握每一笔收支。</p>
+          <template v-if="step === 'credentials'">
+            <h2>欢迎回来</h2>
+            <p class="form-sub">登录你的账本，继续掌握每一笔收支。</p>
 
-          <n-form ref="formRef" :model="form" :rules="rules" label-placement="top" size="large">
-            <n-form-item label="用户名" path="username">
-              <n-input v-model:value="form.username" placeholder="请输入用户名" @keyup.enter="handleLogin">
-                <template #prefix><n-icon><person-outline /></n-icon></template>
-              </n-input>
-            </n-form-item>
-            <n-form-item label="密码" path="password">
-              <n-input v-model:value="form.password" type="password" placeholder="请输入密码" @keyup.enter="handleLogin" show-password-on="click">
-                <template #prefix><n-icon><lock-closed-outline /></n-icon></template>
-              </n-input>
-            </n-form-item>
-            <n-button type="primary" size="large" block :loading="loading" @click="handleLogin" class="login-button">
-              登 录
-            </n-button>
-          </n-form>
+            <n-form ref="formRef" :model="form" :rules="rules" label-placement="top" size="large">
+              <n-form-item label="用户名" path="username">
+                <n-input v-model:value="form.username" placeholder="请输入用户名" @keyup.enter="handleLogin">
+                  <template #prefix><n-icon><person-outline /></n-icon></template>
+                </n-input>
+              </n-form-item>
+              <n-form-item label="密码" path="password">
+                <n-input v-model:value="form.password" type="password" placeholder="请输入密码" @keyup.enter="handleLogin" show-password-on="click">
+                  <template #prefix><n-icon><lock-closed-outline /></n-icon></template>
+                </n-input>
+              </n-form-item>
+              <n-button type="primary" size="large" block :loading="loading" @click="handleLogin" class="login-button">
+                登 录
+              </n-button>
+            </n-form>
 
-          <p class="login-hint">数据存储在你自己的服务器 · 安全登录</p>
+            <p class="login-hint">数据存储在你自己的服务器 · 安全登录</p>
+          </template>
+
+          <template v-else>
+            <h2>验证身份</h2>
+            <p class="form-sub">
+              验证码已发送到 {{ otpChannel }}<span v-if="otpRecipient">（{{ otpRecipient }}）</span>
+            </p>
+
+            <n-form label-placement="top" size="large">
+              <n-form-item label="验证码">
+                <n-input
+                  v-model:value="code"
+                  maxlength="6"
+                  placeholder="请输入 6 位验证码"
+                  :input-props="{ inputmode: 'numeric', autocomplete: 'one-time-code' }"
+                  @keyup.enter="handleVerify"
+                />
+              </n-form-item>
+              <n-button type="primary" size="large" block :loading="verifying" @click="handleVerify" class="login-button">
+                验证并登录
+              </n-button>
+            </n-form>
+
+            <div class="otp-actions">
+              <n-button text type="primary" :disabled="resendIn > 0 || resending" @click="handleResend">
+                {{ resendIn > 0 ? `重新发送（${resendIn}s）` : '重新发送验证码' }}
+              </n-button>
+              <n-button text @click="backToCredentials">返回重新登录</n-button>
+            </div>
+
+            <p class="login-hint">公网登录需要验证码确认 · 有效期 {{ Math.round(otpExpireIn / 60) }} 分钟</p>
+          </template>
         </div>
       </main>
     </div>
@@ -56,7 +89,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { PersonOutline, LockClosedOutline } from '@vicons/ionicons5'
@@ -69,6 +102,17 @@ const message = useMessage()
 const formRef = ref(null)
 const loading = ref(false)
 
+const step = ref('credentials')
+const challengeId = ref('')
+const code = ref('')
+const otpChannel = ref('')
+const otpRecipient = ref('')
+const otpExpireIn = ref(300)
+const verifying = ref(false)
+const resending = ref(false)
+const resendIn = ref(0)
+let countdownTimer = null
+
 const form = reactive({
   username: '',
   password: ''
@@ -79,15 +123,42 @@ const rules = {
   password: { required: true, message: '请输入密码', trigger: 'blur' }
 }
 
+function startCountdown(seconds) {
+  clearInterval(countdownTimer)
+  resendIn.value = seconds
+  countdownTimer = setInterval(() => {
+    if (resendIn.value > 0) {
+      resendIn.value -= 1
+    } else {
+      clearInterval(countdownTimer)
+    }
+  }, 1000)
+}
+
+function applyChallenge(data) {
+  challengeId.value = data.challengeId
+  otpChannel.value = data.channel || '通知渠道'
+  otpRecipient.value = data.recipient || ''
+  otpExpireIn.value = data.expireIn || 300
+  code.value = ''
+  step.value = 'otp'
+  startCountdown(60)
+}
+
 async function handleLogin() {
   loading.value = true
   try {
     await formRef.value?.validate()
     const res = await auth.login(form.username, form.password)
     if (res.code === 0) {
-      message.success('登录成功')
-      const redirect = route.query.redirect || '/'
-      router.push(redirect)
+      if (res.data?.needVerify) {
+        applyChallenge(res.data)
+        message.success('验证码已发送')
+      } else {
+        message.success('登录成功')
+        const redirect = route.query.redirect || '/'
+        router.push(redirect)
+      }
     } else {
       message.error(res.message || '登录失败')
     }
@@ -104,6 +175,47 @@ async function handleLogin() {
     loading.value = false
   }
 }
+
+async function handleVerify() {
+  if (!/^\d{6}$/.test(code.value)) {
+    message.warning('请输入 6 位数字验证码')
+    return
+  }
+  verifying.value = true
+  try {
+    await auth.verifyOtp(challengeId.value, code.value)
+    message.success('登录成功')
+    const redirect = route.query.redirect || '/'
+    router.push(redirect)
+  } catch (e) {
+    message.error(e?.message || '验证码错误或已过期')
+  } finally {
+    verifying.value = false
+  }
+}
+
+async function handleResend() {
+  if (resendIn.value > 0 || resending.value) return
+  resending.value = true
+  try {
+    const res = await auth.resendOtp(challengeId.value)
+    applyChallenge(res.data)
+    message.success('验证码已重新发送')
+  } catch (e) {
+    message.error(e?.message || '发送失败，请稍后再试')
+  } finally {
+    resending.value = false
+  }
+}
+
+function backToCredentials() {
+  step.value = 'credentials'
+  code.value = ''
+  clearInterval(countdownTimer)
+  resendIn.value = 0
+}
+
+onUnmounted(() => clearInterval(countdownTimer))
 </script>
 
 <style scoped>
@@ -284,6 +396,13 @@ async function handleLogin() {
   text-align: center;
   font-size: 11px;
   color: #94a3b8;
+}
+
+.otp-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 14px;
 }
 
 @media (max-width: 860px) {

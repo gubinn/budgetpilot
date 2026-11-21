@@ -48,16 +48,19 @@ public class SystemController {
     private final StringRedisTemplate redisTemplate;
     private final ScheduledTasks scheduledTasks;
 
+    @SaCheckRole("ADMIN")
     @GetMapping("/config")
     public Result<Map<String, String>> getAllConfig() {
         return Result.ok(configService.getAll());
     }
 
+    @SaCheckRole("ADMIN")
     @GetMapping("/config/{key}")
     public Result<String> getConfig(@PathVariable String key) {
         return Result.ok(configService.get(key));
     }
 
+    @SaCheckRole("ADMIN")
     @PutMapping("/config/{key}")
     public Result<Void> setConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
         configService.set(key, body.get("value"));
@@ -88,6 +91,7 @@ public class SystemController {
         return Result.ok(currencyRateService.getRate(currency, queryDate));
     }
 
+    @SaCheckRole("ADMIN")
     @PostMapping("/rates/refresh")
     public Result<String> refreshRates() {
         currencyRateService.refreshRates();
@@ -105,12 +109,14 @@ public class SystemController {
         return Result.ok();
     }
 
+    @SaCheckRole("ADMIN")
     @PostMapping("/telegram/test")
     public Result<String> testTelegram() {
         boolean success = telegramNotifyService.testSend();
         return success ? Result.ok("Telegram 推送成功") : Result.fail(10003, "Telegram 推送失败");
     }
 
+    @SaCheckRole("ADMIN")
     @PostMapping("/whatsapp/test")
     public Result<String> testWhatsApp() {
         boolean success = whatsAppNotifyService.testSend();
@@ -162,6 +168,7 @@ public class SystemController {
         }
     }
 
+    @SaCheckRole("ADMIN")
     @PostMapping("/check-unconfirmed")
     public Result<String> checkUnconfirmedTransactions() {
         scheduledTasks.checkUnconfirmedTransactions();

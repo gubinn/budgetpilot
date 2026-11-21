@@ -35,8 +35,15 @@ public class TelegramNotifyService {
      * 发送 Telegram 消息
      */
     public boolean send(String title, String content) {
-        String token = resolveConfig("telegram_bot_token", defaultBotToken);
         String chatId = resolveConfig("telegram_chat_id", defaultChatId);
+        return sendToChat(chatId, content);
+    }
+
+    /**
+     * 发送到指定 Chat ID（复用全局 Bot Token），用于按用户投递登录验证码。
+     */
+    public boolean sendToChat(String chatId, String content) {
+        String token = resolveConfig("telegram_bot_token", defaultBotToken);
 
         if (token == null || token.isBlank() || chatId == null || chatId.isBlank()) {
             log.warn("Telegram 未配置，跳过推送");
@@ -54,9 +61,16 @@ public class TelegramNotifyService {
             restTemplate.postForEntity(url, body, String.class);
             return true;
         } catch (Exception e) {
-            log.error("Telegram 推送失败", e);
+            log.error("Telegram 推送失败: {}", e.getMessage());
             return false;
         }
+    }
+
+    /**
+     * 当前生效的全局 Chat ID（数据库优先，环境变量兜底）。
+     */
+    public String resolveChatId() {
+        return resolveConfig("telegram_chat_id", defaultChatId);
     }
 
     /**

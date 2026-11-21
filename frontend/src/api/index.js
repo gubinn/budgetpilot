@@ -104,6 +104,9 @@ export const userApi = {
 
 export const authApi = {
   login: (data) => api.post('/auth/login', data),
+  verifyOtp: (data) => api.post('/auth/verify', data),
+  resendOtp: (data) => api.post('/auth/otp/resend', data),
+  ingress: () => api.get('/auth/ingress'),
   logout: () => api.post('/auth/logout'),
   info: () => api.get('/auth/info'),
   changePassword: (data) => api.post('/auth/change-password', data),

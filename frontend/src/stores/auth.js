@@ -12,10 +12,27 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(username, password) {
     const res = await authApi.login({ username, password })
-    token.value = res.data.token
-    user.value = res.data
-    localStorage.setItem('token', token.value)
+    // 公网来源不会直接返回 token，而是返回验证码挑战
+    if (res.data?.token) {
+      applySession(res.data)
+    }
     return res
+  }
+
+  async function verifyOtp(challengeId, code) {
+    const res = await authApi.verifyOtp({ challengeId, code })
+    applySession(res.data)
+    return res
+  }
+
+  async function resendOtp(challengeId) {
+    return authApi.resendOtp({ challengeId })
+  }
+
+  function applySession(data) {
+    token.value = data.token
+    user.value = data
+    localStorage.setItem('token', token.value)
   }
 
   async function logout() {
@@ -45,5 +62,5 @@ export const useAuthStore = defineStore('auth', () => {
     return res
   }
 
-  return { user, token, isLoggedIn, isAdmin, nickname, login, logout, fetchUser, changePassword }
+  return { user, token, isLoggedIn, isAdmin, nickname, login, verifyOtp, resendOtp, logout, fetchUser, changePassword }
 })

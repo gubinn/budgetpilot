@@ -59,6 +59,22 @@ budgetpilot:
     # 接收者，格式 user:<id>；纯数字会自动补 user: 前缀
     to: ${BUDGETPILOT_WHATSAPP_TO:}
     base-url: ${BUDGETPILOT_WHATSAPP_BASE_URL:https://api.whatsapp.com/agent/v1}
+  # 来源识别与公网登录验证码
+  ingress:
+    # Cloudflare Tunnel connector 的 Tailscale IP（IPv4 / IPv6，逗号分隔），只有这些对端发来的 CF 头才精确可信
+    # 未配置时，Tailscale 节点发来的 CF 头仍会按公网处理（fail-secure），只是日志会提示修正
+    trusted-proxies: "${BUDGETPILOT_INGRESS_TRUSTED_PROXIES:}"
+    tailscale-cidrs: "${BUDGETPILOT_TAILSCALE_CIDRS:100.64.0.0/10,fd7a:115c:a1e0::/48}"
+    lan-cidrs: 127.0.0.0/8,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+    block-unknown: true
+    # 公网登录 token：12 小时绝对有效，1 小时无操作过期
+    public-session-timeout: 43200
+    public-active-timeout: 3600
+    # 验证码：5 分钟有效，最多尝试 5 次，60 秒内不可重发
+    otp-ttl: 300
+    otp-max-attempts: 5
+    otp-resend-seconds: 60
+    otp-ip-limit: 10
   exchange-rate-api:
     key: ${EXCHANGE_RATE_API_KEY:}
     url: https://v6.exchangerate-api.com/v6

@@ -1,7 +1,7 @@
 <template>
   <div class="mobile-settings">
     <!-- 定时提醒渠道（全局） -->
-    <div class="section-card">
+    <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">定时提醒渠道</h3>
       <n-form label-placement="top" label-width="auto">
         <n-form-item label="渠道">
@@ -13,7 +13,7 @@
     </div>
 
     <!-- Telegram -->
-    <div class="section-card">
+    <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">Telegram 通知</h3>
       <n-form label-placement="top" label-width="auto">
         <n-form-item label="Bot Token">
@@ -30,7 +30,7 @@
     </div>
 
     <!-- WhatsApp -->
-    <div class="section-card">
+    <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">WhatsApp 通知</h3>
       <n-form label-placement="top" label-width="auto">
         <n-form-item label="API Key">
@@ -46,8 +46,26 @@
       </n-form>
     </div>
 
-    <!-- 汇率 -->
+    <!-- 公网登录验证：每个用户自己的接收渠道 -->
     <div class="section-card">
+      <h3 class="section-title">登录验证（公网访问）</h3>
+      <n-form label-placement="top" label-width="auto">
+        <n-form-item label="验证码接收渠道">
+          <n-select v-model:value="myConfig.notify_channel" :options="myChannelOptions" />
+        </n-form-item>
+        <n-form-item label="Telegram Chat ID">
+          <n-input v-model:value="myConfig.telegram_chat_id" placeholder="留空则使用系统全局配置" />
+        </n-form-item>
+        <n-form-item label="WhatsApp 接收者">
+          <n-input v-model:value="myConfig.whatsapp_to" placeholder="user:<id>；留空则使用系统全局配置" />
+        </n-form-item>
+        <n-button type="primary" size="small" @click="saveMyNotify">保存</n-button>
+      </n-form>
+      <div class="config-hint">公网登录时验证码发到这里；WhatsApp 只能发给 Agent 创建者，家人建议用 Telegram。</div>
+    </div>
+
+    <!-- 汇率 -->
+    <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">汇率设置</h3>
       <n-form label-placement="top" label-width="auto">
         <n-form-item label="API Key">
@@ -109,9 +127,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useMessage } from 'naive-ui'
-import { systemApi, authApi } from '@/api'
+import { systemApi, authApi, userApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 
 const message = useMessage()
+const auth = useAuthStore()
 const config = ref({
   telegram_bot_token: '',
   telegram_chat_id: '',
@@ -125,6 +145,17 @@ const notifyChannelOptions = [
   { label: 'WhatsApp', value: 'WHATSAPP' },
   { label: '两者都发', value: 'BOTH' },
   { label: '仅应用内', value: 'APP' }
+]
+const myConfig = ref({
+  notify_channel: '',
+  telegram_chat_id: '',
+  whatsapp_to: ''
+})
+const myChannelOptions = [
+  { label: '跟随系统全局配置', value: '' },
+  { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' }
 ]
 const supportedCurrencies = ref([])
 const rates = ref([])
@@ -172,6 +203,24 @@ async function saveWhatsApp() {
 async function saveNotifyChannel() {
   try {
     await systemApi.setConfig('notify_channel', config.value.notify_channel || 'TELEGRAM')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function loadMyNotify() {
+  try {
+    const res = await userApi.getMyConfig()
+    myConfig.value.notify_channel = res.data.notify_channel || ''
+    myConfig.value.telegram_chat_id = res.data.telegram_chat_id || ''
+    myConfig.value.whatsapp_to = res.data.whatsapp_to || ''
+  } catch (e) { console.error('Failed to load my notify config', e) }
+}
+
+async function saveMyNotify() {
+  try {
+    await userApi.setMyConfig('notify_channel', myConfig.value.notify_channel || '')
+    await userApi.setMyConfig('telegram_chat_id', myConfig.value.telegram_chat_id || '')
+    await userApi.setMyConfig('whatsapp_to', myConfig.value.whatsapp_to || '')
     message.success('保存成功')
   } catch (e) { message.error('保存失败') }
 }
@@ -231,7 +280,13 @@ function copyApiKey() {
 
 function toggleApiKeyVisibility() { apiKeyVisible.value = !apiKeyVisible.value }
 
-onMounted(() => { loadConfig(); loadRates(); loadAlerts(); loadApiKey() })
+onMounted(() => {
+  if (auth.isAdmin) loadConfig()
+  loadMyNotify()
+  loadRates()
+  loadAlerts()
+  loadApiKey()
+})
 </script>
 
 <style scoped>

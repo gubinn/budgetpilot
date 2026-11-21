@@ -1,7 +1,7 @@
 <template>
   <n-grid :cols="2" :x-gap="16" :y-gap="16">
     <!-- 定时提醒渠道（全局配置，独立于各通知渠道） -->
-    <n-gi :span="2">
+    <n-gi :span="2" v-if="auth.isAdmin">
       <n-card title="定时提醒渠道" hoverable>
         <div class="channel-row">
           <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" class="channel-select" />
@@ -12,7 +12,7 @@
     </n-gi>
 
     <!-- Telegram 配置 -->
-    <n-gi>
+    <n-gi v-if="auth.isAdmin">
       <n-card title="Telegram 通知" hoverable>
         <n-form label-placement="left" label-width="80">
           <n-form-item label="Bot Token">
@@ -32,7 +32,7 @@
     </n-gi>
 
     <!-- WhatsApp 配置 -->
-    <n-gi>
+    <n-gi v-if="auth.isAdmin">
       <n-card title="WhatsApp 通知" hoverable>
         <n-form label-placement="left" label-width="96">
           <n-form-item label="API Key">
@@ -49,8 +49,29 @@
       </n-card>
     </n-gi>
 
+    <!-- 公网登录验证：每个用户配置自己的验证码接收渠道 -->
+    <n-gi :span="2">
+      <n-card title="登录验证（公网访问）" hoverable>
+        <n-form label-placement="left" label-width="130">
+          <n-form-item label="验证码接收渠道">
+            <n-select v-model:value="myConfig.notify_channel" :options="myChannelOptions" class="channel-select" />
+          </n-form-item>
+          <n-form-item label="Telegram Chat ID">
+            <n-input v-model:value="myConfig.telegram_chat_id" placeholder="留空则使用系统全局配置" />
+          </n-form-item>
+          <n-form-item label="WhatsApp 接收者">
+            <n-input v-model:value="myConfig.whatsapp_to" placeholder="user:<id>；留空则使用系统全局配置" />
+          </n-form-item>
+          <n-form-item>
+            <n-button type="primary" @click="saveMyNotify">保存</n-button>
+            <span class="config-inline-hint">公网登录时验证码发到这里；WhatsApp 只能发给 Agent 创建者，家人建议用 Telegram。</span>
+          </n-form-item>
+        </n-form>
+      </n-card>
+    </n-gi>
+
     <!-- 汇率配置 -->
-    <n-gi>
+    <n-gi v-if="auth.isAdmin">
       <n-card title="汇率设置" hoverable>
         <n-form label-placement="left" label-width="80">
           <n-form-item label="API Key">
@@ -128,9 +149,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
-import { systemApi, authApi } from '@/api'
+import { systemApi, authApi, userApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 
 const message = useMessage()
+const auth = useAuthStore()
 const config = ref({
   telegram_bot_token: '',
   telegram_chat_id: '',
@@ -144,6 +167,17 @@ const notifyChannelOptions = [
   { label: 'WhatsApp', value: 'WHATSAPP' },
   { label: '两者都发', value: 'BOTH' },
   { label: '仅应用内', value: 'APP' }
+]
+const myConfig = ref({
+  notify_channel: '',
+  telegram_chat_id: '',
+  whatsapp_to: ''
+})
+const myChannelOptions = [
+  { label: '跟随系统全局配置', value: '' },
+  { label: 'Telegram', value: 'TELEGRAM' },
+  { label: 'WhatsApp', value: 'WHATSAPP' },
+  { label: '两者都发', value: 'BOTH' }
 ]
 const supportedCurrencies = ref([])
 const rates = ref([])
@@ -191,6 +225,24 @@ async function saveWhatsApp() {
 async function saveNotifyChannel() {
   try {
     await systemApi.setConfig('notify_channel', config.value.notify_channel || 'TELEGRAM')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function loadMyNotify() {
+  try {
+    const res = await userApi.getMyConfig()
+    myConfig.value.notify_channel = res.data.notify_channel || ''
+    myConfig.value.telegram_chat_id = res.data.telegram_chat_id || ''
+    myConfig.value.whatsapp_to = res.data.whatsapp_to || ''
+  } catch (e) { console.error('Failed to load my notify config', e) }
+}
+
+async function saveMyNotify() {
+  try {
+    await userApi.setMyConfig('notify_channel', myConfig.value.notify_channel || '')
+    await userApi.setMyConfig('telegram_chat_id', myConfig.value.telegram_chat_id || '')
+    await userApi.setMyConfig('whatsapp_to', myConfig.value.whatsapp_to || '')
     message.success('保存成功')
   } catch (e) { message.error('保存失败') }
 }
@@ -264,7 +316,8 @@ function toggleApiKeyVisibility() {
 }
 
 onMounted(() => {
-  loadConfig()
+  if (auth.isAdmin) loadConfig()
+  loadMyNotify()
   loadRates()
   loadAlerts()
   loadApiKey()
@@ -284,6 +337,12 @@ onMounted(() => {
 }
 .channel-select {
   width: 260px;
+}
+.config-inline-hint {
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--bp-muted, #888);
+  line-height: 1.6;
 }
 @media (max-width: 640px) {
   .channel-row {

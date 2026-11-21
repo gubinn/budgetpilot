@@ -8,9 +8,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import uk.gubin.budgetpilot.entity.User;
+import uk.gubin.budgetpilot.ingress.IngressContext;
+import uk.gubin.budgetpilot.ingress.IngressInfo;
+import uk.gubin.budgetpilot.ingress.IngressType;
 import uk.gubin.budgetpilot.mapper.UserMapper;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
 /**
  * API Key 过滤器
@@ -46,6 +50,16 @@ public class ApiKeyFilter implements Filter {
         // 没有 token，但有 X-Api-Key，自动登录
         String apiKey = httpReq.getHeader("X-Api-Key");
         if (apiKey != null && !apiKey.isBlank()) {
+            // 公网来源禁止使用长期 API Key，必须走登录 + 验证码
+            IngressInfo ingress = IngressContext.get(httpReq);
+            if (ingress.type() == IngressType.CLOUDFLARE) {
+                httpResp.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                httpResp.setCharacterEncoding(StandardCharsets.UTF_8.name());
+                httpResp.setContentType("application/json;charset=UTF-8");
+                httpResp.getWriter().write("{\"code\":80002,\"message\":\"公网访问不允许使用 API Key\"}");
+                return;
+            }
+
             // 通过 userId 找 apiKey
             User user = userMapper.selectOne(
                     new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<User>()

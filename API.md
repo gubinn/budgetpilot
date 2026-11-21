@@ -509,6 +509,8 @@
 | DELETE | `/api/v1/system/test-data` | 清空测试数据 | - |
 | POST | `/api/v1/system/check-unconfirmed` | 手动触发待确认交易检查 | - |
 
+> 全局配置读写（`/system/config`）、通知测试、汇率刷新、清空测试数据、待确认检查均需要 **ADMIN** 角色；普通用户只能读写自己的 `/users/config`。
+
 #### 清空测试数据响应
 
 ```json
@@ -678,6 +680,9 @@ PUT /api/v1/system/config/notify_channel
 | 方法 | 路径 | 功能 | 请求体 | 需登录 |
 |------|------|------|--------|--------|
 | POST | `/api/v1/auth/login` | 用户登录 | `LoginDTO` | 否 |
+| POST | `/api/v1/auth/verify` | 校验公网登录验证码并换取 token | `OtpVerifyDTO` | 否 |
+| POST | `/api/v1/auth/otp/resend` | 重新发送公网登录验证码 | `OtpResendDTO` | 否 |
+| GET | `/api/v1/auth/ingress` | 查看当前请求来源类型（诊断） | - | 否 |
 | POST | `/api/v1/auth/logout` | 退出登录 | - | 是 |
 | GET | `/api/v1/auth/info` | 获取当前用户信息 | - | 是 |
 | POST | `/api/v1/auth/change-password` | 修改密码 | `ChangePasswordDTO` | 是 |
@@ -693,7 +698,9 @@ PUT /api/v1/system/config/notify_channel
 }
 ```
 
-##### LoginVO（登录响应）
+##### 登录响应（Tailscale / 局域网 / 本机）
+
+直接返回 `LoginVO`，`data.token` 为 Sa-Token 凭证，默认 7 天有效：
 
 ```json
 {
@@ -708,6 +715,43 @@ PUT /api/v1/system/config/notify_channel
   }
 }
 ```
+
+##### 登录响应（公网 / Cloudflare Tunnel）
+
+公网来源在用户名密码校验通过后**不直接返回 token**，而是返回验证码挑战；验证码通过该用户在 `/api/v1/users/config` 配置的渠道发送，未配置时回退到系统全局通知配置：
+
+```json
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "needVerify": true,
+    "challengeId": "eaa70b0e-3003-4bc3-940e-781183d4a464",
+    "channel": "WhatsApp",
+    "recipient": "***1234",
+    "expireIn": 300
+  }
+}
+```
+
+##### OtpVerifyDTO
+
+```json
+{
+  "challengeId": "登录响应中的 challengeId",
+  "code": "6 位数字验证码"
+}
+```
+
+##### OtpResendDTO
+
+```json
+{
+  "challengeId": "登录响应中的 challengeId"
+}
+```
+
+`POST /api/v1/auth/otp/resend` 返回新的挑战信息（`challengeId` 不变），同一用户 60 秒内只能发送一次，同一 IP 10 分钟内最多 10 次。验证码 5 分钟有效、最多尝试 5 次、使用后立即失效。公网登录成功后的 token 为 12 小时绝对有效、1 小时无操作过期。
 
 ##### UserVO（用户信息响应）
 
@@ -778,11 +822,27 @@ PUT /api/v1/system/config/notify_channel
 | GET | `/api/v1/users/config` | 获取当前用户所有配置 | - |
 | PUT | `/api/v1/users/config/{key}` | 设置配置 | `{ "value": "xxx" }` |
 
+公网登录验证码使用以下用户级配置（`t_user_config`），未配置时回退到 `t_config` 的全局值：
+
+| key | 说明 |
+|-----|------|
+| `notify_channel` | `TELEGRAM` / `WHATSAPP` / `BOTH`；留空跟随全局 |
+| `telegram_chat_id` | 该用户的 Telegram Chat ID；留空跟随全局 |
+| `whatsapp_to` | 该用户的 WhatsApp 接收者（`user:<id>`）；留空跟随全局。Agent Platform 只能发给创建者本人，家人建议用 Telegram |
+
+```json
+PUT /api/v1/users/config/notify_channel
+{ "value": "TELEGRAM" }
+
+PUT /api/v1/users/config/telegram_chat_id
+{ "value": "123456789" }
+```
+
 ---
 
 ### 10. 鉴权方式说明
 
-所有 `/api/v1/` 开头的接口（除 `/api/v1/auth/login` 外）都需要鉴权。支持以下两种方式：
+所有 `/api/v1/` 开头的接口（除 `/api/v1/auth/login`、`/api/v1/auth/verify`、`/api/v1/auth/otp/resend`、`/api/v1/auth/ingress` 外）都需要鉴权。支持以下两种方式：
 
 #### 方式一：Token 鉴权（浏览器/前端使用）
 
@@ -808,6 +868,27 @@ API Key 通过以下方式获取：
 3. 调用 `POST /api/v1/auth/api-key/generate` 重新生成
 
 **两种鉴权方式互斥**：如果请求头中同时存在 `Authorization` 和 `X-Api-Key`，优先使用 `Authorization` token 校验。
+
+**公网来源禁止使用 API Key**：经 Cloudflare Tunnel 进入的请求如果只带 `X-Api-Key`，会返回 HTTP 403 / `code: 80002`，必须走用户名密码 + 验证码登录。本机、局域网、Tailscale 来源不受影响。
+
+#### 来源识别
+
+服务端按 TCP 对端地址 + Cloudflare 头识别来源，并在响应头返回 `X-BudgetPilot-Ingress`：
+
+| 值 | 判定 |
+|----|------|
+| `CLOUDFLARE` | 可信隧道 connector 或 Tailscale 节点发来的请求，且带 `CF-Ray` + `CF-Connecting-IP`；需要验证码 |
+| `TAILSCALE` | 对端在 `100.64.0.0/10` 或 `fd7a:115c:a1e0::/48` |
+| `LAN` | 对端在私有网段 |
+| `LOOPBACK` | 本机 `127.0.0.1` |
+| `UNKNOWN` | 其他来源，默认直接 403 |
+
+诊断接口：
+
+```
+GET /api/v1/auth/ingress
+{"code":0,"data":{"ingress":"TAILSCALE","clientIp":"100.64.196.104"}}
+```
 
 ##### API Key 调用示例
 
@@ -885,6 +966,11 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 80002 | 无权限访问（需要 ADMIN 角色） |
 | 80003 | 用户名已存在 |
 | 80101 | 用户不存在 |
+| 80110 | 验证码错误或已过期 |
+| 80111 | 验证码尝试次数过多，请重新登录 |
+| 80112 | 验证码发送失败，请检查通知渠道配置 |
+| 80113 | 该账号未配置可用的验证码接收渠道 |
+| 80114 | 验证码发送过于频繁，请稍后再试 |
 
 ---
 

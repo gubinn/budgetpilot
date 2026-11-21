@@ -22,7 +22,10 @@ public class SaTokenConfig implements WebMvcConfigurer {
         registry.addInterceptor(new SaInterceptor(handle -> StpUtil.checkLogin()))
                 .addPathPatterns("/api/**")
                 .excludePathPatterns(
-                        "/api/v1/auth/login"
+                        "/api/v1/auth/login",
+                        "/api/v1/auth/verify",
+                        "/api/v1/auth/otp/resend",
+                        "/api/v1/auth/ingress"
                 );
     }
 

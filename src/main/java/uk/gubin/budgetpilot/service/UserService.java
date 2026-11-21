@@ -1,6 +1,7 @@
 package uk.gubin.budgetpilot.service;
 
 import cn.dev33.satoken.secure.SaSecureUtil;
+import cn.dev33.satoken.stp.SaLoginModel;
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.annotation.InterceptorIgnore;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -21,6 +22,7 @@ import uk.gubin.budgetpilot.entity.AlertRule;
 import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.User;
 import uk.gubin.budgetpilot.entity.UserConfig;
+import uk.gubin.budgetpilot.ingress.IngressType;
 import uk.gubin.budgetpilot.mapper.AlertRuleMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.UserConfigMapper;
@@ -56,97 +58,131 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     /**
-     * 用户登录
+     * 校验用户名密码，但不创建会话。
+     *
+     * <p>公网来源会在密码校验通过后追加验证码步骤，因此登录流程拆成
+     * 「authenticate → createSession」两段。</p>
      */
-    public LoginVO login(LoginDTO dto) {
+    public User authenticate(LoginDTO dto, String clientIp) {
         String username = dto.getUsername();
+        String failKey = "login_fail:" + username;
+        String lockKey = "login_lock:" + username;
+        String ipFailKey = (clientIp != null && !clientIp.isBlank()) ? "login_fail_ip:" + clientIp : null;
+        String ipLockKey = (clientIp != null && !clientIp.isBlank()) ? "login_lock_ip:" + clientIp : null;
 
-        // 登录限流：同一用户名连续失败 5 次后锁定 15 分钟
+        // 登录限流：同一用户名连续失败 10 次、或同一 IP 失败 20 次后锁定 15 分钟
         // Redis 不可用时跳过限流（优雅降级）
         try {
-            String failKey = "login_fail:" + username;
-            String lockKey = "login_lock:" + username;
-            if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))) {
+            if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))
+                    || (ipLockKey != null && Boolean.TRUE.equals(redisTemplate.hasKey(ipLockKey)))) {
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS, "登录失败次数过多，请 15 分钟后再试");
             }
 
-            LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
-            query.eq(User::getUsername, username);
-            User user = baseMapper.selectOne(query);
+            User user = findByUsername(username);
 
             if (user == null) {
-                recordLoginFail(failKey);
+                recordLoginFail(failKey, lockKey, 10);
+                recordLoginFail(ipFailKey, ipLockKey, 20);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
 
-            if (!user.getIsActive()) {
+            if (!Boolean.TRUE.equals(user.getIsActive())) {
                 throw new BizException(ErrorCode.AUTH_USER_DISABLED);
             }
 
             if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
-                recordLoginFail(failKey);
+                recordLoginFail(failKey, lockKey, 10);
+                recordLoginFail(ipFailKey, ipLockKey, 20);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
 
-            // 登录成功，清除失败计数和锁定
-            try {
-                redisTemplate.delete(failKey);
-                redisTemplate.delete(lockKey);
-            } catch (Exception ignored) {}
-
-            // Sa-Token 登录
-            StpUtil.login(user.getId());
-            // 将角色存入 Token Session
-            StpUtil.getTokenSession().set("role", user.getRole());
-
-            // 更新最后登录时间
-            user.setLastLogin(LocalDateTime.now());
-            baseMapper.updateById(user);
-
-            LoginVO vo = new LoginVO();
-            vo.setToken(StpUtil.getTokenValue());
-            vo.setId(user.getId());
-            vo.setUsername(user.getUsername());
-            vo.setNickname(user.getNickname());
-            vo.setRole(user.getRole());
-            return vo;
+            clearLoginFail(failKey, lockKey, ipFailKey, ipLockKey);
+            return user;
         } catch (BizException e) {
             throw e;
         } catch (Exception e) {
             // Redis 不可用（连接超时、超时异常等），跳过登录限流，降级为不限流登录
             log.warn("Redis 不可用，跳过登录限流: {}", e.getClass().getSimpleName());
-            LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
-            query.eq(User::getUsername, username);
-            User user = baseMapper.selectOne(query);
-            if (user == null || !user.getIsActive()) {
+            User user = findByUsername(username);
+            if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
             if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
-            StpUtil.login(user.getId());
-            StpUtil.getTokenSession().set("role", user.getRole());
-            user.setLastLogin(LocalDateTime.now());
-            baseMapper.updateById(user);
-            LoginVO vo = new LoginVO();
-            vo.setToken(StpUtil.getTokenValue());
-            vo.setId(user.getId());
-            vo.setUsername(user.getUsername());
-            vo.setNickname(user.getNickname());
-            vo.setRole(user.getRole());
-            return vo;
+            return user;
         }
     }
 
-    private void recordLoginFail(String failKey) {
+    /**
+     * 创建 Sa-Token 会话。
+     *
+     * @param timeoutSeconds       绝对有效期，<=0 使用全局配置
+     * @param activeTimeoutSeconds 空闲有效期，<=0 使用全局配置
+     * @param ingress              来源类型，写入 token session 便于审计
+     */
+    public LoginVO createSession(User user, long timeoutSeconds, long activeTimeoutSeconds, IngressType ingress) {
+        SaLoginModel model = new SaLoginModel();
+        if (timeoutSeconds > 0) {
+            model.setTimeout(timeoutSeconds);
+        }
+        if (activeTimeoutSeconds > 0) {
+            model.setActiveTimeout(activeTimeoutSeconds);
+        }
+        StpUtil.login(user.getId(), model);
+        StpUtil.getTokenSession().set("role", user.getRole());
+        StpUtil.getTokenSession().set("ingress", ingress == null ? IngressType.UNKNOWN.name() : ingress.name());
+
+        user.setLastLogin(LocalDateTime.now());
+        baseMapper.updateById(user);
+
+        LoginVO vo = new LoginVO();
+        vo.setToken(StpUtil.getTokenValue());
+        vo.setId(user.getId());
+        vo.setUsername(user.getUsername());
+        vo.setNickname(user.getNickname());
+        vo.setRole(user.getRole());
+        return vo;
+    }
+
+    /**
+     * 兼容旧调用：不做来源区分，直接创建默认会话。
+     */
+    public LoginVO login(LoginDTO dto) {
+        User user = authenticate(dto, null);
+        return createSession(user, 0, 0, IngressType.UNKNOWN);
+    }
+
+    private User findByUsername(String username) {
+        LambdaQueryWrapper<User> query = new LambdaQueryWrapper<>();
+        query.eq(User::getUsername, username);
+        return baseMapper.selectOne(query);
+    }
+
+    private void recordLoginFail(String failKey, String lockKey, int threshold) {
+        if (failKey == null) {
+            return;
+        }
         Long count = redisTemplate.opsForValue().increment(failKey);
-        if (count != null && count >= 5) {
+        if (count != null && count >= threshold) {
             // 达到阈值，设置锁定 15 分钟
-            redisTemplate.opsForValue().set(failKey.replace("login_fail:", "login_lock:"), "1", 15, java.util.concurrent.TimeUnit.MINUTES);
+            redisTemplate.opsForValue().set(lockKey, "1", 15, java.util.concurrent.TimeUnit.MINUTES);
             redisTemplate.delete(failKey);
         } else {
             // 设置过期时间 15 分钟（首次创建时设置，后续 increment 不改变 TTL）
             redisTemplate.expire(failKey, 15, java.util.concurrent.TimeUnit.MINUTES);
+        }
+    }
+
+    private void clearLoginFail(String failKey, String lockKey, String ipFailKey, String ipLockKey) {
+        try {
+            redisTemplate.delete(failKey);
+            redisTemplate.delete(lockKey);
+            if (ipFailKey != null) {
+                redisTemplate.delete(ipFailKey);
+                redisTemplate.delete(ipLockKey);
+            }
+        } catch (Exception ignored) {
         }
     }
 
