@@ -841,7 +841,7 @@ WhatsApp 渠道使用官方 **Agent Platform API**（`https://api.whatsapp.com/a
 4. 点击「保存配置」后点「推送测试」
 
 > 该 API 只能给创建 Agent 的本人发送消息；出站频率限制为每分钟 12 条。
-> 定时提醒的默认渠道可在同一张卡片选择 Telegram / WhatsApp / 两者都发；单条预警规则也可在「预警规则」页单独指定。
+> 定时提醒走哪个渠道，由设置页顶部的「定时提醒渠道」卡片统一选择（Telegram / WhatsApp / 两者都发 / 仅应用内）；单条预警规则也可在「预警规则」页单独指定。
 
 也可以写入环境变量（`BUDGETPILOT_WHATSAPP_API_KEY`、`BUDGETPILOT_WHATSAPP_TO`），数据库配置优先。
 

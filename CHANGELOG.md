@@ -17,7 +17,8 @@
 
 ### 3. 设置页
 
-- 桌面端与移动端设置页新增「WhatsApp 通知」卡片：API Key、接收者 ID、定时提醒渠道、保存与推送测试。
+- 桌面端与移动端设置页新增「WhatsApp 通知」卡片：API Key、接收者 ID、保存与推送测试。
+- 「定时提醒渠道」独立为全局配置卡片，不再放在 WhatsApp 卡片内；Telegram 与 WhatsApp 是并列的渠道配置，全局卡片只负责选择定时提醒走哪个渠道。
 - 接收者字段标注为「接收者 ID」并补充说明：填 WhatsApp 的 `user:<id>`（不是手机号），官方只允许发给 Agent 创建者本人。
 - 部署文档与 `docker-compose.yml` 补充 WhatsApp 环境变量透传；建表与初始化 SQL 增加对应配置项。
 

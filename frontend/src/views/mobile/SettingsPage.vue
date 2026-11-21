@@ -1,5 +1,17 @@
 <template>
   <div class="mobile-settings">
+    <!-- 定时提醒渠道（全局） -->
+    <div class="section-card">
+      <h3 class="section-title">定时提醒渠道</h3>
+      <n-form label-placement="top" label-width="auto">
+        <n-form-item label="渠道">
+          <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" />
+        </n-form-item>
+        <n-button type="primary" size="small" @click="saveNotifyChannel">保存</n-button>
+      </n-form>
+      <div class="config-hint">信用卡还款、周期账单、预算超支等系统定时提醒统一使用该渠道；单条预警规则在「预警规则」页单独设置。</div>
+    </div>
+
     <!-- Telegram -->
     <div class="section-card">
       <h3 class="section-title">Telegram 通知</h3>
@@ -26,9 +38,6 @@
         </n-form-item>
         <n-form-item label="接收者 ID">
           <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>（不是手机号）" />
-        </n-form-item>
-        <n-form-item label="定时提醒渠道">
-          <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" />
         </n-form-item>
         <n-space>
           <n-button type="primary" size="small" @click="saveWhatsApp">保存</n-button>
@@ -156,6 +165,12 @@ async function saveWhatsApp() {
   try {
     await systemApi.setConfig('whatsapp_api_key', config.value.whatsapp_api_key || '')
     await systemApi.setConfig('whatsapp_to', config.value.whatsapp_to || '')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function saveNotifyChannel() {
+  try {
     await systemApi.setConfig('notify_channel', config.value.notify_channel || 'TELEGRAM')
     message.success('保存成功')
   } catch (e) { message.error('保存失败') }
@@ -237,4 +252,6 @@ onMounted(() => { loadConfig(); loadRates(); loadAlerts(); loadApiKey() })
 .alert-log-content { flex: 1; min-width: 0; }
 .alert-log-title { font-size: 13px; font-weight: 500; }
 .alert-log-desc { font-size: 12px; color: #666; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.config-hint { font-size: 12px; line-height: 1.6; color: #888; margin-top: 8px; }
 </style>

@@ -1,5 +1,16 @@
 <template>
   <n-grid :cols="2" :x-gap="16" :y-gap="16">
+    <!-- 定时提醒渠道（全局配置，独立于各通知渠道） -->
+    <n-gi :span="2">
+      <n-card title="定时提醒渠道" hoverable>
+        <div class="channel-row">
+          <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" class="channel-select" />
+          <n-button type="primary" @click="saveNotifyChannel">保存</n-button>
+        </div>
+        <div class="config-hint">信用卡还款、周期账单、预算超支、周消费异常、月度总结、预算未设定等系统定时提醒统一使用该渠道；单条预警规则的渠道在「预警规则」页单独设置。</div>
+      </n-card>
+    </n-gi>
+
     <!-- Telegram 配置 -->
     <n-gi>
       <n-card title="Telegram 通知" hoverable>
@@ -29,9 +40,6 @@
           </n-form-item>
           <n-form-item label="接收者 ID">
             <n-input v-model:value="config.whatsapp_to" placeholder="user:<id>（不是手机号）" />
-          </n-form-item>
-          <n-form-item label="定时提醒渠道">
-            <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" style="width: 100%" />
           </n-form-item>
           <n-form-item>
             <n-button type="primary" @click="saveWhatsApp">保存配置</n-button>
@@ -177,6 +185,12 @@ async function saveWhatsApp() {
   try {
     await systemApi.setConfig('whatsapp_api_key', config.value.whatsapp_api_key || '')
     await systemApi.setConfig('whatsapp_to', config.value.whatsapp_to || '')
+    message.success('保存成功')
+  } catch (e) { message.error('保存失败') }
+}
+
+async function saveNotifyChannel() {
+  try {
     await systemApi.setConfig('notify_channel', config.value.notify_channel || 'TELEGRAM')
     message.success('保存成功')
   } catch (e) { message.error('保存失败') }
@@ -263,5 +277,22 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.6;
   color: var(--bp-muted, #888);
+}
+.channel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.channel-select {
+  width: 260px;
+}
+@media (max-width: 640px) {
+  .channel-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .channel-select {
+    width: 100%;
+  }
 }
 </style>
