@@ -1519,7 +1519,7 @@ sudo systemctl restart budgetpilot
 
 ### 分类预算属性 / 退款 / 人工复核迁移（2026-11-22）
 
-`t_category` 新增 `budget_type`，`t_transaction` 新增 `review_status`，交易类型新增 `4=退款`。**先执行迁移脚本，再部署新代码**。
+`t_category` 新增 `budget_type`、`exclude_from_reports`，`t_transaction` 新增 `review_status`（`PENDING`/`REVIEWED`），交易类型新增 `4=退款`。**先执行迁移脚本，再部署新代码**。
 
 ```bash
 # 1. 备份
