@@ -1,5 +1,30 @@
 # 变更记录
 
+## 2026-11-22（报表）— 新增年度报表视图
+
+### 功能
+
+- 新增 `GET /api/v1/reports/yearly-summary?year=2026&level=1`：一次返回全年总览，避免前端按 12 个月逐次请求。
+- 年度总览口径与月度报表一致：只统计已确认、已复核的交易，支出包含退款冲减，排除 `budgetType=NONE` 和 `excludeFromReports` 的分类。
+- 返回字段：
+  - `totalIncome` / `totalExpense` / `balance`：全年收入、净支出和结余；
+  - `avgMonthlyExpense` / `monthCount`：月均支出，历史年份按 12 个月、本年按已过月份计算；
+  - `months`：12 个月的收入/支出/结余（无数据月份补零）；
+  - `categoryShares` / `categorySharesExcludingFixed`：按一级/二级归并的全年分类占比，并保留剔除固定支出的视图；
+  - `tagShares`：全年支出标签统计；
+  - `merchantShares`：全年商户消费前 10；
+  - `compare`：与上一年的收入/支出同比及变化百分比。
+- 报表页新增「月度 / 年度」切换：年度模式可选择年份（默认近 6 年），展示全年总览卡片、12 个月收支柱状+结余折线、分类占比、标签统计、商户消费和年度同比；移动端同步支持。
+- 年度结果写入 Redis 缓存：本年缓存 1 小时，历史年份 24 小时，缓存键区分用户和分类层级。
+
+### 验证
+
+- `mvn -q -DskipTests package` 编译通过。
+- 前端 `npm run build` 构建通过。
+- 本地调用 `GET /api/v1/reports/yearly-summary?year=2026` 返回 12 个月数据、分类占比、标签、商户和同比字段；与同年 12 次 `monthly-summary` 的合计一致。
+
+---
+
 ## 2026-11-22（对账）— 新增微信支付账单对账
 
 ### 功能

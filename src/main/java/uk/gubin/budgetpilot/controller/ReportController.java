@@ -42,6 +42,18 @@ public class ReportController {
         return Result.ok(reportService.monthlySummary(month, level));
     }
 
+    @GetMapping("/yearly-summary")
+    public Result<ReportVO> yearlySummary(@RequestParam Integer year,
+                                          @RequestParam(defaultValue = "1") Integer level) {
+        if (year == null || year < 2000 || year > 2100) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "年份不合法，应在 2000 到 2100 之间");
+        }
+        if (level == null || (level != 1 && level != 2)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "level 只能为 1 或 2");
+        }
+        return Result.ok(reportService.yearlySummary(year, level));
+    }
+
     @GetMapping("/category-detail")
     public Result<ReportVO> categoryDetail(
             @RequestParam String month,

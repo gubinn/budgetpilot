@@ -524,6 +524,7 @@
 | 方法 | 路径 | 功能 | Query 参数 |
 |------|------|------|-------------|
 | GET | `/api/v1/reports/monthly-summary` | 月度汇总 | `month` (yyyy-MM, 必填), `level` (1=一级汇总, 2=二级明细, 默认 1) |
+| GET | `/api/v1/reports/yearly-summary` | 年度汇总 | `year` (yyyy, 必填), `level` (1/2, 默认 1) |
 | GET | `/api/v1/reports/category-detail` | 分类明细 | `month`, `categoryId` |
 | GET | `/api/v1/reports/trend` | 趋势分析 | `months` (默认12), `type` (可选) |
 | GET | `/api/v1/reports/compare` | 对比分析 | `month`, `compareWith` |
@@ -540,6 +541,16 @@
 - `categorySharesExcludingFixed`：剔除 `budgetType=FIXED` 的分类（房租、房贷、保险等）后的支出占比，百分比以剔除后的总额为分母。
 
 `merchant-distribution` 同样返回两套数据：`merchantShares` 和 `merchantSharesExcludingFixed`，后者剔除固定支出分类后重新计算商户占比。
+
+`yearly-summary` 返回 `yearlySummary`，与月度口径一致地过滤已确认、已复核的交易：
+
+- `totalIncome` / `totalExpense` / `balance`：全年收入、净支出（退款按类型 4 冲减）和结余。
+- `avgMonthlyExpense` / `monthCount`：月均支出；历史年份按 12 个月计算，本年按已过月份计算。
+- `months`：12 个月的 `income` / `expense` / `balance`，无数据的月份补零。
+- `categoryShares` / `categorySharesExcludingFixed`：全年分类占比（可切换一级/二级，并可剔除固定支出分类）。
+- `tagShares`：全年支出标签统计。
+- `merchantShares`：全年商户消费占比（前 10）。
+- `compare`：与上一年的收入/支出同比及变化百分比；上一年为 0 时百分比为 `null`。
 
 ---
 

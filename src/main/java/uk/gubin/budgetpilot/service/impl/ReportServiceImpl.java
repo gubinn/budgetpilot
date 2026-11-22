@@ -102,7 +102,142 @@ public class ReportServiceImpl implements ReportService {
         summary.setCategorySharesExcludingFixed(
                 buildCategoryShares(nonFixedAmounts, nonFixedExpense, catMap, reportLevel));
 
-        // 标签统计：仅统计支出交易；一笔交易有多个标签时，每个标签各计全额
+        summary.setTagShares(buildTagShares(expenses, totalExpense));
+
+        vo.setMonthlySummary(summary);
+        putCache(cacheKey, vo, isCurrentMonth(month) ? 1 : 24); // 当前月份缓存1小时，历史月份24小时
+        return vo;
+    }
+
+    @Override
+    public ReportVO yearlySummary(int year, int level) {
+        int reportLevel = level == 2 ? 2 : 1;
+        String cacheKey = "report:yearly-summary:" + getUserId() + ":" + year + ":L" + reportLevel;
+        ReportVO cached = getCached(cacheKey);
+        if (cached != null) return cached;
+
+        Map<Long, Category> catMap = loadCategoryMap();
+        YearTotals totals = loadYearTotals(year, catMap);
+
+        ReportVO.YearlySummary summary = new ReportVO.YearlySummary();
+        summary.setYear(year);
+        summary.setTotalIncome(totals.income());
+        summary.setTotalExpense(totals.expense());
+        summary.setBalance(totals.income().subtract(totals.expense()));
+
+        // 本年按已过月份计算月均，历史年份按 12 个月
+        int monthCount = year == LocalDate.now().getYear()
+                ? Math.max(1, LocalDate.now().getMonthValue()) : 12;
+        summary.setMonthCount(monthCount);
+        summary.setAvgMonthlyExpense(totals.expense()
+                .divide(BigDecimal.valueOf(monthCount), 2, RoundingMode.HALF_UP));
+
+        summary.setMonths(buildMonthlyTrend(year, totals.transactions(), catMap));
+
+        summary.setCategoryShares(buildCategoryShares(
+                groupCategoryAmounts(totals.expenses(), catMap, reportLevel),
+                totals.expense(), catMap, reportLevel));
+
+        // 分类占比（剔除固定支出）：与月度视图口径一致
+        List<Transaction> nonFixedExpenses = totals.expenses().stream()
+                .filter(tx -> {
+                    Category cat = catMap.get(tx.getCategoryId());
+                    return cat == null || !"FIXED".equals(cat.getBudgetType());
+                })
+                .toList();
+        BigDecimal nonFixedExpense = sumNetExpense(nonFixedExpenses);
+        summary.setCategorySharesExcludingFixed(buildCategoryShares(
+                groupCategoryAmounts(nonFixedExpenses, catMap, reportLevel),
+                nonFixedExpense, catMap, reportLevel));
+
+        summary.setTagShares(buildTagShares(totals.expenses(), totals.expense()));
+        summary.setMerchantShares(buildMerchantShares(totals.expenses()));
+        summary.setCompare(buildYearlyCompare(year, totals, catMap));
+
+        ReportVO vo = new ReportVO();
+        vo.setYearlySummary(summary);
+        putCache(cacheKey, vo, year == LocalDate.now().getYear() ? 1 : 24);
+        return vo;
+    }
+
+    /** 全年可统计交易，按月度视图的口径过滤。 */
+    private YearTotals loadYearTotals(int year, Map<Long, Category> catMap) {
+        LocalDate start = LocalDate.of(year, 1, 1);
+        LocalDate end = LocalDate.of(year, 12, 31);
+
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
+        query.in(Transaction::getType, 1, 2, 4).eq(Transaction::getIsConfirmed, true)
+                .eq(Transaction::getReviewStatus, "REVIEWED")
+                .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
+        List<Transaction> txs = transactionMapper.selectList(query);
+
+        List<Transaction> expenses = txs.stream()
+                .filter(tx -> tx.getType() != 2)
+                .filter(tx -> isReportableExpense(tx, catMap))
+                .toList();
+        BigDecimal income = txs.stream()
+                .filter(tx -> tx.getType() == 2)
+                .filter(tx -> isReportableIncome(tx, catMap))
+                .map(tx -> tx.getAmountBase() == null ? BigDecimal.ZERO : tx.getAmountBase())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return new YearTotals(income, sumNetExpense(expenses), txs, expenses);
+    }
+
+    /** 12 个月的收入/支出/结余，无数据的月份补零。 */
+    private List<ReportVO.TrendItem> buildMonthlyTrend(int year, List<Transaction> txs,
+                                                       Map<Long, Category> catMap) {
+        List<ReportVO.TrendItem> months = new ArrayList<>(12);
+        for (int m = 1; m <= 12; m++) {
+            YearMonth ym = YearMonth.of(year, m);
+            List<Transaction> monthTxs = txs.stream()
+                    .filter(tx -> tx.getTransactionDate() != null
+                            && YearMonth.from(tx.getTransactionDate()).equals(ym))
+                    .toList();
+            BigDecimal income = monthTxs.stream()
+                    .filter(tx -> tx.getType() == 2)
+                    .filter(tx -> isReportableIncome(tx, catMap))
+                    .map(tx -> tx.getAmountBase() == null ? BigDecimal.ZERO : tx.getAmountBase())
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal expense = sumNetExpense(monthTxs.stream()
+                    .filter(tx -> tx.getType() != 2)
+                    .filter(tx -> isReportableExpense(tx, catMap))
+                    .toList());
+
+            ReportVO.TrendItem item = new ReportVO.TrendItem();
+            item.setMonth(ym.toString());
+            item.setIncome(income);
+            item.setExpense(expense);
+            item.setBalance(income.subtract(expense));
+            months.add(item);
+        }
+        return months;
+    }
+
+    private ReportVO.YearlyCompare buildYearlyCompare(int year, YearTotals current,
+                                                      Map<Long, Category> catMap) {
+        YearTotals previous = loadYearTotals(year - 1, catMap);
+        ReportVO.YearlyCompare compare = new ReportVO.YearlyCompare();
+        compare.setCompareYear(year - 1);
+        compare.setCurrentIncome(current.income());
+        compare.setCurrentExpense(current.expense());
+        compare.setCompareIncome(previous.income());
+        compare.setCompareExpense(previous.expense());
+        compare.setIncomeChangePct(changePct(current.income(), previous.income()));
+        compare.setExpenseChangePct(changePct(current.expense(), previous.expense()));
+        return compare;
+    }
+
+    private BigDecimal changePct(BigDecimal current, BigDecimal compareWith) {
+        if (compareWith == null || compareWith.compareTo(BigDecimal.ZERO) == 0) {
+            return null;
+        }
+        return current.subtract(compareWith)
+                .divide(compareWith, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    private List<ReportVO.TagShareItem> buildTagShares(List<Transaction> expenses, BigDecimal totalExpense) {
+        // 仅统计支出交易；一笔交易有多个标签时，每个标签各计全额
         Map<String, BigDecimal> tagAmounts = new LinkedHashMap<>();
         Map<String, Integer> tagCounts = new LinkedHashMap<>();
         for (Transaction tx : expenses) {
@@ -133,11 +268,7 @@ public class ReportServiceImpl implements ReportService {
             tagShares.add(item);
         }
         tagShares.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
-        summary.setTagShares(tagShares);
-
-        vo.setMonthlySummary(summary);
-        putCache(cacheKey, vo, isCurrentMonth(month) ? 1 : 24); // 当前月份缓存1小时，历史月份24小时
-        return vo;
+        return tagShares;
     }
 
     @Override
@@ -515,6 +646,10 @@ public class ReportServiceImpl implements ReportService {
     // ==================== Helper Methods ====================
 
     private record MonthData(BigDecimal income, BigDecimal expense) {}
+
+    /** 一个自然年的原始交易、可统计支出与净支出汇总 */
+    private record YearTotals(BigDecimal income, BigDecimal expense,
+                              List<Transaction> transactions, List<Transaction> expenses) {}
 
     private MonthData getMonthData(String month) {
         YearMonth ym = YearMonth.parse(month);

@@ -76,6 +76,7 @@ export const recurringApi = {
 
 export const reportApi = {
   monthlySummary: (month, level = 1) => api.get('/reports/monthly-summary', { params: { month, level } }),
+  yearlySummary: (year, level = 1) => api.get('/reports/yearly-summary', { params: { year, level } }),
   categoryDetail: (month, categoryId) => api.get('/reports/category-detail', { params: { month, categoryId } }),
   trend: (months = 12, type) => api.get('/reports/trend', { params: { months, type } }),
   compare: (month, compareWith) => api.get('/reports/compare', { params: { month, compareWith } }),

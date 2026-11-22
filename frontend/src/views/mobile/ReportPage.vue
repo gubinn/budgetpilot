@@ -2,12 +2,17 @@
   <div class="mobile-reports">
     <!-- 顶部控制栏 -->
     <div class="control-bar">
-      <n-select v-model:value="selectedMonth" :options="monthOptions" size="small" style="flex: 1" />
-      <n-select v-model:value="trendMonths" :options="[{label:'近6个月',value:6},{label:'近12个月',value:12}]" size="small" style="flex: 1; margin-left: 8px" />
+      <n-radio-group v-model:value="viewMode" size="small">
+        <n-radio-button value="month">月度</n-radio-button>
+        <n-radio-button value="year">年度</n-radio-button>
+      </n-radio-group>
+      <n-select v-if="viewMode === 'month'" v-model:value="selectedMonth" :options="monthOptions" size="small" style="flex: 1" />
+      <n-select v-else v-model:value="selectedYear" :options="yearOptions" size="small" style="flex: 1" />
+      <n-select v-if="viewMode === 'month'" v-model:value="trendMonths" :options="[{label:'近6个月',value:6},{label:'近12个月',value:12}]" size="small" style="flex: 1; margin-left: 8px" />
       <n-button type="primary" size="small" @click="loadAll" style="margin-left: 8px">查询</n-button>
     </div>
 
-    <!-- 月度总览 -->
+    <!-- 总览（月度/年度） -->
     <div class="summary-grid">
       <div v-for="card in summaryCards" :key="card.label" class="summary-item">
         <div class="summary-label">{{ card.label }}</div>
@@ -20,8 +25,9 @@
 
     <!-- 趋势图 -->
     <div class="chart-card">
-      <h3 class="chart-title">收支趋势</h3>
-      <div ref="trendChartRef" style="width: 100%; height: 250px"></div>
+      <h3 class="chart-title">{{ viewMode === 'year' ? `月度收支（${selectedYear}年）` : '收支趋势' }}</h3>
+      <div v-show="viewMode === 'month'" ref="trendChartRef" style="width: 100%; height: 250px"></div>
+      <div v-show="viewMode === 'year'" ref="yearChartRef" style="width: 100%; height: 250px"></div>
     </div>
 
     <!-- 分类占比 -->
@@ -46,8 +52,8 @@
       </div>
     </div>
 
-    <!-- 扩展字段统计（默认支付渠道） -->
-    <div class="chart-card">
+    <!-- 扩展字段统计（默认支付渠道，仅月度） -->
+    <div v-if="viewMode === 'month'" class="chart-card">
       <div class="chart-title-row">
         <h3 class="chart-title">{{ extKey === 'channel' ? '支付渠道' : '扩展字段统计' }}</h3>
         <n-select
@@ -72,15 +78,15 @@
       <n-empty v-else description="暂无数据" />
     </div>
 
-    <!-- 币种分布 -->
-    <div class="chart-card">
+    <!-- 币种分布（仅月度） -->
+    <div v-if="viewMode === 'month'" class="chart-card">
       <h3 class="chart-title">币种分布</h3>
       <div v-if="hasCurrencyData" ref="currencyChartRef" style="width: 100%; height: 250px"></div>
       <n-empty v-else description="暂无数据" />
     </div>
 
     <!-- 月度对比 -->
-    <div v-if="compareData" class="chart-card">
+    <div v-if="viewMode === 'month' && compareData" class="chart-card">
       <h3 class="chart-title">月度对比</h3>
       <div class="compare-row">
         <div class="compare-month">{{ compareData.currentMonth }}</div>
@@ -109,6 +115,37 @@
         支出变化: {{ compareData.expenseChangePct > 0 ? '+' : '' }}{{ compareData.expenseChangePct }}%
       </div>
     </div>
+
+    <!-- 年度同比 -->
+    <div v-if="viewMode === 'year' && yearCompare" class="chart-card">
+      <h3 class="chart-title">年度同比</h3>
+      <div class="compare-row">
+        <div class="compare-month">{{ selectedYear }}年</div>
+        <div class="compare-item">
+          <span>收入</span>
+          <span class="green">¥{{ formatNum(yearCompare.currentIncome) }}</span>
+        </div>
+        <div class="compare-item">
+          <span>支出</span>
+          <span class="red">¥{{ formatNum(yearCompare.currentExpense) }}</span>
+        </div>
+      </div>
+      <div class="compare-divider"></div>
+      <div class="compare-row">
+        <div class="compare-month">{{ yearCompare.compareYear }}年</div>
+        <div class="compare-item">
+          <span>收入</span>
+          <span class="green">¥{{ formatNum(yearCompare.compareIncome) }}</span>
+        </div>
+        <div class="compare-item">
+          <span>支出</span>
+          <span class="red">¥{{ formatNum(yearCompare.compareExpense) }}</span>
+        </div>
+      </div>
+      <div v-if="yearCompare.expenseChangePct != null" class="compare-change">
+        支出变化: {{ yearCompare.expenseChangePct > 0 ? '+' : '' }}{{ yearCompare.expenseChangePct }}%
+      </div>
+    </div>
   </div>
 </template>
 
@@ -121,11 +158,14 @@ import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
 
 const message = useMessage()
+const viewMode = ref('month')
 const selectedMonth = ref(dayjs().format('YYYY-MM'))
+const selectedYear = ref(dayjs().year())
 const trendMonths = ref(12)
 const categoryLevel = ref(1)
 const summaryCards = ref([])
 const compareData = ref(null)
+const yearCompare = ref(null)
 const hasPieData = ref(false)
 const hasMerchantData = ref(false)
 const hasCurrencyData = ref(false)
@@ -138,16 +178,25 @@ const extKeyOptions = computed(() => extKeys.value.map(k => ({
   value: k
 })))
 
-watch([selectedMonth, trendMonths, categoryLevel, extKey], loadAll)
+const yearOptions = computed(() => {
+  const current = dayjs().year()
+  return Array.from({ length: 6 }, (_, i) => {
+    const y = current - i
+    return { label: `${y}年`, value: y }
+  })
+})
+
+watch([viewMode, selectedMonth, selectedYear, trendMonths, categoryLevel, extKey], loadAll, { flush: 'post' })
 
 const trendChartRef = ref(null)
+const yearChartRef = ref(null)
 const pieChartRef = ref(null)
 const merchantChartRef = ref(null)
 const currencyChartRef = ref(null)
 const tagChartRef = ref(null)
 const extChartRef = ref(null)
 
-let trendChart, pieChart, merchantChart, currencyChart, tagChart, extChart
+let trendChart, yearChart, pieChart, merchantChart, currencyChart, tagChart, extChart
 
 const monthOptions = ref([])
 for (let i = -12; i <= 0; i++) {
@@ -157,6 +206,7 @@ for (let i = -12; i <= 0; i++) {
 
 function resetCharts() {
   trendChart?.dispose(); trendChart = null
+  yearChart?.dispose(); yearChart = null
   pieChart?.dispose(); pieChart = null
   merchantChart?.dispose(); merchantChart = null
   currencyChart?.dispose(); currencyChart = null
@@ -170,10 +220,15 @@ function resetCharts() {
 }
 
 async function loadAll() {
-  // 先清空旧数据和图表，避免切到无数据月份时继续显示上个月
+  // 先清空旧数据和图表，避免切换月份/年份时继续显示旧数据
   resetCharts()
   summaryCards.value = []
   compareData.value = null
+  yearCompare.value = null
+  if (viewMode.value === 'year') {
+    return loadYearly()
+  }
+
   try {
     const extPromise = extKey.value
       ? reportApi.extFieldDistribution(selectedMonth.value, extKey.value, 1)
@@ -196,106 +251,49 @@ async function loadAll() {
         { label: '日均支出', value: `¥${formatNum(s.avgDailyExpense)}`, tag: '日均', type: 'info' }
       ]
 
-      // 饼图
-      if (s.categoryShares?.length) {
-        hasPieData.value = true
-        if (pieChart) pieChart.dispose()
-        await new Promise(r => setTimeout(r, 50))
-        if (!pieChartRef.value) return
-        pieChart = echarts.init(pieChartRef.value)
-        pieChart.setOption({
-          tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-          series: [{
-            type: 'pie', radius: ['35%', '65%'],
-            data: s.categoryShares.map(c => ({
-              name: categoryLabel(c), value: Number(c.amount),
-              itemStyle: { color: c.categoryColor || '#3498db' }
-            }))
-          }]
-        })
-      }
+      renderCategoryPie(s.categoryShares)
+      renderTagChart(s.tagShares || [])
+    }
 
-      // 标签统计
-      const tagShares = s.tagShares || []
-      hasTagData.value = tagShares.length > 0
-      if (tagChart) { tagChart.dispose(); tagChart = null }
-      if (tagShares.length && tagChartRef.value) {
-        const top = tagShares.slice(0, 10).slice().reverse()
-        tagChart = echarts.init(tagChartRef.value)
-        tagChart.setOption({
-          grid: { left: 78, right: 16, top: 8, bottom: 20 },
-          tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'shadow' },
-            formatter: p => `${p[0].name}: ¥${Number(p[0].value).toFixed(2)}`
-          },
-          xAxis: {
-            type: 'value',
-            axisLabel: { color: '#94a3b8', fontSize: 10 },
-            splitLine: { lineStyle: { color: '#eef2f7' } }
-          },
-          yAxis: {
-            type: 'category',
-            data: top.map(t => t.tag),
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            axisLine: { show: false },
-            axisTick: { show: false }
-          },
-          series: [{
-            type: 'bar',
-            data: top.map(t => Number(t.amount)),
-            barWidth: 12,
-            itemStyle: {
-              borderRadius: [0, 6, 6, 0],
-              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0, color: '#2563eb' },
-                { offset: 1, color: '#0ea5a4' }
-              ])
-            }
-          }]
-        })
-      }
-
-      // 扩展字段统计（默认支付渠道）
-      const extItems = extDist.status === 'fulfilled' ? (extDist.value.data || []) : []
-      hasExtData.value = extItems.length > 0
-      if (extChart) { extChart.dispose(); extChart = null }
-      if (extItems.length && extChartRef.value) {
-        const top = extItems.slice(0, 10).slice().reverse()
-        extChart = echarts.init(extChartRef.value)
-        extChart.setOption({
-          grid: { left: 78, right: 16, top: 8, bottom: 20 },
-          tooltip: {
-            trigger: 'axis',
-            axisPointer: { type: 'shadow' },
-            formatter: p => `${p[0].name}: ¥${Number(p[0].value).toFixed(2)}`
-          },
-          xAxis: {
-            type: 'value',
-            axisLabel: { color: '#94a3b8', fontSize: 10 },
-            splitLine: { lineStyle: { color: '#eef2f7' } }
-          },
-          yAxis: {
-            type: 'category',
-            data: top.map(i => i.value),
-            axisLabel: { color: '#64748b', fontSize: 10 },
-            axisLine: { show: false },
-            axisTick: { show: false }
-          },
-          series: [{
-            type: 'bar',
-            data: top.map(i => Number(i.amount)),
-            barWidth: 12,
-            itemStyle: {
-              borderRadius: [0, 6, 6, 0],
-              color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-                { offset: 0, color: '#0ea5a4' },
-                { offset: 1, color: '#2563eb' }
-              ])
-            }
-          }]
-        })
-      }
+    // 扩展字段统计（默认支付渠道）
+    const extItems = extDist.status === 'fulfilled' ? (extDist.value.data || []) : []
+    hasExtData.value = extItems.length > 0
+    if (extChart) { extChart.dispose(); extChart = null }
+    if (extItems.length && extChartRef.value) {
+      const top = extItems.slice(0, 10).slice().reverse()
+      extChart = echarts.init(extChartRef.value)
+      extChart.setOption({
+        grid: { left: 78, right: 16, top: 8, bottom: 20 },
+        tooltip: {
+          trigger: 'axis',
+          axisPointer: { type: 'shadow' },
+          formatter: p => `${p[0].name}: ¥${Number(p[0].value).toFixed(2)}`
+        },
+        xAxis: {
+          type: 'value',
+          axisLabel: { color: '#94a3b8', fontSize: 10 },
+          splitLine: { lineStyle: { color: '#eef2f7' } }
+        },
+        yAxis: {
+          type: 'category',
+          data: top.map(i => i.value),
+          axisLabel: { color: '#64748b', fontSize: 10 },
+          axisLine: { show: false },
+          axisTick: { show: false }
+        },
+        series: [{
+          type: 'bar',
+          data: top.map(i => Number(i.amount)),
+          barWidth: 12,
+          itemStyle: {
+            borderRadius: [0, 6, 6, 0],
+            color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+              { offset: 0, color: '#0ea5a4' },
+              { offset: 1, color: '#2563eb' }
+            ])
+          }
+        }]
+      })
     }
 
     // 趋势图
@@ -338,19 +336,7 @@ async function loadAll() {
     // 商户分布
     if (merchantDist.status === 'fulfilled' && merchantDist.value.data?.merchantShares?.length) {
       hasMerchantData.value = true
-      if (merchantChart) merchantChart.dispose()
-      await new Promise(r => setTimeout(r, 50))
-      merchantChart = echarts.init(merchantChartRef.value)
-      merchantChart.setOption({
-        tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-        series: [{
-          type: 'pie', radius: ['35%', '65%'],
-          data: merchantDist.value.data.merchantShares.map(m => ({
-            name: m.merchantName, value: Number(m.amount),
-            itemStyle: { color: m.merchantColor || '#3498db' }
-          }))
-        }]
-      })
+      renderMerchantChart(merchantDist.value.data.merchantShares)
     }
 
     // 月度对比
@@ -364,12 +350,135 @@ async function loadAll() {
   }
 }
 
+async function loadYearly() {
+  try {
+    const res = await reportApi.yearlySummary(selectedYear.value, categoryLevel.value)
+    const s = res.data?.yearlySummary
+    if (!s) return
+
+    summaryCards.value = [
+      { label: '全年收入', value: `¥${formatNum(s.totalIncome)}`, tag: '收入', type: 'success' },
+      { label: '全年支出', value: `¥${formatNum(s.totalExpense)}`, tag: '支出', type: 'error' },
+      { label: '全年结余', value: `¥${formatNum(s.balance)}`, tag: s.balance >= 0 ? '盈余' : '亏损', type: s.balance >= 0 ? 'success' : 'error' },
+      { label: '月均支出', value: `¥${formatNum(s.avgMonthlyExpense)}`, tag: `${s.monthCount || 12}个月`, type: 'info' }
+    ]
+
+    // 12 个月收入/支出柱状 + 结余折线
+    if (s.months?.length && yearChartRef.value) {
+      if (yearChart) yearChart.dispose()
+      await new Promise(r => setTimeout(r, 50))
+      yearChart = echarts.init(yearChartRef.value)
+      yearChart.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['收入', '支出'], top: 0 },
+        grid: { top: 30, bottom: 20, left: 10, right: 10 },
+        xAxis: {
+          type: 'category',
+          data: s.months.map(m => `${Number(m.month.slice(5))}月`),
+          axisLabel: { fontSize: 10 }
+        },
+        yAxis: { type: 'value', axisLabel: { fontSize: 10 } },
+        series: [
+          { name: '收入', type: 'bar', data: s.months.map(m => Number(m.income)), itemStyle: { color: '#27ae60' } },
+          { name: '支出', type: 'bar', data: s.months.map(m => Number(m.expense)), itemStyle: { color: '#e74c3c' } }
+        ]
+      })
+    }
+
+    renderCategoryPie(s.categoryShares)
+    renderTagChart(s.tagShares || [])
+    if (s.merchantShares?.length) {
+      hasMerchantData.value = true
+      renderMerchantChart(s.merchantShares)
+    }
+    yearCompare.value = s.compare || null
+  } catch (e) {
+    message.error('加载年度报表失败')
+  }
+}
+
+async function renderCategoryPie(shares) {
+  if (!shares?.length) return
+  hasPieData.value = true
+  if (pieChart) pieChart.dispose()
+  await new Promise(r => setTimeout(r, 50))
+  if (!pieChartRef.value) return
+  pieChart = echarts.init(pieChartRef.value)
+  pieChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    series: [{
+      type: 'pie', radius: ['35%', '65%'],
+      data: shares.map(c => ({
+        name: categoryLabel(c), value: Number(c.amount),
+        itemStyle: { color: c.categoryColor || '#3498db' }
+      }))
+    }]
+  })
+}
+
+function renderMerchantChart(shares) {
+  if (!shares?.length || !merchantChartRef.value) return
+  if (merchantChart) merchantChart.dispose()
+  merchantChart = echarts.init(merchantChartRef.value)
+  merchantChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+    series: [{
+      type: 'pie', radius: ['35%', '65%'],
+      data: shares.map(m => ({
+        name: m.merchantName, value: Number(m.amount),
+        itemStyle: { color: m.merchantColor || '#3498db' }
+      }))
+    }]
+  })
+}
+
+function renderTagChart(tagShares) {
+  hasTagData.value = tagShares.length > 0
+  if (tagChart) { tagChart.dispose(); tagChart = null }
+  if (!tagShares.length || !tagChartRef.value) return
+  const top = tagShares.slice(0, 10).slice().reverse()
+  tagChart = echarts.init(tagChartRef.value)
+  tagChart.setOption({
+    grid: { left: 78, right: 16, top: 8, bottom: 20 },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: p => `${p[0].name}: ¥${Number(p[0].value).toFixed(2)}`
+    },
+    xAxis: {
+      type: 'value',
+      axisLabel: { color: '#94a3b8', fontSize: 10 },
+      splitLine: { lineStyle: { color: '#eef2f7' } }
+    },
+    yAxis: {
+      type: 'category',
+      data: top.map(t => t.tag),
+      axisLabel: { color: '#64748b', fontSize: 10 },
+      axisLine: { show: false },
+      axisTick: { show: false }
+    },
+    series: [{
+      type: 'bar',
+      data: top.map(t => Number(t.amount)),
+      barWidth: 12,
+      itemStyle: {
+        borderRadius: [0, 6, 6, 0],
+        color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+          { offset: 0, color: '#2563eb' },
+          { offset: 1, color: '#0ea5a4' }
+        ])
+      }
+    }]
+  })
+}
+
 function categoryLabel(c) {
   return c.parentName ? `${c.parentName}/${c.categoryName}` : c.categoryName
 }
 
 function handleResize() {
   trendChart?.resize()
+  yearChart?.resize()
   pieChart?.resize()
   merchantChart?.resize()
   currencyChart?.resize()
@@ -398,6 +507,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleResize)
   trendChart?.dispose()
+  yearChart?.dispose()
   pieChart?.dispose()
   merchantChart?.dispose()
   currencyChart?.dispose()

@@ -13,6 +13,8 @@ import java.util.Map;
 public class ReportVO {
     /** 月度总览 */
     private MonthlySummary monthlySummary;
+    /** 年度总览 */
+    private YearlySummary yearlySummary;
     /** 分类明细 */
     private List<CategoryDetailItem> categoryDetails;
     /** 趋势数据 */
@@ -56,6 +58,39 @@ public class ReportVO {
             private BigDecimal amount;
             private BigDecimal percentage;
         }
+    }
+
+    @Data
+    public static class YearlySummary {
+        private Integer year;
+        private BigDecimal totalIncome;
+        private BigDecimal totalExpense;
+        private BigDecimal balance;
+        /** 月均支出：历史年份按 12 个月，本年按已过月份 */
+        private BigDecimal avgMonthlyExpense;
+        private Integer monthCount;
+        /** 12 个月的收支明细 */
+        private List<TrendItem> months;
+        private List<MonthlySummary.CategoryShareItem> categoryShares;
+        /** 分类占比（剔除固定支出分类） */
+        private List<MonthlySummary.CategoryShareItem> categorySharesExcludingFixed;
+        /** 标签统计（全年支出） */
+        private List<TagShareItem> tagShares;
+        /** 全年商户消费占比 */
+        private List<MerchantShareItem> merchantShares;
+        /** 与上一年的同比 */
+        private YearlyCompare compare;
+    }
+
+    @Data
+    public static class YearlyCompare {
+        private Integer compareYear;
+        private BigDecimal currentIncome;
+        private BigDecimal currentExpense;
+        private BigDecimal compareIncome;
+        private BigDecimal compareExpense;
+        private BigDecimal incomeChangePct;
+        private BigDecimal expenseChangePct;
     }
 
     @Data
