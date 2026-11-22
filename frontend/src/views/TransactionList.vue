@@ -40,7 +40,7 @@
       :data="transactions"
       :loading="loading"
       :pagination="pagination"
-      :scroll-x="1600"
+      :scroll-x="1100"
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
       remote
@@ -210,48 +210,88 @@ function channelLabel(channel) {
   return channelLabels[channel] || channel
 }
 
+function hasExtFields(row) {
+  const ext = row.extFields
+  return !!ext && typeof ext === 'object' && Object.keys(ext).length > 0
+}
+
+function renderExtDetail(row) {
+  const entries = Object.entries(row.extFields || {})
+  if (!entries.length) return null
+  return h('div', { class: 'ext-detail' }, [
+    h('div', { class: 'ext-detail-title' }, `账单扩展信息 · ${entries.length} 项`),
+    h('div', { class: 'ext-detail-grid' }, entries.map(([k, v]) => h('div', { class: 'ext-detail-row' }, [
+      h('span', { class: 'ext-detail-key' }, k),
+      h('span', { class: 'ext-detail-value', title: String(v ?? '') }, String(v ?? '-'))
+    ])))
+  ])
+}
+
 const columns = [
   {
-    title: '日期', key: 'transactionDate', width: 110,
-    render: (row) => row.transactionDate
+    type: 'expand',
+    key: 'expand',
+    width: 36,
+    expandable: hasExtFields,
+    renderExpand: renderExtDetail
   },
   {
-    title: '类型', key: 'type', width: 80,
+    title: '日期', key: 'transactionDate', width: 130,
+    render: (row) => {
+      const time = row.transactionTime ? String(row.transactionTime).slice(0, 8) : ''
+      if (!time) return row.transactionDate
+      return h('div', { class: 'date-cell' }, [
+        h('div', null, row.transactionDate),
+        h('div', { class: 'date-time' }, time)
+      ])
+    }
+  },
+  {
+    title: '类型', key: 'type', width: 64,
     render: (row) => h(NTag, {
       size: 'small', type: typeTagTypes[row.type] || 'default', bordered: false
     }, { default: () => typeLabels[row.type] || '-' })
   },
   {
-    title: '账户', key: 'accountName', width: 140,
-    render: (row) => row.accountName || '-'
-  },
-  {
-    title: '对手方', key: 'targetAccountName', width: 160,
+    title: '账户', key: 'accountName', width: 130,
+    ellipsis: { tooltip: true },
     render: (row) => {
-      if (row.type !== 3 || !row.targetAccountName) return '-'
-      return row.targetAccountId != null && row.targetAccountId === row.accountId
-        ? '自己'
-        : row.targetAccountName
+      if (row.type === 3 && row.targetAccountName) {
+        const target = row.targetAccountId != null && row.targetAccountId === row.accountId
+          ? '自己'
+          : row.targetAccountName
+        return h('span', [
+          row.accountName || '-',
+          h('span', { style: { color: '#b0b7c3', margin: '0 4px' } }, '→'),
+          target
+        ])
+      }
+      return row.accountName || '-'
     }
   },
   {
-    title: '一级分类', key: 'parentCategoryName', width: 110,
-    render: (row) => h('span', {
-      style: { color: row.parentCategoryColor || row.categoryColor, fontWeight: 500 }
-    }, row.parentCategoryName || row.categoryName || '-')
+    title: '分类', key: 'categoryName', width: 130,
+    ellipsis: { tooltip: true },
+    render: (row) => {
+      const parentName = row.parentCategoryName || row.categoryName || '-'
+      const parentColor = row.parentCategoryColor || row.categoryColor
+      if (!row.parentCategoryId) {
+        return h('span', { style: { color: parentColor, fontWeight: 500 } }, parentName)
+      }
+      return h('span', [
+        h('span', { style: { color: parentColor, fontWeight: 500 } }, parentName),
+        h('span', { style: { color: '#b0b7c3', margin: '0 4px' } }, '/'),
+        h('span', { style: { color: row.categoryColor || '#666' } }, row.categoryName || '-')
+      ])
+    }
   },
   {
-    title: '二级分类', key: 'categoryName', width: 110,
-    render: (row) => h('span', {
-      style: { color: row.categoryColor, fontWeight: 500 }
-    }, row.parentCategoryId ? (row.categoryName || '-') : '-')
-  },
-  {
-    title: '商户', key: 'merchantName', width: 120,
+    title: '商户', key: 'merchantName', width: 80,
+    ellipsis: { tooltip: true },
     render: (row) => row.merchantName ? h('span', { style: { color: row.merchantColor || '#666' } }, row.merchantName) : '-'
   },
   {
-    title: '金额', key: 'amount', width: 140, align: 'right',
+    title: '金额', key: 'amount', width: 110, align: 'right',
     render: (row) => {
       const color = row.type === 1 ? '#e74c3c' : row.type === 2 ? '#27ae60' : row.type === 4 ? '#2d98da' : '#333'
       const prefix = row.type === 1 ? '-' : (row.type === 2 || row.type === 4) ? '+' : ''
@@ -262,46 +302,43 @@ const columns = [
       ].filter(Boolean))
     }
   },
-  { title: '备注', key: 'note', ellipsis: { tooltip: true } },
   {
-    title: '状态', key: 'isConfirmed', width: 140,
-    render: (row) => h(NSpace, { size: 4 }, [
-      h(NTag, {
-        size: 'small',
-        type: row.isConfirmed ? 'success' : 'warning',
-        bordered: false
-      }, { default: () => row.isConfirmed ? '已入账' : '待入账' }),
-      row.reviewStatus === 'PENDING'
-        ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '待复核' })
-        : null,
-      row.reconciled
-        ? h(NTag, { size: 'small', type: 'info', bordered: false }, {
-          default: () => `已对账${row.reconcileChannel ? ':' + channelLabel(row.reconcileChannel) : ''}`
-        })
-        : null
-    ].filter(Boolean))
-  },
-  {
-    title: '扩展字段', key: 'extFields', width: 180,
+    title: '状态', key: 'isConfirmed', width: 130,
     render: (row) => {
-      const ext = row.extFields
-      if (!ext || typeof ext !== 'object' || Object.keys(ext).length === 0) return '-'
-      const tags = Object.entries(ext).map(([k, v]) =>
-        h(NTag, { size: 'tiny', type: 'default', bordered: false, style: { marginRight: '4px', marginBottom: '2px' } }, {
-          default: () => `${k}:${v}`
-        })
-      )
-      return h('div', { style: { display: 'flex', flexWrap: 'wrap' } }, tags)
+      const pending = []
+      if (!row.isConfirmed) pending.push('待入账')
+      if (row.reviewStatus === 'PENDING') pending.push('待复核')
+      return h('div', { class: 'status-cell' }, [
+        h(NTag, {
+          size: 'tiny',
+          type: pending.length ? 'warning' : 'success',
+          bordered: false
+        }, { default: () => pending.length ? pending.join('·') : '已入账' }),
+        row.reconciled
+          ? h(NTag, { size: 'tiny', type: 'info', bordered: false }, {
+            default: () => `已对账${row.reconcileChannel ? ':' + channelLabel(row.reconcileChannel) : ''}`
+          })
+          : null
+      ].filter(Boolean))
     }
   },
   {
-    title: '标签', key: 'tags', width: 100,
-    render: (row) => row.tags?.length ? h(NSpace, { size: 4 }, row.tags.map(t =>
-      h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => t })
-    )) : '-'
+    title: '备注', key: 'note', minWidth: 120,
+    render: (row) => {
+      const note = row.note || ''
+      const tags = row.tags || []
+      if (!note && !tags.length) return '-'
+      return h('div', { class: 'note-cell' }, [
+        note ? h('span', { class: 'note-text', title: note }, note) : null,
+        tags.length
+          ? h(NSpace, { size: 4, class: 'note-tags' }, tags.map(t =>
+            h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => t })))
+          : null
+      ].filter(Boolean))
+    }
   },
   {
-    title: '操作', key: 'actions', width: 160, fixed: 'right',
+    title: '操作', key: 'actions', width: 150, fixed: 'right',
     render: (row) => h(NSpace, { size: 8 }, [
       row.isConfirmed ? null : h(NButton, { size: 'small', type: 'success', onClick: () => handleConfirm(row.id) }, { default: () => '确认' }),
       row.reviewStatus === 'PENDING'
@@ -495,6 +532,69 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+/* 日期列：日期为主，时间用弱化的第二行显示 */
+:deep(.date-time) {
+  font-size: 11px;
+  color: #8a94a6;
+  line-height: 14px;
+}
+/* 状态列：小标签自动换行，最多两行 */
+:deep(.status-cell) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* 备注与标签同格：备注超长省略，标签不参与挤压 */
+:deep(.note-cell) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+:deep(.note-text) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:deep(.note-tags) {
+  flex-shrink: 0;
+}
+/* 展开行：账单扩展字段按两列键值对平铺，避免挤压主表格 */
+:deep(.ext-detail) {
+  padding: 4px 16px 12px 20px;
+  background: #fafbfc;
+  border-radius: 8px;
+}
+:deep(.ext-detail-title) {
+  font-size: 12px;
+  color: #8a94a6;
+  margin-bottom: 6px;
+}
+:deep(.ext-detail-grid) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 4px 24px;
+}
+:deep(.ext-detail-row) {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+:deep(.ext-detail-key) {
+  flex: 0 0 112px;
+  color: #8a94a6;
+  text-align: right;
+}
+:deep(.ext-detail-value) {
+  flex: 1;
+  min-width: 0;
+  color: #333;
+  word-break: break-all;
 }
 @media (max-width: 1279px) {
   .filter-grid {
