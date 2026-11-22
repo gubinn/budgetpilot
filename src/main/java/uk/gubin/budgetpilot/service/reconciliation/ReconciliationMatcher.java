@@ -76,7 +76,10 @@ public class ReconciliationMatcher {
                     continue;
                 }
             }
-            if (channel.matches(extChannel(tx), tx.getNote())) {
+            // 微信账单里很多消费在银行侧只留下「快捷支付 收款人」，备注没有微信关键字；
+            // 对账补录生成的交易只有日期，按金额/日期仍应参与微信匹配
+            if (channel.matches(extChannel(tx), tx.getNote())
+                    || (channel == BillChannel.WECHAT && ReconcileConstants.isBackfilled(tx))) {
                 txById.put(tx.getId(), tx);
             }
         }
@@ -281,7 +284,7 @@ public class ReconciliationMatcher {
                 continue;
             }
             BigDecimal txAmount = txAmount(tx);
-            if (txAmount == null || txAmount.compareTo(item.getAmount()) != 0) {
+            if (txAmount == null || !sameAmount(item, txAmount)) {
                 continue;
             }
             LocalDateTime txTime = txDateTime(tx);
@@ -324,10 +327,28 @@ public class ReconciliationMatcher {
         return item.getPaidTime() != null || item.getCreatedTime() != null;
     }
 
-    /** 补录的转账/退款没有真实时间，创建时用 12:00 占位 */
+    /**
+     * 金额是否一致。微信零钱提现会先扣服务费，账单金额比银行到账多 0.01，
+     * 账单行带服务费时允许按「到账金额 + 服务费 = 账单金额」匹配。
+     */
+    private boolean sameAmount(ReconciliationItem item, BigDecimal txAmount) {
+        if (txAmount.compareTo(item.getAmount()) == 0) {
+            return true;
+        }
+        BigDecimal fee = item.getFee();
+        return fee != null && fee.compareTo(BigDecimal.ZERO) > 0
+                && txAmount.add(fee).compareTo(item.getAmount()) == 0;
+    }
+
+    /** 对账补录的交易没有真实时间，创建时用 12:00 占位 */
     private boolean isDateOnlyAdjustment(Transaction tx) {
-        return (Objects.equals(tx.getType(), 3) || Objects.equals(tx.getType(), 4))
-                && (tx.getTransactionTime() == null || LocalTime.NOON.equals(tx.getTransactionTime()));
+        boolean dateOnly = tx.getTransactionTime() == null
+                || LocalTime.NOON.equals(tx.getTransactionTime());
+        if (!dateOnly) {
+            return false;
+        }
+        return Objects.equals(tx.getType(), 3) || Objects.equals(tx.getType(), 4)
+                || ReconcileConstants.isBackfilled(tx);
     }
 
     /**

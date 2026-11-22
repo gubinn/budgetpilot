@@ -271,6 +271,47 @@ class ReconciliationMatcherTest {
     }
 
     @Test
+    void matchesWechatPaymentToDateOnlyBackfilledBankTransaction() {
+        ReconciliationItem item = item(1L, "2026-02-17 11:18:52", "50.00",
+                ReconcileConstants.DIRECTION_EXPENSE, "扫二维码付款", "示例收款人");
+        item.setChannel(BillChannel.WECHAT.name());
+        Transaction tx = tx(10L, 1, "50.00", "2026-02-17", "12:00:00", "快捷支付 示例收款人");
+        tx.setExternalId("recon:CMB_DEBIT:example");
+        tx.setTags("[\"对账补录\"]");
+        tx.setReconciled(true);
+        tx.setReconcileChannel(BillChannel.CMB_DEBIT.name());
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.WECHAT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
+    void matchesWalletWithdrawalNetOfServiceFee() {
+        ReconciliationItem item = item(1L, "2026-01-17 17:35:59", "1.46",
+                ReconcileConstants.DIRECTION_NEUTRAL, "零钱提现", "招商银行(0611)");
+        item.setChannel(BillChannel.WECHAT.name());
+        item.setFee(new BigDecimal("0.01"));
+        Transaction tx = tx(10L, 2, "1.45", "2026-01-17", "12:00:00", "银联代付 示例用户");
+        tx.setExternalId("recon:CMB_DEBIT:example");
+        tx.setTags("[\"对账补录\"]");
+        tx.setReconciled(true);
+        tx.setReconcileChannel(BillChannel.CMB_DEBIT.name());
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.WECHAT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
     void ignoresZeroAmountAuthorizationRows() {
         ReconciliationItem item = item(1L, "2026-10-23 11:55:45", "0.00",
                 ReconcileConstants.DIRECTION_EXPENSE, "支付成功", "拼多多");

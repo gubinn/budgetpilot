@@ -329,7 +329,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                 .filter(tx -> reconcilableWith(tx, channel))
                 .filter(tx -> channelCoversTransaction(channel, tx))
                 .filter(tx -> !linked.contains(tx.getId()))
-                .filter(tx -> channel.matches(extChannel(tx), tx.getNote()))
+                .filter(tx -> channelAccepts(channel, tx))
                 .sorted(Comparator.comparing(Transaction::getTransactionDate,
                                 Comparator.nullsLast(Comparator.reverseOrder()))
                         .thenComparing(Transaction::getTransactionTime,
@@ -372,7 +372,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                 .filter(tx -> ReconcileConstants.matchesTransactionType(item.getDirection(),
                         item.getTradeStatus(), tx.getType(), tx.getNote()))
                 .filter(tx -> channel == null || reconcilableWith(tx, channel))
-                .filter(tx -> channel == null || channel.matches(extChannel(tx), tx.getNote()))
+                .filter(tx -> channelAccepts(channel, tx))
                 // 只展示金额接近或时间接近的流水，避免把无关交易排进候选
                 .filter(tx -> withinReasonableCandidate(tx, item, target))
                 .sorted(Comparator
@@ -1142,6 +1142,17 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             return new BigDecimal("999999999");
         }
         return amount.subtract(item.getAmount()).abs();
+    }
+
+    /** 渠道识别：微信账单还接受对账补录生成的、没有渠道关键字的银行侧交易 */
+    private boolean channelAccepts(BillChannel channel, Transaction tx) {
+        if (channel == null) {
+            return true;
+        }
+        if (channel.matches(extChannel(tx), tx.getNote())) {
+            return true;
+        }
+        return channel == BillChannel.WECHAT && ReconcileConstants.isBackfilled(tx);
     }
 
     private String extChannel(Transaction tx) {

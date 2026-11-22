@@ -50,6 +50,17 @@ public final class ReconcileConstants {
         };
     }
 
+    /** 是否为对账补录创建的交易：这类交易通常只有日期，时分秒用 12:00 占位 */
+    public static boolean isBackfilled(uk.gubin.budgetpilot.entity.Transaction tx) {
+        if (tx == null) {
+            return false;
+        }
+        if (tx.getTags() != null && tx.getTags().contains("对账补录")) {
+            return true;
+        }
+        return tx.getExternalId() != null && tx.getExternalId().startsWith("recon:");
+    }
+
     public static boolean isRefund(String tradeStatus) {
         if (tradeStatus == null) {
             return false;
