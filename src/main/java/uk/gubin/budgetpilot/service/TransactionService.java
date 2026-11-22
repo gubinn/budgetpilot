@@ -7,6 +7,7 @@ import uk.gubin.budgetpilot.dto.TransactionReclassifyDTO;
 import uk.gubin.budgetpilot.dto.TransactionUpdateDTO;
 import uk.gubin.budgetpilot.entity.Transaction;
 import uk.gubin.budgetpilot.common.PageResult;
+import uk.gubin.budgetpilot.vo.TransactionSummaryVO;
 import uk.gubin.budgetpilot.vo.TransactionVO;
 
 import java.time.LocalDate;
@@ -16,6 +17,9 @@ import java.util.Map;
 public interface TransactionService extends IService<Transaction> {
     TransactionVO create(TransactionCreateDTO dto);
     PageResult<TransactionVO> query(TransactionQueryDTO dto);
+
+    /** 按同一组条件汇总金额（不分页） */
+    TransactionSummaryVO summary(TransactionQueryDTO dto);
     TransactionVO getById(Long id);
     TransactionVO update(Long id, TransactionUpdateDTO dto);
     void delete(Long id);

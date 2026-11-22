@@ -58,6 +58,11 @@ router.beforeEach(async (to, from, next) => {
   }
 
   const token = localStorage.getItem('token')
+  // 对账在手机端不提供入口，直接跳回交易列表
+  if (to.name === 'Reconciliation' && window.innerWidth < 768) {
+    next({ name: 'Transactions' })
+    return
+  }
   if (to.meta.requiresAuth && !token) {
     next({ path: '/login', query: { redirect: to.fullPath } })
   } else if (to.path === '/login' && token) {

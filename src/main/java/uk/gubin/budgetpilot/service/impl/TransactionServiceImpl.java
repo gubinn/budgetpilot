@@ -40,6 +40,7 @@ import uk.gubin.budgetpilot.service.MerchantService;
 import uk.gubin.budgetpilot.service.TransactionService;
 import uk.gubin.budgetpilot.service.reconciliation.ReconcileConstants;
 import uk.gubin.budgetpilot.vo.MerchantVO;
+import uk.gubin.budgetpilot.vo.TransactionSummaryVO;
 import uk.gubin.budgetpilot.vo.TransactionVO;
 
 import java.math.BigDecimal;
@@ -224,6 +225,83 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
     @Override
     public PageResult<TransactionVO> query(TransactionQueryDTO dto) {
+        LambdaQueryWrapper<Transaction> query = buildQuery(dto);
+
+        // 解析排序
+        String[] sortParts = dto.getSort().split(",");
+        String sortField = sortParts[0];
+        boolean isAsc = sortParts.length < 2 || "asc".equalsIgnoreCase(sortParts[1]);
+
+        Page<Transaction> page = new Page<>(dto.getPage(), dto.getSize());
+        if (isAsc) {
+            query.orderByAsc(mapSortField(sortField));
+        } else {
+            query.orderByDesc(mapSortField(sortField));
+        }
+
+        Page<Transaction> result = baseMapper.selectPage(page, query);
+
+        // 批量加载关联数据
+        Map<Long, Account> accountMap = loadAccounts(result.getRecords());
+        Map<Long, Category> categoryMap = loadCategories(result.getRecords());
+        Map<Long, Category> parentCategoryMap = loadParentCategories(categoryMap.values());
+        Map<Long, Merchant> merchantMap = loadMerchants(result.getRecords());
+
+        List<TransactionVO> items = result.getRecords().stream()
+                .map(t -> {
+                    Category category = t.getCategoryId() != null ? categoryMap.get(t.getCategoryId()) : null;
+                    Category parent = category != null && category.getParentId() != null
+                            && category.getParentId() != 0 ? parentCategoryMap.get(category.getParentId()) : null;
+                    return toVO(t,
+                            accountMap.get(t.getAccountId()),
+                            category,
+                            t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null,
+                            parent, accountMap);
+                })
+                .collect(Collectors.toList());
+
+        return PageResult.of(items, result.getTotal(), dto.getPage(), dto.getSize());
+    }
+
+    @Override
+    public TransactionSummaryVO summary(TransactionQueryDTO dto) {
+        LambdaQueryWrapper<Transaction> query = buildQuery(dto);
+        query.select(Transaction::getType, Transaction::getAmount, Transaction::getAmountBase);
+
+        TransactionSummaryVO vo = new TransactionSummaryVO();
+        for (Transaction t : baseMapper.selectList(query)) {
+            BigDecimal amount = t.getAmountBase() != null ? t.getAmountBase() : t.getAmount();
+            if (amount == null) amount = BigDecimal.ZERO;
+            vo.setCount(vo.getCount() + 1);
+            if (t.getType() == null) continue;
+            switch (t.getType()) {
+                case 1 -> {
+                    vo.setExpense(vo.getExpense().add(amount));
+                    vo.setExpenseCount(vo.getExpenseCount() + 1);
+                }
+                case 2 -> {
+                    vo.setIncome(vo.getIncome().add(amount));
+                    vo.setIncomeCount(vo.getIncomeCount() + 1);
+                }
+                case 3 -> {
+                    vo.setTransfer(vo.getTransfer().add(amount));
+                    vo.setTransferCount(vo.getTransferCount() + 1);
+                }
+                case 4 -> {
+                    vo.setRefund(vo.getRefund().add(amount));
+                    vo.setRefundCount(vo.getRefundCount() + 1);
+                }
+                default -> {
+                }
+            }
+        }
+        vo.setNetExpense(vo.getExpense().subtract(vo.getRefund()));
+        vo.setNet(vo.getIncome().subtract(vo.getNetExpense()));
+        return vo;
+    }
+
+    /** 列表查询与汇总共用同一套筛选条件，保证两处口径一致 */
+    private LambdaQueryWrapper<Transaction> buildQuery(TransactionQueryDTO dto) {
         LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
         // 只有明确指定 confirmed 参数时才过滤，否则查询全部
         if (dto.getConfirmed() != null) {
@@ -284,41 +362,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                 query.apply("JSON_CONTAINS_PATH(ext_fields, 'one', {0})", path);
             }
         }
-
-        // 解析排序
-        String[] sortParts = dto.getSort().split(",");
-        String sortField = sortParts[0];
-        boolean isAsc = sortParts.length < 2 || "asc".equalsIgnoreCase(sortParts[1]);
-
-        Page<Transaction> page = new Page<>(dto.getPage(), dto.getSize());
-        if (isAsc) {
-            query.orderByAsc(mapSortField(sortField));
-        } else {
-            query.orderByDesc(mapSortField(sortField));
-        }
-
-        Page<Transaction> result = baseMapper.selectPage(page, query);
-
-        // 批量加载关联数据
-        Map<Long, Account> accountMap = loadAccounts(result.getRecords());
-        Map<Long, Category> categoryMap = loadCategories(result.getRecords());
-        Map<Long, Category> parentCategoryMap = loadParentCategories(categoryMap.values());
-        Map<Long, Merchant> merchantMap = loadMerchants(result.getRecords());
-
-        List<TransactionVO> items = result.getRecords().stream()
-                .map(t -> {
-                    Category category = t.getCategoryId() != null ? categoryMap.get(t.getCategoryId()) : null;
-                    Category parent = category != null && category.getParentId() != null
-                            && category.getParentId() != 0 ? parentCategoryMap.get(category.getParentId()) : null;
-                    return toVO(t,
-                            accountMap.get(t.getAccountId()),
-                            category,
-                            t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null,
-                            parent, accountMap);
-                })
-                .collect(Collectors.toList());
-
-        return PageResult.of(items, result.getTotal(), dto.getPage(), dto.getSize());
+        return query;
     }
 
     @Override

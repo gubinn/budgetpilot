@@ -47,6 +47,21 @@
       remote
     />
 
+    <!-- 汇总栏：按当前查询条件统计全部结果，不受分页影响 -->
+    <div v-if="summary" class="summary-bar">
+      <div class="summary-group">
+        <span class="summary-item">共 <b>{{ summary.count }}</b> 笔</span>
+        <span class="summary-item expense">支出 <b>¥{{ formatNum(summary.expense) }}</b><em>{{ summary.expenseCount }} 笔</em></span>
+        <span v-if="Number(summary.refund) > 0" class="summary-item refund">退款 <b>¥{{ formatNum(summary.refund) }}</b><em>{{ summary.refundCount }} 笔</em></span>
+        <span class="summary-item net">净支出 <b>¥{{ formatNum(summary.netExpense) }}</b></span>
+      </div>
+      <div class="summary-group">
+        <span v-if="Number(summary.income) > 0" class="summary-item income">收入 <b>¥{{ formatNum(summary.income) }}</b><em>{{ summary.incomeCount }} 笔</em></span>
+        <span v-if="Number(summary.transfer) > 0" class="summary-item transfer">转账 <b>¥{{ formatNum(summary.transfer) }}</b><em>{{ summary.transferCount }} 笔</em></span>
+        <span v-if="Number(summary.income) > 0" class="summary-item net-total">结余 <b>¥{{ formatNum(summary.net) }}</b></span>
+      </div>
+    </div>
+
     <!-- 复核弹窗 -->
     <n-modal v-model:show="showReview" preset="card" title="复核交易" style="width: 560px">
       <n-descriptions v-if="reviewRow" :column="1" size="small" bordered>
@@ -103,6 +118,7 @@ const message = useMessage()
 
 const loading = ref(false)
 const transactions = ref([])
+const summary = ref(null)
 const accounts = ref([])
 const categories = ref([])
 
@@ -374,9 +390,13 @@ async function loadData() {
       params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
       params.endDate = dayjs(filters.value.dateRange[1]).format('YYYY-MM-DD')
     }
-    const res = await transactionApi.list(params)
+    const [res, sumRes] = await Promise.all([
+      transactionApi.list(params),
+      transactionApi.summary(params)
+    ])
     transactions.value = res.data.items
     pagination.value.itemCount = res.data.total
+    summary.value = sumRes.data
   } catch (e) {
     message.error('加载失败')
   } finally {
@@ -600,6 +620,50 @@ onMounted(async () => {
   color: #333;
   word-break: break-all;
 }
+.summary-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 20px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid var(--bp-line);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #5b6472;
+}
+.summary-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+}
+.summary-item {
+  white-space: nowrap;
+}
+.summary-item b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.summary-item em {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 11px;
+  color: #98a2b3;
+}
+.summary-item.expense b { color: #e74c3c; }
+.summary-item.refund b { color: #2d98da; }
+.summary-item.income b { color: #27ae60; }
+.summary-item.transfer b { color: #8a94a6; }
+.summary-item.net b { color: #1f2937; }
+.summary-item.net-total {
+  padding-left: 14px;
+  border-left: 1px solid var(--bp-line);
+}
+.summary-item.net-total b { color: #1f2937; }
+
 @media (max-width: 1279px) {
   .filter-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));

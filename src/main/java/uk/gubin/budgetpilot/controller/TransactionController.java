@@ -13,6 +13,7 @@ import uk.gubin.budgetpilot.dto.TransactionQueryDTO;
 import uk.gubin.budgetpilot.dto.TransactionReclassifyDTO;
 import uk.gubin.budgetpilot.dto.TransactionUpdateDTO;
 import uk.gubin.budgetpilot.service.TransactionService;
+import uk.gubin.budgetpilot.vo.TransactionSummaryVO;
 import uk.gubin.budgetpilot.vo.TransactionVO;
 
 @RestController
@@ -31,6 +32,12 @@ public class TransactionController {
     @GetMapping
     public Result<PageResult<TransactionVO>> query(TransactionQueryDTO dto) {
         return Result.ok(transactionService.query(dto));
+    }
+
+    /** 与列表查询同条件的金额汇总，供列表页底部汇总栏使用 */
+    @GetMapping("/summary")
+    public Result<TransactionSummaryVO> summary(TransactionQueryDTO dto) {
+        return Result.ok(transactionService.summary(dto));
     }
 
     @GetMapping("/tags")

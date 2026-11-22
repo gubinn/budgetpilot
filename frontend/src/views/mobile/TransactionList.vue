@@ -55,6 +55,21 @@
     </div>
     <n-empty v-else description="暂无交易" />
 
+    <!-- 汇总栏：按当前查询条件统计全部结果，不受分页影响 -->
+    <div v-if="summary" class="summary-bar">
+      <div class="summary-row">
+        <span>共 <b>{{ summary.count }}</b> 笔</span>
+        <span class="expense">支出 <b>¥{{ formatNum(summary.expense) }}</b></span>
+        <span v-if="Number(summary.refund) > 0" class="refund">退款 <b>¥{{ formatNum(summary.refund) }}</b></span>
+        <span class="net">净支出 <b>¥{{ formatNum(summary.netExpense) }}</b></span>
+      </div>
+      <div v-if="Number(summary.income) > 0 || Number(summary.transfer) > 0" class="summary-row">
+        <span v-if="Number(summary.income) > 0" class="income">收入 <b>¥{{ formatNum(summary.income) }}</b></span>
+        <span v-if="Number(summary.transfer) > 0" class="transfer">转账 <b>¥{{ formatNum(summary.transfer) }}</b></span>
+        <span v-if="Number(summary.income) > 0" class="net">结余 <b>¥{{ formatNum(summary.net) }}</b></span>
+      </div>
+    </div>
+
     <n-modal v-model:show="showReview" preset="card" title="复核交易" style="width: 92vw; max-width: 520px">
       <div v-if="reviewRow" class="review-summary">
         <div>{{ reviewRow.transactionDate }} · {{ reviewRow.type === 1 ? '-' : '+' }}¥{{ formatNum(reviewRow.amount) }}</div>
@@ -112,6 +127,7 @@ const router = useRouter()
 const message = useMessage()
 const loading = ref(false)
 const transactions = ref([])
+const summary = ref(null)
 
 const typeLabels = { 1: '支出', 2: '收入', 3: '转账', 4: '退款' }
 const typeTagTypes = { 1: 'error', 2: 'success', 3: 'info', 4: 'warning' }
@@ -293,9 +309,13 @@ async function loadData() {
       params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
       params.endDate = dayjs(filters.value.dateRange[1]).format('YYYY-MM-DD')
     }
-    const res = await transactionApi.list(params)
+    const [res, sumRes] = await Promise.all([
+      transactionApi.list(params),
+      transactionApi.summary(params)
+    ])
     transactions.value = res.data.items
     pagination.value.itemCount = res.data.total
+    summary.value = sumRes.data
   } catch (e) {
     message.error('加载失败')
   } finally {
@@ -346,6 +366,36 @@ onMounted(async () => {
 }
 .filter-row:last-of-type { margin-bottom: 6px; }
 .filter-actions { display: flex; justify-content: flex-end; }
+
+/* 汇总栏 */
+.summary-bar {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border: 1px solid var(--bp-line);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #5b6472;
+}
+.summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+.summary-row + .summary-row {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--bp-line);
+}
+.summary-bar b {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.summary-bar .expense b { color: #e74c3c; }
+.summary-bar .refund b { color: #2d98da; }
+.summary-bar .income b { color: #27ae60; }
+.summary-bar .transfer b { color: #8a94a6; }
+.summary-bar .net b { color: #1f2937; }
 
 /* 交易列表 */
 .tx-list { }

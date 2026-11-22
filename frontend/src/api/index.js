@@ -13,6 +13,7 @@ export const accountApi = {
 export const transactionApi = {
   create: (data) => api.post('/transactions', data),
   list: (params) => api.get('/transactions', { params }),
+  summary: (params) => api.get('/transactions/summary', { params }),
   get: (id) => api.get(`/transactions/${id}`),
   update: (id, data) => api.put(`/transactions/${id}`, data),
   remove: (id) => api.delete(`/transactions/${id}`),

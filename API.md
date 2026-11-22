@@ -94,6 +94,7 @@
 |------|------|------|--------|
 | POST | `/api/v1/transactions` | 创建交易 | `TransactionCreateDTO` |
 | GET | `/api/v1/transactions` | 查询交易列表 | `TransactionQueryDTO` |
+| GET | `/api/v1/transactions/summary` | 按同一组条件汇总金额（笔数/支出/收入/转账/退款/净额） | `TransactionQueryDTO` |
 | GET | `/api/v1/transactions/tags` | 查询当前用户使用过的标签 | - |
 | GET | `/api/v1/transactions/ext-keys` | 查询扩展字段使用过的 key | - |
 | POST | `/api/v1/transactions/annotate` | 批量补充标签/扩展字段（不动余额） | `TransactionAnnotateDTO` |
