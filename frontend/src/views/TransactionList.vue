@@ -122,6 +122,11 @@ const summary = ref(null)
 const accounts = ref([])
 const categories = ref([])
 
+// 默认只查最近一个月，避免一进页面就拉全量
+function defaultDateRange() {
+  return [dayjs().subtract(1, 'month').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')]
+}
+
 const filters = ref({
   type: null,
   accountId: null,
@@ -130,7 +135,7 @@ const filters = ref({
   isConfirmed: null,
   reviewStatus: null,
   reconciled: null,
-  dateRange: null
+  dateRange: defaultDateRange()
 })
 
 const typeOptions = [
@@ -421,7 +426,8 @@ function onSizeChange(size) {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null, dateRange: defaultDateRange() }
+  pagination.value.page = 1
   loadData()
 }
 
