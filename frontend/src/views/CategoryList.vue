@@ -106,7 +106,7 @@ const typeOptions = [
 ]
 const budgetTypeOptions = [
   { label: '日常（月度预算）', value: 'DAILY' },
-  { label: '固定（不预算）', value: 'FIXED' },
+  { label: '固定（年度预算）', value: 'FIXED' },
   { label: '专项（年度预算）', value: 'SPECIAL' },
   { label: '非预算流水', value: 'NONE' }
 ]

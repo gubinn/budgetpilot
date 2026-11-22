@@ -4,7 +4,7 @@
       <n-space :size="8" :wrap="true">
         <n-radio-group v-model:value="budgetMode" size="small">
           <n-radio-button value="monthly">月度</n-radio-button>
-          <n-radio-button value="annual">年度专项</n-radio-button>
+          <n-radio-button value="annual">年度预算</n-radio-button>
         </n-radio-group>
         <n-select v-if="budgetMode === 'monthly'" v-model:value="selectedMonth" :options="monthOptions" style="min-width: 120px; max-width: 140px" />
         <n-select v-else v-model:value="selectedYear" :options="yearOptions" style="min-width: 100px; max-width: 120px" />
@@ -38,10 +38,10 @@
     </n-grid>
 
     <n-alert v-if="budgetMode === 'monthly'" type="info" :bordered="false" style="margin-bottom: 12px">
-      月度预算只统计日常分类；固定支出（房租/房贷/保险）和年度专项（旅行/学费/大额购物）不占本预算，但仍计入报表总支出。
+      月度预算只统计日常分类；固定支出（房租/房贷/保险）与年度专项（旅行/学费/大额购物）不占本预算，统一计入年度预算。
     </n-alert>
 
-    <n-card v-if="budgetMode === 'monthly' && fixedExpenses.length" size="small" title="固定支出（不占预算）" style="margin-bottom: 12px">
+    <n-card v-if="budgetMode === 'monthly' && fixedExpenses.length" size="small" title="固定支出（计入年度预算）" style="margin-bottom: 12px">
       <n-space>
         <n-tag v-for="item in fixedExpenses" :key="item.categoryId" :bordered="false" type="default">
           {{ item.categoryName }}：¥{{ formatNum(item.spent) }}
@@ -79,7 +79,7 @@
     <n-empty v-if="!budget" :description="budgetMode === 'annual' ? '该年度未设置专项预算，点击「创建」开始' : '该月未设置预算，点击「创建」开始'" />
 
     <!-- 创建/编辑弹窗 -->
-    <n-modal v-model:show="showCreate" preset="card" :title="budgetMode === 'annual' ? '设定年度专项预算' : '设定月度预算'" style="max-width: 90vw; width: 550px">
+    <n-modal v-model:show="showCreate" preset="card" :title="budgetMode === 'annual' ? '设定年度预算' : '设定月度预算'" style="max-width: 90vw; width: 550px">
       <n-form ref="formRef" :model="createForm" label-placement="left" label-width="auto">
         <n-form-item label="总预算" required>
           <n-input-number v-model:value="createForm.totalAmount" :min="0" :precision="2" disabled style="width: 100%">
@@ -327,7 +327,7 @@ onMounted(async () => {
       })
     })
     expenseCategories.value = flat.filter(c => c.budgetType === 'DAILY')
-    annualCategories.value = flat.filter(c => c.budgetType === 'SPECIAL')
+    annualCategories.value = flat.filter(c => c.budgetType === 'SPECIAL' || c.budgetType === 'FIXED')
     createForm.value.items = expenseCategories.value.map(c => ({
       categoryId: c.id,
       categoryName: c.displayName,

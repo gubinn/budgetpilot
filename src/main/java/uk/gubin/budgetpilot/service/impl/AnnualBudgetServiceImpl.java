@@ -40,6 +40,9 @@ import java.util.stream.Collectors;
 public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, AnnualBudget>
         implements AnnualBudgetService {
 
+    /** 年度预算可纳入的分类类型：年度专项 + 固定支出 */
+    private static final Set<String> ANNUAL_BUDGET_TYPES = Set.of("SPECIAL", "FIXED");
+
     private final AnnualBudgetItemMapper annualBudgetItemMapper;
     private final CategoryMapper categoryMapper;
     private final TransactionMapper transactionMapper;
@@ -98,7 +101,7 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
         Map<Long, BigDecimal> catSpentMap = new HashMap<>();
         BigDecimal totalSpent = BigDecimal.ZERO;
         for (AnnualBudgetItem item : items) {
-            Set<Long> ids = collectBudgetCategoryIds(item, "SPECIAL", allCats);
+            Set<Long> ids = collectBudgetCategoryIds(item, ANNUAL_BUDGET_TYPES, allCats);
             BigDecimal net = sumNetExpense(ids, start, end);
             catSpentMap.put(item.getCategoryId(), net);
             totalSpent = totalSpent.add(net);
@@ -216,24 +219,24 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
                 .collect(Collectors.toMap(Category::getId, c -> c));
     }
 
-    private Set<Long> collectBudgetCategoryIds(AnnualBudgetItem item, String budgetType,
+    private Set<Long> collectBudgetCategoryIds(AnnualBudgetItem item, Set<String> budgetTypes,
                                                Map<Long, Category> categories) {
         Set<Long> result = new LinkedHashSet<>();
         Category root = categories.get(item.getCategoryId());
-        if (root == null || !budgetType.equals(root.getBudgetType())) return result;
+        if (root == null || !budgetTypes.contains(root.getBudgetType())) return result;
         result.add(root.getId());
-        collectDescendants(root.getId(), budgetType, categories, result);
+        collectDescendants(root.getId(), budgetTypes, categories, result);
         return result;
     }
 
-    private void collectDescendants(Long parentId, String budgetType,
+    private void collectDescendants(Long parentId, Set<String> budgetTypes,
                                     Map<Long, Category> categories, Set<Long> result) {
         for (Category category : categories.values()) {
             if (!parentId.equals(category.getParentId())) continue;
-            if (budgetType.equals(category.getBudgetType())) {
+            if (budgetTypes.contains(category.getBudgetType())) {
                 result.add(category.getId());
             }
-            collectDescendants(category.getId(), budgetType, categories, result);
+            collectDescendants(category.getId(), budgetTypes, categories, result);
         }
     }
 
@@ -285,9 +288,9 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
                 throw new BizException(ErrorCode.PARAM_ERROR,
                         "预算只能设置在支出分类: " + category.getName());
             }
-            if (!"SPECIAL".equals(category.getBudgetType())) {
+            if (!ANNUAL_BUDGET_TYPES.contains(category.getBudgetType())) {
                 throw new BizException(ErrorCode.PARAM_ERROR,
-                        "年度专项预算只能设置在专项分类: " + category.getName());
+                        "年度预算只能设置在专项或固定分类: " + category.getName());
             }
         }
 

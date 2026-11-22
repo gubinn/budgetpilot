@@ -4,7 +4,7 @@
     <div class="month-selector">
       <n-radio-group v-model:value="budgetMode" size="small" style="flex: 1">
         <n-radio-button value="monthly">月度</n-radio-button>
-        <n-radio-button value="annual">年度专项</n-radio-button>
+        <n-radio-button value="annual">年度预算</n-radio-button>
       </n-radio-group>
     </div>
     <div class="month-selector">
@@ -67,7 +67,7 @@
 
     <!-- 创建/编辑弹窗 -->
     <n-drawer v-model:show="showCreate" :height="'85vh'" placement="bottom">
-      <n-drawer-content :title="budgetMode === 'annual' ? '设定年度专项预算' : '设定月度预算'" closable>
+      <n-drawer-content :title="budgetMode === 'annual' ? '设定年度预算' : '设定月度预算'" closable>
         <n-form label-placement="top" label-width="auto">
           <n-form-item label="总预算（按明细自动合计）" required>
             <n-input-number v-model:value="createForm.totalAmount" :min="0" :precision="2" disabled style="width: 100%">
@@ -294,7 +294,7 @@ onMounted(async () => {
       })
     })
     expenseCategories.value = flat.filter(c => c.budgetType === 'DAILY')
-    annualCategories.value = flat.filter(c => c.budgetType === 'SPECIAL')
+    annualCategories.value = flat.filter(c => c.budgetType === 'SPECIAL' || c.budgetType === 'FIXED')
     createForm.value.items = expenseCategories.value.map(c => ({ categoryId: c.id, categoryName: c.displayName, amount: 0 }))
     createForm.value.totalAmount = 0
   } catch (e) {}
