@@ -8,20 +8,23 @@
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="7" label="账户范围">
             <n-select v-model:value="form.accountId" :options="importAccountOptions" clearable
-                      :placeholder="form.channel === 'CMB_CREDIT' ? '选择信用卡账户（必选）' : '全部账户（可限定）'" />
+                      :placeholder="requiresAccount(form.channel) ? '选择银行账户（必选）' : '全部账户（可限定）'" />
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="7" label="账单文件">
             <n-upload :default-upload="false" :show-file-list="false" accept=".csv,.pdf"
                       @change="onFileChange">
-              <n-button>{{ fileName || (form.channel === 'CMB_CREDIT' ? '选择信用卡账单 PDF' : '选择支付宝账单 CSV') }}</n-button>
+              <n-button>{{ fileName || fileButtonText }}</n-button>
             </n-upload>
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="4" label=" ">
             <n-button type="primary" :loading="importing"
-                      :disabled="!file || !form.channel || (form.channel === 'CMB_CREDIT' && !form.accountId)"
+                      :disabled="!file || !form.channel || (requiresAccount(form.channel) && !form.accountId)"
                       @click="submitImport">开始对账</n-button>
           </n-form-item-gi>
         </n-grid>
+        <n-checkbox v-model:checked="form.force" style="margin-top: 12px">
+          强制重新解析已导入的账单（保留手工匹配、补录和忽略结果）
+        </n-checkbox>
       </n-form>
       <n-alert v-if="importResult" :type="importResult.duplicate ? 'warning' : 'success'"
                :show-icon="true" closable style="margin-top: 12px" @close="importResult = null">
@@ -32,8 +35,8 @@
         </template>
       </n-alert>
       <n-text depth="3" style="display: block; margin-top: 8px; font-size: 12px">
-        当前支持支付宝「交易记录明细查询」CSV、招商银行信用卡电子账单 PDF。
-        微信支付、招商银行储蓄卡账单后续开放。
+        当前支持支付宝「交易记录明细查询」CSV、招商银行信用卡电子账单 PDF、
+        招商银行储蓄卡交易流水 PDF。微信支付账单后续开放。
         账单只用于核对，不会修改交易金额、分类或余额。
       </n-text>
     </n-card>
@@ -119,7 +122,17 @@
     <!-- 补录交易 -->
     <n-modal v-model:show="showCreate" preset="card" title="补录为交易" style="width: 560px">
       <n-alert type="warning" :show-icon="true" style="margin-bottom: 12px">
-        补录会按所选账户实际增减余额，请确认这笔钱确实从该账户支出/退回。
+        <template v-if="activeItem?.selfTransfer">
+          这是本人账户之间的互转，只影响转出、转入账户的余额，不计入收入和支出。
+          历史漏记默认「不计入余额」，只有明确勾选后才会增减当前余额。
+        </template>
+        <template v-else-if="createForm.type === 3">
+          按转账补录会同时影响转出、转入两个账户，不计入收入和支出。
+          历史漏记默认「不计入余额」，只有明确勾选后才会增减当前余额。
+        </template>
+        <template v-else>
+          补录会按所选账户实际增减余额，请确认这笔钱确实从该账户支出/退回。
+        </template>
       </n-alert>
       <n-descriptions v-if="activeItem" :column="1" size="small" bordered>
         <n-descriptions-item label="账单时间">
@@ -136,20 +149,49 @@
         退款账单会按交易类型「退款」补录（冲减支出），分类请选择支出分类。
       </n-text>
       <n-form label-placement="left" label-width="80" style="margin-top: 12px">
-        <n-form-item label="账户">
-          <n-select v-model:value="createForm.accountId" :options="accountOptions" placeholder="选择入账账户" />
+        <n-form-item v-if="activeItem?.selfTransfer" label="补录方式">
+          <n-tag type="warning" size="small" :bordered="false">本人账户互转</n-tag>
+          <n-text depth="3" style="margin-left: 8px; font-size: 12px">只影响余额，不计入收支</n-text>
         </n-form-item>
-        <n-form-item label="分类">
-          <n-tree-select v-model:value="createForm.categoryId" :options="createCategoryOptions"
-                         key-field="value" label-field="label" children-field="children"
-                         placeholder="选择分类" filterable />
+        <n-form-item v-else-if="activeItem?.direction === 'EXPENSE' || activeItem?.direction === 'INCOME'" label="补录方式">
+          <n-radio-group v-model:value="createForm.type" @update:value="onCreateTypeChange">
+            <n-radio-button v-if="activeItem?.direction === 'EXPENSE'" :value="1">支出</n-radio-button>
+            <n-radio-button v-if="activeItem?.direction === 'INCOME'" :value="2">收入</n-radio-button>
+            <n-radio-button :value="3">转账</n-radio-button>
+          </n-radio-group>
+        </n-form-item>
+        <template v-if="createForm.type === 3">
+          <n-form-item label="转出账户">
+            <n-select v-model:value="createForm.accountId" :options="accountOptions"
+                      placeholder="选择转出账户" filterable />
+          </n-form-item>
+          <n-form-item label="转入账户">
+            <n-select v-model:value="createForm.targetAccountId" :options="accountOptions"
+                      placeholder="选择转入账户" filterable />
+          </n-form-item>
+        </template>
+        <template v-else>
+          <n-form-item label="账户">
+            <n-select v-model:value="createForm.accountId" :options="accountOptions" placeholder="选择入账账户" />
+          </n-form-item>
+          <n-form-item label="分类">
+            <n-tree-select v-model:value="createForm.categoryId" :options="createCategoryOptions"
+                           key-field="value" label-field="label" children-field="children"
+                           placeholder="选择分类" filterable />
+          </n-form-item>
+        </template>
+        <n-form-item label="计入余额">
+          <n-switch v-model:value="createForm.confirmed" />
+          <n-text depth="3" style="margin-left: 8px; font-size: 12px">
+            历史漏记建议不勾选，避免重复影响当前余额
+          </n-text>
         </n-form-item>
       </n-form>
       <template #footer>
         <n-space justify="end">
           <n-button @click="showCreate = false">取消</n-button>
           <n-button type="primary" :loading="creating"
-                    :disabled="!createForm.accountId || !createForm.categoryId || !canCreate(activeItem)"
+                    :disabled="!canSubmitCreate"
                     @click="submitCreate">确认补录</n-button>
         </n-space>
       </template>
@@ -171,7 +213,7 @@ const batches = ref([])
 const loadingBatches = ref(false)
 const accounts = ref([])
 const accountOptions = ref([])
-const form = ref({ channel: 'ALIPAY', accountId: null })
+const form = ref({ channel: 'ALIPAY', accountId: null, force: false })
 const file = ref(null)
 const fileName = ref('')
 const importing = ref(false)
@@ -180,25 +222,36 @@ const importResult = ref(null)
 const channelOptions = [
   { label: '支付宝', value: 'ALIPAY' },
   { label: '微信支付（后续开放）', value: 'WECHAT', disabled: true },
-  { label: '招商银行储蓄卡（后续开放）', value: 'CMB_DEBIT', disabled: true },
+  { label: '招商银行储蓄卡', value: 'CMB_DEBIT' },
   { label: '招商银行信用卡', value: 'CMB_CREDIT' }
 ]
 
-// 信用卡对账必须限定到具体信用卡账户，否则同金额的储蓄卡流水会被误配
+// 银行渠道必须限定到具体账户，否则同金额的其它银行卡流水会被误配
+const bankAccountType = (channel) => channel === 'CMB_DEBIT' ? 2 : channel === 'CMB_CREDIT' ? 3 : null
+const requiresAccount = (channel) => bankAccountType(channel) !== null
+
 const importAccountOptions = computed(() => {
-  if (form.value.channel === 'CMB_CREDIT') {
+  const type = bankAccountType(form.value.channel)
+  if (type !== null) {
     return accountOptions.value.filter(option => {
       const account = accounts.value.find(a => a.id === option.value)
-      return account?.type === 3
+      return account?.type === type
     })
   }
   return accountOptions.value
 })
 
+const fileButtonText = computed(() => {
+  if (form.value.channel === 'CMB_DEBIT') return '选择储蓄卡流水 PDF'
+  if (form.value.channel === 'CMB_CREDIT') return '选择信用卡账单 PDF'
+  return '选择支付宝账单 CSV'
+})
+
 watch(() => form.value.channel, (channel) => {
-  if (channel === 'CMB_CREDIT') {
+  const type = bankAccountType(channel)
+  if (type !== null) {
     const current = accounts.value.find(a => a.id === form.value.accountId)
-    if (current?.type !== 3) {
+    if (current?.type !== type) {
       form.value.accountId = null
     }
   }
@@ -224,7 +277,7 @@ const searchRange = ref(null)
 
 const showCreate = ref(false)
 const creating = ref(false)
-const createForm = ref({ accountId: null, categoryId: null })
+const createForm = ref({ type: null, accountId: null, categoryId: null, targetAccountId: null, confirmed: true })
 const createCategories = ref([])
 
 const warnings = computed(() => {
@@ -407,20 +460,40 @@ const candidateColumns = [
   }
 ]
 
+const isTransfer = (row) => (row?.tradeStatus || '').includes('转账')
 const createTypeLabel = computed(() => {
   const row = activeItem.value
   if (!row) return '-'
+  const type = createForm.value.type
+  if (type === 3) return '转账'
+  if (type === 2) return '收入'
+  if (type === 1) return '支出'
+  if (type === 4) return '退款'
   if (row.direction === 'INCOME') return '收入'
   if (row.direction === 'EXPENSE') return '支出'
   return (row.tradeStatus || '').includes('退款') ? '退款' : '不支持补录'
 })
 const createTypeTagType = computed(() => {
+  const type = createForm.value.type
+  if (type === 2) return 'success'
+  if (type === 1) return 'error'
+  if (type === 3) return 'warning'
   if (activeItem.value?.direction === 'INCOME') return 'success'
   if (activeItem.value?.direction === 'EXPENSE') return 'error'
   return 'info'
 })
 const canCreate = (row) => row?.direction !== 'NEUTRAL'
   || (row?.tradeStatus || '').includes('退款')
+
+const canSubmitCreate = computed(() => {
+  if (!canCreate(activeItem.value)) return false
+  if (createForm.value.type === 3) {
+    return !!createForm.value.accountId
+      && !!createForm.value.targetAccountId
+      && createForm.value.accountId !== createForm.value.targetAccountId
+  }
+  return !!createForm.value.accountId && !!createForm.value.categoryId
+})
 
 const createCategoryOptions = computed(() => {
   function build(nodes) {
@@ -469,6 +542,10 @@ async function submitImport() {
     message.warning('招商银行信用卡对账请先选择信用卡账户')
     return
   }
+  if (form.value.channel === 'CMB_DEBIT' && !form.value.accountId) {
+    message.warning('招商银行储蓄卡对账请先选择储蓄卡账户')
+    return
+  }
   importing.value = true
   try {
     const formData = new FormData()
@@ -477,10 +554,12 @@ async function submitImport() {
     if (form.value.accountId) {
       formData.append('accountId', form.value.accountId)
     }
+    formData.append('force', form.value.force ? 'true' : 'false')
     const res = await reconciliationApi.import(formData)
     importResult.value = res.data
     file.value = null
     fileName.value = ''
+    form.value.force = false
     await loadBatches()
     if (res.data?.batch) {
       openDetail(res.data.batch)
@@ -630,16 +709,60 @@ function doIgnore(row) {
   })
 }
 
-async function openCreate(row) {
-  activeItem.value = row
-  createForm.value = { accountId: null, categoryId: null }
-  const type = row.direction === 'INCOME' ? 2 : 1
+async function loadCreateCategories(type) {
   try {
     const res = await categoryApi.tree(type)
     createCategories.value = res.data || []
   } catch (e) {
     createCategories.value = []
   }
+}
+
+function onCreateTypeChange(type) {
+  if (type === 3) {
+    // 切到转账：账单账户是已知的一侧
+    const batchAccountId = detail.value?.accountId || null
+    const incoming = activeItem.value?.direction === 'INCOME'
+    createForm.value.accountId = incoming ? null : batchAccountId
+    createForm.value.targetAccountId = incoming ? batchAccountId : null
+    createForm.value.categoryId = null
+    createForm.value.confirmed = false
+    createCategories.value = []
+    return
+  }
+  // 改成普通支出/收入：账户就是账单账户，另选分类
+  createForm.value.accountId = detail.value?.accountId || null
+  createForm.value.targetAccountId = null
+  createForm.value.categoryId = null
+  createForm.value.confirmed = false
+  loadCreateCategories(type === 4 ? 1 : type)
+}
+
+async function openCreate(row) {
+  activeItem.value = row
+  if (isTransfer(row) || row.selfTransfer) {
+    const batchAccountId = detail.value?.accountId || null
+    const incoming = row.direction === 'INCOME'
+    createForm.value = {
+      type: 3,
+      accountId: incoming ? null : batchAccountId,
+      targetAccountId: incoming ? batchAccountId : null,
+      categoryId: null,
+      confirmed: false
+    }
+    createCategories.value = []
+    showCreate.value = true
+    return
+  }
+  const type = row.direction === 'INCOME' ? 2 : row.direction === 'EXPENSE' ? 1 : 4
+  createForm.value = {
+    type,
+    accountId: null,
+    categoryId: null,
+    targetAccountId: null,
+    confirmed: true
+  }
+  await loadCreateCategories(type === 4 ? 1 : type)
   showCreate.value = true
 }
 

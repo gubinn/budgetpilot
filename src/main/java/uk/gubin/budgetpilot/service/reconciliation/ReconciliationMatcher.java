@@ -70,7 +70,9 @@ public class ReconciliationMatcher {
             // （例如支付宝账单和信用卡账单都会出现同一笔信用卡消费）
             if (Boolean.TRUE.equals(tx.getReconciled())) {
                 BillChannel existing = BillChannel.of(tx.getReconcileChannel());
-                if (existing == null || existing == channel) {
+                // 同渠道的转账可以同时核对两个账户的对账单（转出侧和转入侧）
+                if (existing == null
+                        || (existing == channel && !Objects.equals(tx.getType(), 3))) {
                     continue;
                 }
             }
@@ -112,7 +114,7 @@ public class ReconciliationMatcher {
                 continue;
             }
             boolean timed = hasTime(item);
-            List<Candidate> candidates = collectCandidates(item, txType, txById.values(), timed);
+            List<Candidate> candidates = collectCandidates(item, txById.values(), timed);
             candidatesByItem.put(item.getId(), candidates);
             if (timed) {
                 if (candidates.size() >= 2
@@ -195,6 +197,7 @@ public class ReconciliationMatcher {
                     ItemMatch m = byItem.get(i.getId());
                     return m != null && ReconcileConstants.STATUS_UNMATCHED.equals(m.status())
                             && i.getAmount() != null && i.getAmount().compareTo(BigDecimal.ZERO) > 0
+                            && ReconcileConstants.DIRECTION_EXPENSE.equals(i.getDirection())
                             && txType(i) != null;
                 })
                 .sorted(Comparator.comparing(i -> itemTime(i)))
@@ -213,7 +216,8 @@ public class ReconciliationMatcher {
                     .filter(i -> byItem.get(i.getId()) != null)
                     .filter(i -> ReconcileConstants.STATUS_UNMATCHED.equals(byItem.get(i.getId()).status()))
                     .filter(i -> Objects.equals(i.getTradeDate(), tx.getTransactionDate()))
-                    .filter(i -> Objects.equals(txType(i), tx.getType()))
+                    .filter(i -> ReconcileConstants.matchesTransactionType(i.getDirection(),
+                            i.getTradeStatus(), tx.getType(), tx.getNote()))
                     .filter(i -> Math.abs(ChronoUnit.SECONDS.between(itemTime(i), txTime)) <= AGGREGATE_WINDOW_SECONDS)
                     .toList();
 
@@ -266,13 +270,14 @@ public class ReconciliationMatcher {
         return left.isEmpty() || right.isEmpty() || left.equals(right);
     }
 
-    private List<Candidate> collectCandidates(ReconciliationItem item, Integer txType,
+    private List<Candidate> collectCandidates(ReconciliationItem item,
                                               Iterable<Transaction> transactions, boolean timed) {
         LocalDateTime itemTime = itemTime(item);
         LocalDate itemDate = item.getTradeDate() != null ? item.getTradeDate() : itemTime.toLocalDate();
         List<Candidate> candidates = new ArrayList<>();
         for (Transaction tx : transactions) {
-            if (!Objects.equals(tx.getType(), txType)) {
+            if (!ReconcileConstants.matchesTransactionType(item.getDirection(), item.getTradeStatus(),
+                    tx.getType(), tx.getNote())) {
                 continue;
             }
             BigDecimal txAmount = txAmount(tx);
@@ -342,13 +347,7 @@ public class ReconciliationMatcher {
     }
 
     private Integer txType(ReconciliationItem item) {
-        return switch (item.getDirection()) {
-            case ReconcileConstants.DIRECTION_EXPENSE -> 1;
-            case ReconcileConstants.DIRECTION_INCOME -> 2;
-            case ReconcileConstants.DIRECTION_NEUTRAL ->
-                    item.getTradeStatus() != null && item.getTradeStatus().contains("退款") ? 4 : null;
-            default -> null;
-        };
+        return ReconcileConstants.transactionType(item.getDirection(), item.getTradeStatus());
     }
 
     private LocalDateTime itemTime(ReconciliationItem item) {

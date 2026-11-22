@@ -33,6 +33,7 @@ public class ReconciliationItemVO {
     private BigDecimal fee;
     private BigDecimal refunded;
     private String remark;
+    private Boolean selfTransfer;
     private String matchStatus;
     private String matchType;
     private Long matchTransactionId;

@@ -211,7 +211,7 @@
 
 | 方法 | 路径 | 功能 | 请求体 |
 |------|------|------|--------|
-| POST | `/api/v1/reconciliation/import` | 导入渠道账单（multipart） | `file` + `channel` + 可选 `accountId` |
+| POST | `/api/v1/reconciliation/import` | 导入渠道账单（multipart） | `file` + `channel` + 可选 `accountId` + 可选 `force` |
 | GET | `/api/v1/reconciliation/batches` | 对账批次列表（最近 100 条） | - |
 | GET | `/api/v1/reconciliation/batches/{id}` | 批次详情 | - |
 | GET | `/api/v1/reconciliation/batches/{id}/items` | 账单明细分页 | `status` (`MATCHED`/`PENDING`/`IGNORED`/`AMBIGUOUS`) + `page` + `size` |
@@ -222,19 +222,25 @@
 | POST | `/api/v1/reconciliation/items/{id}/match` | 手工匹配 | `{ "transactionId": 123 }` |
 | POST | `/api/v1/reconciliation/items/{id}/unmatch` | 取消匹配 / 恢复忽略 | - |
 | POST | `/api/v1/reconciliation/items/{id}/ignore` | 忽略账单行 | `{ "reason": "人工忽略" }` |
-| POST | `/api/v1/reconciliation/items/{id}/create-transaction` | 账单项补录为交易并完成对账 | `{ "accountId": 1, "categoryId": 163, "confirmed": true }` |
+| POST | `/api/v1/reconciliation/items/{id}/create-transaction` | 账单项补录为交易并完成对账 | 普通收支：`{ "accountId": 1, "categoryId": 163, "confirmed": true }`；转账：`{ "accountId": 转出账户, "targetAccountId": 转入账户, "confirmed": false }`；把「转账汇款」按支出补录：`{ "type": 1, "accountId": 2, "categoryId": 1228, "confirmed": false }`；普通支出改按转账（充值微信余额）：`{ "type": 3, "accountId": 2, "targetAccountId": 19, "confirmed": false }` |
 
 #### 导入说明
 
-- `channel` 取值：`ALIPAY`、`CMB_CREDIT`（招商银行信用卡，已实现）；`WECHAT` / `CMB_DEBIT`（预留）。
-- `CMB_CREDIT` 必须传 `accountId`（具体信用卡账户），候选流水与手工候选都会限定在该账户内。
-- 同一用户 + 渠道 + 文件 SHA-256 重复上传直接返回已有批次（`duplicate=true`）。
-- 解析支持支付宝「交易记录明细查询」CSV（GB18030/UTF-8，带 4 行说明和页脚汇总）和招商银行信用卡电子账单 PDF。
+- `channel` 取值：`ALIPAY`、`CMB_DEBIT`（招商银行储蓄卡）、`CMB_CREDIT`（招商银行信用卡）；`WECHAT` 预留。
+- `CMB_DEBIT` / `CMB_CREDIT` 必须传 `accountId`（对应的储蓄卡/信用卡账户）。候选流水包含两类：`account_id` 是本账户的支出/转出，以及 `target_account_id` 是本账户的转入（例如从另一个储蓄卡账户归集进来的转账）。
+- 同一用户 + 渠道 + 文件 SHA-256 重复上传直接返回已有批次（`duplicate=true`）。传 `force=true` 时可对已有批次原地重新解析：重新生成账单明细、重新自动匹配，并按 `item_key` 保留原来的手工匹配、补录和忽略结果（`summary.restoredManualMatches` 为恢复数量）。
+- 解析支持支付宝「交易记录明细查询」CSV（GB18030/UTF-8，带 4 行说明和页脚汇总）、招商银行信用卡电子账单 PDF、招商银行储蓄卡交易流水 PDF。
 - 匹配按「金额精确 + 收支方向一致 + 时间 ±10 分钟」自动分配；同金额同时间多候选标记 `AMBIGUOUS`；一笔流水对应多笔账单时做 2~3 笔聚合匹配。
-- 信用卡 PDF 没有时分秒，改按交易日匹配（允许跨日 1 天），同金额同日多笔时用账单摘要与流水备注的相似度决定顺序。
+- 信用卡/储蓄卡 PDF 没有时分秒，改按交易日匹配（允许跨日 1 天），同金额同日多笔时用账单摘要与流水备注的相似度决定顺序。
 - 信用卡账单中的非人民币账户行会跳过并在批次 `summary.warnings` 提示；多卡账单只匹配批次指定账户的流水。
-- 同一笔流水可被不同渠道的账单交叉核对（例如支付宝账单与信用卡账单）；交易表保留最先写入的 `reconcile_channel`，后写入的渠道只记在账单明细上，但会合并该渠道的扩展字段。
-- 命中后交易写入 `reconciled=1`、`reconcile_channel`、`reconcile_batch_id`、`reconciled_at`，并在 `ext_fields` 合并渠道字段：支付宝为 `支付宝交易号`、`支付宝商家订单号`、`支付宝交易对方`、`支付宝商品名称` 等；招行信用卡为 `招行信用卡卡号末四位`、`招行信用卡交易日`、`招行信用卡记账日`、`招行信用卡交易摘要`、`招行信用卡账单分类`、`招行信用卡交易地金额`、`招行信用卡账单来源`。
+- 储蓄卡流水按「记账日期 + 交易金额 + 联机余额」解析，负数记支出、正数按摘要区分收入/退款/转账；每行会校验「上一行余额 + 本行金额 = 本行余额」，勾稽不一致写入 `summary.balanceMismatches` 并告警。非人民币账户行同样跳过。
+- 储蓄卡流水中的「行内转账转入/转出」按交易类型 3（转账）匹配，不会误记为收入或支出；这类账单行可以在对账页补录，但必须选择转出/转入两个账户，且默认 `confirmed=false`（不计入当前余额），避免历史漏记再次影响已经与银行对齐的余额。
+- 储蓄卡流水中的「朝朝宝转出/转入」是账户内部理财申赎，导入时自动标记为 `IGNORED`，忽略原因「朝朝宝内部划转」；「大额存单还本」是存单到期资金回活期，自动忽略，原因「大额存单到期内部划转」。
+- 转账/收支类型放宽互看：账单摘要里的「转账汇款/行内转账」在账本中可能被记成普通收支，普通收支也可能被记成转账；类型不同时仍按金额、日期和对手信息匹配，手工候选列表也会同时展示三种类型。
+- 本人账户互转：账单对手名等于 PDF 户名或 `RECONCILIATION_SELF_NAMES`（逗号分隔）中的姓名，且摘要含转账/转入/转出时，按交易类型 3 处理，只影响余额，不计入收入/支出。账单项 VO 返回 `selfTransfer=true`，补录时后端强制 `type=3`。
+- 退款账单行优先匹配交易类型 4；如果历史流水把退款记成了支出（类型 1），备注含「退款」的支出流水也会作为候选，避免这类退款永远对不上。
+- 同一笔流水可被不同渠道的账单交叉核对（例如支付宝账单与信用卡/储蓄卡账单）；交易表保留最先写入的 `reconcile_channel`，后写入的渠道只记在账单明细上，但会合并该渠道的扩展字段。
+- 命中后交易写入 `reconciled=1`、`reconcile_channel`、`reconcile_batch_id`、`reconciled_at`，并在 `ext_fields` 合并渠道字段：支付宝为 `支付宝交易号`、`支付宝商家订单号`、`支付宝交易对方`、`支付宝商品名称` 等；招行信用卡为 `招行信用卡卡号末四位`、`招行信用卡交易日`、`招行信用卡记账日`、`招行信用卡交易摘要`、`招行信用卡账单分类`、`招行信用卡交易地金额`、`招行信用卡账单来源`；招行储蓄卡为 `招行储蓄卡账号`、`招行储蓄卡记账日期`、`招行储蓄卡交易摘要`、`招行储蓄卡联机余额`、`招行储蓄卡交易币种`、`招行储蓄卡对手信息`、`招行储蓄卡流水来源`。
 - 修改已对账交易的金额/日期/时间/币种/账户/类型，或删除交易，会自动解绑账单行并取消对账标记。
 - 补录会走正常交易创建流程，按所选账户实际增减余额。
 

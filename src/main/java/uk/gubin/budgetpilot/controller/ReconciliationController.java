@@ -29,8 +29,9 @@ public class ReconciliationController {
     public Result<ReconciliationImportVO> importBill(
             @RequestPart("file") MultipartFile file,
             @RequestParam("channel") String channel,
-            @RequestParam(value = "accountId", required = false) Long accountId) {
-        return Result.ok(reconciliationService.importBill(file, channel, accountId));
+            @RequestParam(value = "accountId", required = false) Long accountId,
+            @RequestParam(value = "force", defaultValue = "false") boolean force) {
+        return Result.ok(reconciliationService.importBill(file, channel, accountId, force));
     }
 
     @GetMapping("/batches")

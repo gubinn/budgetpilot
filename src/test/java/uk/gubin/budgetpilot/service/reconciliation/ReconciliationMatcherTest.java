@@ -185,6 +185,73 @@ class ReconciliationMatcherTest {
     }
 
     @Test
+    void matchesRefundBillToExpenseTransactionRecordedAsRefund() {
+        ReconciliationItem refund = datedItem(1L, "2026-05-21", "520.00",
+                ReconcileConstants.DIRECTION_NEUTRAL, "快捷退款", "微信红包");
+        Transaction tx = tx(10L, 1, "520.00", "2026-05-21", "15:44:00",
+                "您账户1234于05月21日15:44在财付通-微信支付-微信红包退款520.00元，余额2509.80");
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(refund), List.of(tx), BillChannel.CMB_DEBIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
+    void matchesTransferStatementToTypeThreeTransaction() {
+        ReconciliationItem transfer = datedItem(1L, "2026-02-28", "3000.00",
+                ReconcileConstants.DIRECTION_INCOME, "行内转账转入", "示例用户");
+        Transaction tx = tx(10L, 3, "3000.00", "2026-02-28", "12:00:00",
+                "您账户1234于02月28日收到本行转入人民币3000.00，余额5000.00，付方示例用户（1234），备注：转账");
+        tx.setTransactionTime(null);
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(transfer), List.of(tx), BillChannel.CMB_DEBIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
+    void matchesSavingsCardExpenseByDateAndMerchant() {
+        ReconciliationItem item = datedItem(1L, "2026-10-01", "174.47",
+                ReconcileConstants.DIRECTION_EXPENSE, "快捷支付", "示例超市");
+        Transaction tx = tx(10L, 1, "174.47", "2026-10-01", "12:08:31",
+                "您账户1234于10月01日12:08在支付宝-示例超市快捷支付174.47元，余额2529.31");
+        tx.setExtFields("{\"channel\":\"支付宝\"}");
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.CMB_DEBIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
+    void allowsSameChannelTransferForOtherAccountSide() {
+        ReconciliationItem item = datedItem(1L, "2026-02-28", "3000.00",
+                ReconcileConstants.DIRECTION_EXPENSE, "转账汇款", "示例用户");
+        Transaction tx = tx(10L, 3, "3000.00", "2026-02-28", "12:00:00", "转账汇款 示例用户");
+        tx.setReconciled(true);
+        tx.setReconcileChannel(BillChannel.CMB_DEBIT.name());
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.CMB_DEBIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
     void ignoresZeroAmountAuthorizationRows() {
         ReconciliationItem item = item(1L, "2026-10-23 11:55:45", "0.00",
                 ReconcileConstants.DIRECTION_EXPENSE, "支付成功", "拼多多");

@@ -480,7 +480,7 @@ public class MerchantServiceImpl extends ServiceImpl<MerchantMapper, Merchant> i
         Map<Long, MerchantUsageStatDTO> stats = loadStats(merchantIds);
 
         return merchants.stream()
-                .map(m -> toVO(m, categoryMap.get(m.getCategoryId()),
+                .map(m -> toVO(m, m.getCategoryId() == null ? null : categoryMap.get(m.getCategoryId()),
                         aliasMap.getOrDefault(m.getId(), List.of()), stats.get(m.getId())))
                 .collect(Collectors.toList());
     }

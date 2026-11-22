@@ -11,7 +11,7 @@ import uk.gubin.budgetpilot.vo.ReconciliationItemVO;
 import java.util.List;
 
 public interface ReconciliationService {
-    ReconciliationImportVO importBill(MultipartFile file, String channel, Long accountId);
+    ReconciliationImportVO importBill(MultipartFile file, String channel, Long accountId, boolean force);
 
     List<ReconciliationBatchVO> listBatches();
 
