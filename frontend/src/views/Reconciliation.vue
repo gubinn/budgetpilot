@@ -7,17 +7,18 @@
             <n-select v-model:value="form.channel" :options="channelOptions" />
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="7" label="账户范围">
-            <n-select v-model:value="form.accountId" :options="accountOptions" clearable
-                      placeholder="全部账户（可限定）" />
+            <n-select v-model:value="form.accountId" :options="importAccountOptions" clearable
+                      :placeholder="form.channel === 'CMB_CREDIT' ? '选择信用卡账户（必选）' : '全部账户（可限定）'" />
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="7" label="账单文件">
-            <n-upload :default-upload="false" :show-file-list="false" accept=".csv"
+            <n-upload :default-upload="false" :show-file-list="false" accept=".csv,.pdf"
                       @change="onFileChange">
-              <n-button>{{ fileName || '选择支付宝账单 CSV' }}</n-button>
+              <n-button>{{ fileName || (form.channel === 'CMB_CREDIT' ? '选择信用卡账单 PDF' : '选择支付宝账单 CSV') }}</n-button>
             </n-upload>
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="4" label=" ">
-            <n-button type="primary" :loading="importing" :disabled="!file || !form.channel"
+            <n-button type="primary" :loading="importing"
+                      :disabled="!file || !form.channel || (form.channel === 'CMB_CREDIT' && !form.accountId)"
                       @click="submitImport">开始对账</n-button>
           </n-form-item-gi>
         </n-grid>
@@ -31,7 +32,8 @@
         </template>
       </n-alert>
       <n-text depth="3" style="display: block; margin-top: 8px; font-size: 12px">
-        当前支持支付宝「交易记录明细查询」CSV。微信、招商银行账单后续开放。
+        当前支持支付宝「交易记录明细查询」CSV、招商银行信用卡电子账单 PDF。
+        微信支付、招商银行储蓄卡账单后续开放。
         账单只用于核对，不会修改交易金额、分类或余额。
       </n-text>
     </n-card>
@@ -156,7 +158,7 @@
 </template>
 
 <script setup>
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { accountApi, categoryApi, reconciliationApi, transactionApi } from '@/api'
 import { formatNum } from '@/utils/display'
@@ -178,8 +180,29 @@ const importResult = ref(null)
 const channelOptions = [
   { label: '支付宝', value: 'ALIPAY' },
   { label: '微信支付（后续开放）', value: 'WECHAT', disabled: true },
-  { label: '招商银行（后续开放）', value: 'CMB', disabled: true }
+  { label: '招商银行储蓄卡（后续开放）', value: 'CMB_DEBIT', disabled: true },
+  { label: '招商银行信用卡', value: 'CMB_CREDIT' }
 ]
+
+// 信用卡对账必须限定到具体信用卡账户，否则同金额的储蓄卡流水会被误配
+const importAccountOptions = computed(() => {
+  if (form.value.channel === 'CMB_CREDIT') {
+    return accountOptions.value.filter(option => {
+      const account = accounts.value.find(a => a.id === option.value)
+      return account?.type === 3
+    })
+  }
+  return accountOptions.value
+})
+
+watch(() => form.value.channel, (channel) => {
+  if (channel === 'CMB_CREDIT') {
+    const current = accounts.value.find(a => a.id === form.value.accountId)
+    if (current?.type !== 3) {
+      form.value.accountId = null
+    }
+  }
+})
 
 const showDetail = ref(false)
 const detail = ref(null)
@@ -221,6 +244,17 @@ const matchTypeLabel = {
   MANUAL: '手工',
   CREATED: '补录'
 }
+const channelLabels = {
+  ALIPAY: '支付宝',
+  WECHAT: '微信支付',
+  CMB: '招行储蓄卡',
+  CMB_DEBIT: '招行储蓄卡',
+  CMB_CREDIT: '招行信用卡'
+}
+const channelKey = (channel) => channel === 'CMB' ? 'CMB_DEBIT' : channel
+// 同渠道已对账的流水不能再选；其它渠道对过的仍可作为交叉证据
+const blockedByReconcile = (row) => row.reconciled
+  && channelKey(row.reconcileChannel) === channelKey(activeItem.value?.channel)
 
 const batchColumns = [
   { title: '渠道', key: 'channelLabel', width: 90 },
@@ -292,11 +326,17 @@ const itemColumns = [
     render: row => {
       const tx = row.transaction
       if (!tx) return '-'
+      const crossChannel = tx.reconciled && tx.reconcileChannel
+        && channelKey(tx.reconcileChannel) !== channelKey(row.channel)
       return h('div', [
         h('div', `${tx.transactionDate} ${tx.transactionTime || ''} · ${tx.accountName || '-'}`),
         h('div', { style: { color: '#888', fontSize: '12px' } },
-          `${tx.merchantName || '-'} · ¥${formatNum(tx.amountBase ?? tx.amount)}`)
-      ])
+          `${tx.merchantName || '-'} · ¥${formatNum(tx.amountBase ?? tx.amount)}`),
+        crossChannel
+          ? h('div', { style: { color: '#2d98da', fontSize: '12px' } },
+            `已由${channelLabels[tx.reconcileChannel] || tx.reconcileChannel}对账`)
+          : null
+      ].filter(Boolean))
     }
   },
   {
@@ -357,9 +397,13 @@ const candidateColumns = [
   {
     title: '操作', key: 'actions', width: 90,
     render: row => h(NButton, {
-      size: 'tiny', type: 'primary', disabled: row.reconciled,
+      size: 'tiny', type: 'primary', disabled: blockedByReconcile(row),
       onClick: () => doMatch(row.id)
-    }, { default: () => row.reconciled ? '已对账' : '选用' })
+    }, {
+      default: () => blockedByReconcile(row)
+        ? '本渠道已对账'
+        : (row.reconciled ? '跨渠道选用' : '选用')
+    })
   }
 ]
 
@@ -419,6 +463,10 @@ function onFileChange({ file: uploadFile }) {
 async function submitImport() {
   if (!file.value) {
     message.warning('请选择账单文件')
+    return
+  }
+  if (form.value.channel === 'CMB_CREDIT' && !form.value.accountId) {
+    message.warning('招商银行信用卡对账请先选择信用卡账户')
     return
   }
   importing.value = true

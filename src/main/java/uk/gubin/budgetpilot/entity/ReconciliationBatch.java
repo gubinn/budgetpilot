@@ -14,7 +14,7 @@ import java.time.LocalDate;
 @TableName("t_reconciliation_batch")
 public class ReconciliationBatch extends BaseEntity {
     private Long userId;
-    /** ALIPAY / WECHAT / CMB */
+    /** ALIPAY / WECHAT / CMB_DEBIT / CMB_CREDIT */
     private String channel;
     private String fileName;
     private String fileHash;

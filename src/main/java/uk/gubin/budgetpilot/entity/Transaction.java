@@ -40,7 +40,7 @@ public class Transaction extends BaseEntity {
     private String metadata;
     /** 是否已与渠道账单对账 */
     private Boolean reconciled;
-    /** ALIPAY / WECHAT / CMB */
+    /** ALIPAY / WECHAT / CMB_DEBIT / CMB_CREDIT */
     private String reconcileChannel;
     private Long reconcileBatchId;
     private java.time.LocalDateTime reconciledAt;

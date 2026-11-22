@@ -37,6 +37,10 @@ public interface TransactionMapper extends BaseMapper<Transaction> {
     int markReconciled(@Param("id") Long id, @Param("channel") String channel,
                        @Param("batchId") Long batchId, @Param("extFields") String extFields);
 
+    /** 跨渠道对账：只合并扩展字段，不覆盖已有的对账渠道标记 */
+    @Update("UPDATE t_transaction SET ext_fields = #{extFields} WHERE id = #{id}")
+    int updateExtFields(@Param("id") Long id, @Param("extFields") String extFields);
+
     @Update("UPDATE t_transaction SET reconciled = 0, reconcile_channel = NULL, " +
             "reconcile_batch_id = NULL, reconciled_at = NULL WHERE id = #{id}")
     int clearReconciled(@Param("id") Long id);

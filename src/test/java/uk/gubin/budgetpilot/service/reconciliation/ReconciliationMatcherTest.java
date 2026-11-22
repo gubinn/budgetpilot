@@ -96,6 +96,95 @@ class ReconciliationMatcherTest {
     }
 
     @Test
+    void matchesDateOnlyCreditCardItemByAmountAndDate() {
+        ReconciliationItem item = datedItem(1L, "2026-09-15", "6.00",
+                ReconcileConstants.DIRECTION_EXPENSE, "消费",
+                "支付宝-示例商户乙");
+        Transaction tx = tx(10L, 1, "6.00", "2026-09-15", "08:51:04",
+                "08:51:04 CNY 6.00 尾号1234 消费 支付宝-示例商户乙");
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.CMB_CREDIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
+    void matchesDuplicateDateOnlyItemsToDistinctTransactions() {
+        ReconciliationItem first = datedItem(1L, "2026-10-03", "3.34",
+                ReconcileConstants.DIRECTION_EXPENSE, "消费", "支付宝-示例商户甲");
+        ReconciliationItem second = datedItem(2L, "2026-10-03", "3.34",
+                ReconcileConstants.DIRECTION_EXPENSE, "消费", "支付宝-示例商户甲");
+        Transaction morning = tx(10L, 1, "3.34", "2026-10-03", "13:26:25",
+                "13:26:25 CNY 3.34 尾号1234 消费 支付宝-示例商户甲");
+        Transaction evening = tx(11L, 1, "3.34", "2026-10-03", "17:13:57",
+                "17:13:57 CNY 3.34 尾号1234 消费 支付宝-示例商户甲");
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(first, second), List.of(morning, evening), BillChannel.CMB_CREDIT);
+
+        assertThat(result).hasSize(2).allSatisfy(m ->
+                assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED));
+        assertThat(result).extracting(ReconciliationMatcher.ItemMatch::transactionId)
+                .containsExactlyInAnyOrder(10L, 11L);
+    }
+
+    @Test
+    void prefersMerchantMatchWhenDateOnlyAmountIsAmbiguous() {
+        ReconciliationItem item = datedItem(1L, "2026-10-03", "3.34",
+                ReconcileConstants.DIRECTION_EXPENSE, "消费", "支付宝-示例商户丙");
+        Transaction other = tx(10L, 1, "3.34", "2026-10-03", "13:26:25",
+                "13:26:25 CNY 3.34 尾号1234 消费 支付宝-示例商户甲");
+        Transaction sameMerchant = tx(11L, 1, "3.34", "2026-10-03", "18:54:28",
+                "18:54:28 CNY 3.34 尾号1234 消费 支付宝-示例商户丙");
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(other, sameMerchant), BillChannel.CMB_CREDIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(11L);
+        });
+    }
+
+    @Test
+    void allowsCrossChannelReconciliation() {
+        ReconciliationItem item = datedItem(1L, "2026-09-15", "6.00",
+                ReconcileConstants.DIRECTION_EXPENSE, "消费", "支付宝-示例商户乙");
+        Transaction tx = tx(10L, 1, "6.00", "2026-09-15", "08:51:04",
+                "08:51:04 CNY 6.00 尾号1234 消费 支付宝-示例商户乙");
+        tx.setReconciled(true);
+        tx.setReconcileChannel(BillChannel.ALIPAY.name());
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.CMB_CREDIT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
+    void skipsTransactionsReconciledBySameChannel() {
+        ReconciliationItem item = item(1L, "2026-10-31 17:50:29", "7.25",
+                ReconcileConstants.DIRECTION_EXPENSE, "交易成功", "李雅新");
+        Transaction tx = tx(10L, 1, "7.25", "2026-10-31", "17:50:30", "支付宝-巴黎贝甜");
+        tx.setReconciled(true);
+        tx.setReconcileChannel(BillChannel.ALIPAY.name());
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.ALIPAY);
+
+        assertThat(result).singleElement()
+                .extracting(ReconciliationMatcher.ItemMatch::status)
+                .isEqualTo(ReconcileConstants.STATUS_UNMATCHED);
+    }
+
+    @Test
     void ignoresZeroAmountAuthorizationRows() {
         ReconciliationItem item = item(1L, "2026-10-23 11:55:45", "0.00",
                 ReconcileConstants.DIRECTION_EXPENSE, "支付成功", "拼多多");
@@ -120,6 +209,20 @@ class ReconciliationMatcherTest {
         LocalDateTime dateTime = LocalDateTime.parse(time.replace(' ', 'T'));
         item.setPaidTime(dateTime);
         item.setTradeDate(dateTime.toLocalDate());
+        item.setMatchStatus(ReconcileConstants.STATUS_UNMATCHED);
+        return item;
+    }
+
+    private ReconciliationItem datedItem(Long id, String date, String amount, String direction,
+                                         String status, String counterparty) {
+        ReconciliationItem item = new ReconciliationItem();
+        item.setId(id);
+        item.setChannel(BillChannel.CMB_CREDIT.name());
+        item.setDirection(direction);
+        item.setAmount(new BigDecimal(amount));
+        item.setTradeStatus(status);
+        item.setCounterparty(counterparty);
+        item.setTradeDate(LocalDate.parse(date));
         item.setMatchStatus(ReconcileConstants.STATUS_UNMATCHED);
         return item;
     }

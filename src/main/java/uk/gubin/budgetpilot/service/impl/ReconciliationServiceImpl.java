@@ -97,6 +97,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if (channel == null) {
             throw new BizException(ErrorCode.PARAM_ERROR, "不支持的账单渠道");
         }
+        if (channel == BillChannel.CMB_CREDIT && accountId == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "招商银行信用卡对账请先选择信用卡账户");
+        }
         BillParser parser = parsers.stream().filter(p -> p.supports(channel)).findFirst()
                 .orElseThrow(() -> new BizException(ErrorCode.PARAM_ERROR,
                         channel.getLabel() + "账单解析暂未开放"));
@@ -266,7 +269,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                 .filter(tx -> tx.getTransactionDate() != null
                         && !tx.getTransactionDate().isBefore(batch.getPeriodStart())
                         && !tx.getTransactionDate().isAfter(batch.getPeriodEnd()))
-                .filter(tx -> !Boolean.TRUE.equals(tx.getReconciled()))
+                .filter(tx -> reconcilableWith(tx, channel))
+                .filter(tx -> channelCoversTransaction(channel, tx))
                 .filter(tx -> !linked.contains(tx.getId()))
                 .filter(tx -> channel.matches(extChannel(tx), tx.getNote()))
                 .sorted(Comparator.comparing(Transaction::getTransactionDate,
@@ -286,15 +290,21 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if (type == null) {
             return List.of();
         }
+        ReconciliationBatch batch = requireBatch(item.getBatchId());
         BillChannel channel = BillChannel.of(item.getChannel());
         LocalDate date = item.getTradeDate();
-        List<Transaction> txs = transactionMapper.selectList(new LambdaQueryWrapper<Transaction>()
+        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<Transaction>()
                 .eq(Transaction::getType, type)
                 .ge(Transaction::getTransactionDate, date.minusDays(3))
-                .le(Transaction::getTransactionDate, date.plusDays(3)));
+                .le(Transaction::getTransactionDate, date.plusDays(3));
+        // 招行账单会限定信用卡账户，手工候选也必须收窄到同一账户，避免跨账户误配
+        if (batch.getAccountId() != null) {
+            query.eq(Transaction::getAccountId, batch.getAccountId());
+        }
+        List<Transaction> txs = transactionMapper.selectList(query);
         LocalDateTime target = itemTime(item);
         List<Transaction> filtered = txs.stream()
-                .filter(tx -> !Boolean.TRUE.equals(tx.getReconciled()))
+                .filter(tx -> channel == null || reconcilableWith(tx, channel))
                 .filter(tx -> channel == null || channel.matches(extChannel(tx), tx.getNote()))
                 // 只展示金额接近或时间接近的流水，避免把无关交易排进候选
                 .filter(tx -> withinReasonableCandidate(tx, item, target))
@@ -317,16 +327,21 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if (tx == null) {
             throw new BizException(ErrorCode.TRANSACTION_NOT_FOUND);
         }
+        BillChannel itemChannel = BillChannel.of(item.getChannel());
+        BillChannel txChannel = BillChannel.of(tx.getReconcileChannel());
         if (Boolean.TRUE.equals(tx.getReconciled())
-                && !Objects.equals(tx.getId(), item.getMatchTransactionId())) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "该流水已被对账，请先取消原对账");
+                && !Objects.equals(tx.getId(), item.getMatchTransactionId())
+                && (txChannel == null || txChannel == itemChannel)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "该流水已在本渠道对账，请先取消原对账");
         }
-        long usedByOthers = itemMapper.selectCount(new LambdaQueryWrapper<ReconciliationItem>()
+        // 同一渠道内一笔流水只能匹配一条账单；跨渠道（支付宝/信用卡）允许同时核对
+        List<ReconciliationItem> usedByOthers = itemMapper.selectList(new LambdaQueryWrapper<ReconciliationItem>()
                 .eq(ReconciliationItem::getMatchTransactionId, transactionId)
                 .eq(ReconciliationItem::getMatchStatus, ReconcileConstants.STATUS_MATCHED)
                 .ne(ReconciliationItem::getId, itemId));
-        if (usedByOthers > 0) {
-            throw new BizException(ErrorCode.PARAM_ERROR, "该流水已匹配其他账单行");
+        if (usedByOthers.stream().anyMatch(other ->
+                Objects.equals(other.getChannel(), item.getChannel()))) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "该流水已匹配本渠道的其他账单行");
         }
 
         Long previousTxId = item.getMatchTransactionId();
@@ -485,10 +500,19 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     @Transactional
     public void deleteBatch(Long batchId) {
         ReconciliationBatch batch = requireBatch(batchId);
-        transactionMapper.clearReconciledByBatch(batchId);
+        List<Long> linkedTxIds = itemMapper.selectList(new LambdaQueryWrapper<ReconciliationItem>()
+                        .eq(ReconciliationItem::getBatchId, batchId)
+                        .eq(ReconciliationItem::getMatchStatus, ReconcileConstants.STATUS_MATCHED)
+                        .isNotNull(ReconciliationItem::getMatchTransactionId))
+                .stream().map(ReconciliationItem::getMatchTransactionId)
+                .filter(Objects::nonNull).distinct().toList();
         itemMapper.delete(new LambdaQueryWrapper<ReconciliationItem>()
                 .eq(ReconciliationItem::getBatchId, batchId));
         batchMapper.deleteById(batchId);
+        // 只清理没有其它渠道账单行引用的流水，避免误删交叉核对标记
+        for (Long txId : linkedTxIds) {
+            clearTransactionIfUnreferenced(txId);
+        }
         log.info("Deleted reconciliation batch {} ({})", batchId, batch.getChannel());
     }
 
@@ -560,8 +584,14 @@ public class ReconciliationServiceImpl implements ReconciliationService {
                 if (tx != null) {
                     Map<String, Object> ext = extCache.computeIfAbsent(tx.getId(),
                             id -> parseExtFields(tx.getExtFields()));
-                    ext.putAll(billExtFields(item));
-                    transactionMapper.markReconciled(tx.getId(), item.getChannel(), batchId, writeJson(ext));
+                    mergeBillExtFields(ext, item);
+                    if (canMark(tx, item)) {
+                        transactionMapper.markReconciled(tx.getId(), item.getChannel(), batchId,
+                                writeJson(ext));
+                    } else {
+                        // 已被其它渠道对账：只补充本渠道的扩展字段，保留原有对账标记
+                        transactionMapper.updateExtFields(tx.getId(), writeJson(ext));
+                    }
                 }
             } else if (ReconcileConstants.STATUS_IGNORED.equals(match.status())) {
                 item.setMatchType(null);
@@ -582,8 +612,60 @@ public class ReconciliationServiceImpl implements ReconciliationService {
 
     private void markTransaction(Transaction tx, ReconciliationItem item, Long batchId) {
         Map<String, Object> ext = parseExtFields(tx.getExtFields());
-        ext.putAll(billExtFields(item));
-        transactionMapper.markReconciled(tx.getId(), item.getChannel(), batchId, writeJson(ext));
+        mergeBillExtFields(ext, item);
+        if (canMark(tx, item)) {
+            transactionMapper.markReconciled(tx.getId(), item.getChannel(), batchId, writeJson(ext));
+        } else {
+            transactionMapper.updateExtFields(tx.getId(), writeJson(ext));
+        }
+    }
+
+    /** 同一渠道的旧扩展字段先清掉再写入，避免重复导入/重匹配累积过期键 */
+    private void mergeBillExtFields(Map<String, Object> target, ReconciliationItem item) {
+        String prefix = extPrefix(item.getChannel());
+        target.keySet().removeIf(key -> key.startsWith(prefix));
+        target.putAll(billExtFields(item));
+    }
+
+    private String extPrefix(String channel) {
+        return switch (channel == null ? "" : channel) {
+            case "ALIPAY" -> "支付宝";
+            case "WECHAT" -> "微信";
+            case "CMB_DEBIT" -> "招行储蓄卡";
+            case "CMB_CREDIT" -> "招行信用卡";
+            case "CMB" -> "招行";
+            default -> channel;
+        };
+    }
+
+    /**
+     * 一笔流水可以被多个渠道的账单同时核对（支付宝账单 + 信用卡账单）。
+     * 交易表只有一组对账字段，保留最先写入的渠道；跨渠道只记在账单明细上，
+     * 不覆盖交易本身的对账标记。
+     */
+    private boolean canMark(Transaction tx, ReconciliationItem item) {
+        if (!Boolean.TRUE.equals(tx.getReconciled())) {
+            return true;
+        }
+        BillChannel existing = BillChannel.of(tx.getReconcileChannel());
+        return existing == null || Objects.equals(existing.name(), item.getChannel());
+    }
+
+    /** 信用卡账单只覆盖消费与退款；还款/转账流水不算「流水有账单无」 */
+    private boolean channelCoversTransaction(BillChannel channel, Transaction tx) {
+        if (channel == BillChannel.CMB_CREDIT) {
+            return tx.getType() != null && (tx.getType() == 1 || tx.getType() == 4);
+        }
+        return true;
+    }
+
+    /** 流水是否还能作为当前渠道的候选：同渠道已对账的排除，其它渠道的保留作交叉核对 */
+    private boolean reconcilableWith(Transaction tx, BillChannel channel) {
+        if (!Boolean.TRUE.equals(tx.getReconciled())) {
+            return true;
+        }
+        BillChannel existing = BillChannel.of(tx.getReconcileChannel());
+        return existing != null && existing != channel;
     }
 
     private void clearTransactionIfUnreferenced(Long txId) {
@@ -756,12 +838,10 @@ public class ReconciliationServiceImpl implements ReconciliationService {
     }
 
     private Map<String, Object> billExtFields(ReconciliationItem item) {
-        String prefix = switch (item.getChannel() == null ? "" : item.getChannel()) {
-            case "ALIPAY" -> "支付宝";
-            case "WECHAT" -> "微信";
-            case "CMB" -> "招行";
-            default -> item.getChannel();
-        };
+        if ("CMB_CREDIT".equals(item.getChannel())) {
+            return cmbCreditExtFields(item);
+        }
+        String prefix = extPrefix(item.getChannel());
         Map<String, Object> ext = new LinkedHashMap<>();
         putIfText(ext, prefix + "交易号", item.getBillNo());
         putIfText(ext, prefix + "商家订单号", item.getMerchantOrderNo());
@@ -780,6 +860,30 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             ext.put(prefix + "成功退款", item.getRefunded());
         }
         putIfText(ext, prefix + "备注", item.getRemark());
+        return ext;
+    }
+
+    /** 信用卡账单能提供的额外信息：卡号、交易日/记账日、摘要、账单分类、交易地金额 */
+    private Map<String, Object> cmbCreditExtFields(ReconciliationItem item) {
+        Map<String, String> raw = parseStringMap(item.getRawJson());
+        Map<String, Object> ext = new LinkedHashMap<>();
+        putIfText(ext, "招行信用卡卡号末四位", raw.get("卡号末四位"));
+        putIfText(ext, "招行信用卡交易日", raw.get("交易日"));
+        putIfText(ext, "招行信用卡记账日", raw.get("记账日"));
+        putIfText(ext, "招行信用卡交易摘要", item.getCounterparty());
+        putIfText(ext, "招行信用卡账单分类", item.getOrderType());
+        String original = raw.get("交易地金额");
+        String currency = raw.get("交易地币种");
+        if (original != null && !original.isBlank()) {
+            String suffix = switch (currency == null ? "" : currency.toUpperCase(java.util.Locale.ROOT)) {
+                case "", "CN", "CNY" -> " CNY";
+                case "HK", "HKD" -> " HKD";
+                case "US", "USD" -> " USD";
+                default -> " " + currency;
+            };
+            ext.put("招行信用卡交易地金额", original + suffix);
+        }
+        putIfText(ext, "招行信用卡账单来源", item.getSource());
         return ext;
     }
 

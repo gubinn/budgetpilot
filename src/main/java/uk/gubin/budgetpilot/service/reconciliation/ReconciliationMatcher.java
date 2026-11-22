@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -50,10 +51,14 @@ public class ReconciliationMatcher {
     public record ItemMatch(Long itemId, String status, String matchType, Long transactionId) {
     }
 
-    private record Candidate(long diffSeconds, Transaction transaction) {
+    private record Candidate(long diffSeconds, int merchantScore, Transaction transaction) {
     }
 
     private record Pair(long diffSeconds, Long itemId, Long transactionId) {
+    }
+
+    /** 账单只有日期没有时分秒时的候选对，商户相似度优先、日期差其次 */
+    private record DatePair(int merchantScore, long diffSeconds, Long itemId, Long transactionId) {
     }
 
     public List<ItemMatch> match(List<ReconciliationItem> items,
@@ -61,9 +66,13 @@ public class ReconciliationMatcher {
                                  BillChannel channel) {
         Map<Long, Transaction> txById = new LinkedHashMap<>();
         for (Transaction tx : transactions) {
-            // 已被其它批次对过账的流水不再自动匹配，避免重复挂账
+            // 同一渠道已对过账的流水跳过；被其它渠道对过账的仍可作为交叉证据匹配
+            // （例如支付宝账单和信用卡账单都会出现同一笔信用卡消费）
             if (Boolean.TRUE.equals(tx.getReconciled())) {
-                continue;
+                BillChannel existing = BillChannel.of(tx.getReconcileChannel());
+                if (existing == null || existing == channel) {
+                    continue;
+                }
             }
             if (channel.matches(extChannel(tx), tx.getNote())) {
                 txById.put(tx.getId(), tx);
@@ -74,6 +83,7 @@ public class ReconciliationMatcher {
         Map<Long, List<Candidate>> candidatesByItem = new HashMap<>();
         Set<Long> ambiguous = new HashSet<>();
         List<Pair> pairs = new ArrayList<>();
+        List<DatePair> datePairs = new ArrayList<>();
         List<ItemMatch> result = new ArrayList<>();
 
         for (ReconciliationItem item : items) {
@@ -101,14 +111,24 @@ public class ReconciliationMatcher {
                 result.add(new ItemMatch(item.getId(), ReconcileConstants.STATUS_UNMATCHED, null, null));
                 continue;
             }
-            List<Candidate> candidates = collectCandidates(item, txType, txById.values());
+            boolean timed = hasTime(item);
+            List<Candidate> candidates = collectCandidates(item, txType, txById.values(), timed);
             candidatesByItem.put(item.getId(), candidates);
-            if (candidates.size() >= 2
-                    && candidates.get(1).diffSeconds() - candidates.get(0).diffSeconds() <= AMBIGUOUS_GAP_SECONDS) {
-                ambiguous.add(item.getId());
-            } else if (!candidates.isEmpty()) {
-                Candidate best = candidates.get(0);
-                pairs.add(new Pair(best.diffSeconds(), item.getId(), best.transaction().getId()));
+            if (timed) {
+                if (candidates.size() >= 2
+                        && candidates.get(1).diffSeconds() - candidates.get(0).diffSeconds() <= AMBIGUOUS_GAP_SECONDS) {
+                    ambiguous.add(item.getId());
+                } else if (!candidates.isEmpty()) {
+                    Candidate best = candidates.get(0);
+                    pairs.add(new Pair(best.diffSeconds(), item.getId(), best.transaction().getId()));
+                }
+            } else {
+                // 信用卡账单没有时分秒：把所有候选都放进去做全局一对一分配，
+                // 否则同一天同金额的多笔消费会抢同一个候选，其余全部落到人工处理
+                for (Candidate candidate : candidates) {
+                    datePairs.add(new DatePair(candidate.merchantScore(), candidate.diffSeconds(),
+                            item.getId(), candidate.transaction().getId()));
+                }
             }
         }
 
@@ -120,6 +140,17 @@ public class ReconciliationMatcher {
                 continue;
             }
             assigned.put(pair.itemId(), pair);
+            usedTx.add(pair.transactionId());
+        }
+
+        // 按日匹配：商户摘要更接近的先占，再按日期/时间距离分配
+        datePairs.sort(Comparator.comparingInt(DatePair::merchantScore).reversed()
+                .thenComparingLong(DatePair::diffSeconds));
+        for (DatePair pair : datePairs) {
+            if (assigned.containsKey(pair.itemId()) || usedTx.contains(pair.transactionId())) {
+                continue;
+            }
+            assigned.put(pair.itemId(), new Pair(pair.diffSeconds(), pair.itemId(), pair.transactionId()));
             usedTx.add(pair.transactionId());
         }
 
@@ -236,8 +267,9 @@ public class ReconciliationMatcher {
     }
 
     private List<Candidate> collectCandidates(ReconciliationItem item, Integer txType,
-                                              Iterable<Transaction> transactions) {
+                                              Iterable<Transaction> transactions, boolean timed) {
         LocalDateTime itemTime = itemTime(item);
+        LocalDate itemDate = item.getTradeDate() != null ? item.getTradeDate() : itemTime.toLocalDate();
         List<Candidate> candidates = new ArrayList<>();
         for (Transaction tx : transactions) {
             if (!Objects.equals(tx.getType(), txType)) {
@@ -248,17 +280,65 @@ public class ReconciliationMatcher {
                 continue;
             }
             LocalDateTime txTime = txDateTime(tx);
-            // 允许跨日 1 天，但实际时间差仍要落在 10 分钟内
-            if (Math.abs(ChronoUnit.DAYS.between(itemTime.toLocalDate(), txTime.toLocalDate())) > 1) {
+            long dayDiff = Math.abs(ChronoUnit.DAYS.between(itemDate, txTime.toLocalDate()));
+            if (dayDiff > 1) {
                 continue;
             }
-            long diff = Math.abs(ChronoUnit.SECONDS.between(itemTime, txTime));
-            if (diff <= MATCH_WINDOW_SECONDS) {
-                candidates.add(new Candidate(diff, tx));
+            if (timed) {
+                // 有付款时间的账单（支付宝/微信）仍要求 10 分钟内
+                long diff = Math.abs(ChronoUnit.SECONDS.between(itemTime, txTime));
+                if (diff <= MATCH_WINDOW_SECONDS) {
+                    candidates.add(new Candidate(diff, 0, tx));
+                }
+            } else {
+                // 只有交易日的账单（招行信用卡）按整日匹配，跨日最多 1 天；
+                // 同金额同日多笔时用商户摘要相似度决定优先顺序
+                long timeOffset = Math.abs(ChronoUnit.SECONDS.between(
+                        txTime.toLocalDate().atTime(LocalTime.NOON), txTime));
+                long diff = dayDiff * 172_800L + timeOffset;
+                candidates.add(new Candidate(diff, merchantScore(item, tx), tx));
             }
         }
-        candidates.sort(Comparator.comparingLong(Candidate::diffSeconds));
+        if (timed) {
+            candidates.sort(Comparator.comparingLong(Candidate::diffSeconds));
+        } else {
+            candidates.sort(Comparator.comparingInt(Candidate::merchantScore).reversed()
+                    .thenComparingLong(Candidate::diffSeconds));
+        }
         return candidates;
+    }
+
+    private boolean hasTime(ReconciliationItem item) {
+        return item.getPaidTime() != null || item.getCreatedTime() != null;
+    }
+
+    /**
+     * 账单摘要与流水备注的相似度。
+     * 邮件记账的备注形如「12:34:56 CNY 10.00 尾号1234 消费 商户名称…」，
+     * 账单摘要直接包含在里面；摘要被 PDF 截断时也仍然是被包含的前缀。
+     */
+    private int merchantScore(ReconciliationItem item, Transaction tx) {
+        String bill = normalizeText(item.getCounterparty());
+        if (bill.isEmpty()) {
+            return 0;
+        }
+        String note = normalizeText(tx.getNote());
+        if (note.isEmpty()) {
+            return 0;
+        }
+        if (note.contains(bill)) {
+            return 1000 + Math.min(bill.length(), 900);
+        }
+        for (int len = Math.min(bill.length(), 30); len >= 4; len -= 2) {
+            if (note.contains(bill.substring(0, len))) {
+                return len;
+            }
+        }
+        return 0;
+    }
+
+    private String normalizeText(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", "").toLowerCase(Locale.ROOT);
     }
 
     private Integer txType(ReconciliationItem item) {

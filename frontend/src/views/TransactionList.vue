@@ -40,6 +40,7 @@
       :data="transactions"
       :loading="loading"
       :pagination="pagination"
+      :row-key="row => row.id"
       :scroll-x="1100"
       @update:page="onPageChange"
       @update:page-size="onSizeChange"
@@ -205,7 +206,10 @@ const pagination = ref({
 
 const typeLabels = { 1: '支出', 2: '收入', 3: '转账', 4: '退款' }
 const typeTagTypes = { 1: 'error', 2: 'success', 3: 'info', 4: 'warning' }
-const channelLabels = { ALIPAY: '支付宝', WECHAT: '微信', CMB: '招行' }
+const channelLabels = {
+  ALIPAY: '支付宝', WECHAT: '微信',
+  CMB: '招行储蓄卡', CMB_DEBIT: '招行储蓄卡', CMB_CREDIT: '招行信用卡'
+}
 function channelLabel(channel) {
   return channelLabels[channel] || channel
 }
