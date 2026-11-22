@@ -277,7 +277,7 @@ class TransactionServiceTest {
         }
 
         @Test
-        @DisplayName("跨月修改交易日期 - 旧月退回、新月加上 budget spent")
+        @DisplayName("跨月修改交易日期 - 旧月、新月按交易事实重算 budget spent")
         void updateTransaction_CrossMonthBudgetAdjustment() {
             Transaction existing = new Transaction();
             existing.setId(100L);
@@ -301,10 +301,9 @@ class TransactionServiceTest {
 
             transactionService.update(100L, dto);
 
-            // 验证预算调整：3月退回
-            verify(budgetService).updateItemSpent(eq(10L), eq("2026-03"), eq(new BigDecimal("-100")));
-            // 验证预算调整：4月加上
-            verify(budgetService).updateItemSpent(eq(10L), eq("2026-04"), eq(new BigDecimal("100")));
+            // 验证预算重算：旧月和新月都按交易事实重算，避免增量重复
+            verify(budgetService).recalculateItemSpent(eq(10L), eq("2026-03"));
+            verify(budgetService).recalculateItemSpent(eq(10L), eq("2026-04"));
         }
 
         @Test
@@ -333,6 +332,7 @@ class TransactionServiceTest {
 
             // 不应调用预算调整
             verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
+            verify(budgetService, never()).recalculateItemSpent(anyLong(), anyString());
         }
 
         @Test
@@ -360,6 +360,7 @@ class TransactionServiceTest {
             transactionService.update(100L, dto);
 
             verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
+            verify(budgetService, never()).recalculateItemSpent(anyLong(), anyString());
         }
 
         @Test
@@ -388,6 +389,7 @@ class TransactionServiceTest {
 
             // type=2（收入）不会触发预算 spent 调整（只有支出 type=1 才影响预算）
             verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
+            verify(budgetService, never()).recalculateItemSpent(anyLong(), anyString());
         }
     }
 

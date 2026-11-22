@@ -89,6 +89,7 @@
 import { ref, h, onMounted, computed } from 'vue'
 import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { accountApi } from '@/api'
+import { formatNum } from '@/utils/display'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -318,10 +319,6 @@ function resetForm() {
   editingId.value = null
   extFieldsList.value = []
   form.value = { name: '', type: 2, currency: 'CNY', currentBalance: 0, creditLimit: null, billingDay: null, paymentDay: null, sortOrder: 0, extFields: {} }
-}
-
-function formatNum(n) {
-  return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
 onMounted(loadData)

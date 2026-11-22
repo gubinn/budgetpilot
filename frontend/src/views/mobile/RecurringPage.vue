@@ -110,6 +110,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import { recurringApi, accountApi, categoryApi, systemApi, merchantApi } from '@/api'
 import { AddOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
+import { formatNum } from '@/utils/display'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -147,8 +148,6 @@ const maxExecuteDay = computed(() => createForm.value.frequency === 'WEEKLY' ? 7
 const executeDayHint = computed(() => createForm.value.frequency === 'WEEKLY' ? '周一=1, 周日=7' : '1-28日')
 
 function frequencyLabel(f) { return { DAILY: '每天', WEEKLY: '每周', MONTHLY: '每月', YEARLY: '每年' }[f] || f }
-function formatNum(n) { return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }
-
 async function loadRules() {
   try {
     const res = await recurringApi.list()

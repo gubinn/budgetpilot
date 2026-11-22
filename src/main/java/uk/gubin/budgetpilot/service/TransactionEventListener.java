@@ -64,8 +64,10 @@ public class TransactionEventListener {
             return;
         }
 
-        // 1. 更新预算已消费（预算可能设在父分类或子分类，由 service 沿分类链命中）
-        if (tx.getCategoryId() != null) {
+        // 1. 更新预算已消费（预算可能设在父分类或子分类，由 service 沿分类链命中）。
+        //    编辑交易涉及旧/新分类、旧/新月，无法用单一增量表达；
+        //    TransactionServiceImpl.update() 已按交易事实重算两侧，这里只处理新建。
+        if (event.getAction() == TransactionEvent.Action.CREATE && tx.getCategoryId() != null) {
             budgetService.updateItemSpent(tx.getCategoryId(), yearMonth, delta);
         }
 
@@ -127,7 +129,9 @@ public class TransactionEventListener {
             var item = budgetService.getItem(tx.getCategoryId(), yearMonth);
             if (item == null || item.getAmount().compareTo(BigDecimal.ZERO) == 0) return false;
 
-            BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, RoundingMode.HALF_UP)
+            // 以交易事实实时汇总，避免依赖 denormalized spent 的增量维护。
+            BigDecimal spent = budgetService.getCategorySpent(tx.getCategoryId(), yearMonth);
+            BigDecimal pct = spent.divide(item.getAmount(), 4, RoundingMode.HALF_UP)
                     .multiply(BigDecimal.valueOf(100));
             return pct.compareTo(BigDecimal.valueOf(threshold)) >= 0;
         } catch (Exception e) {
@@ -167,7 +171,8 @@ public class TransactionEventListener {
                 var item = tx.getCategoryId() != null
                         ? budgetService.getItem(tx.getCategoryId(), yearMonth) : null;
                 if (item != null && item.getAmount().compareTo(BigDecimal.ZERO) > 0) {
-                    BigDecimal pct = item.getSpent().divide(item.getAmount(), 4, BigDecimal.ROUND_HALF_UP)
+                    BigDecimal spent = budgetService.getCategorySpent(tx.getCategoryId(), yearMonth);
+                    BigDecimal pct = spent.divide(item.getAmount(), 4, BigDecimal.ROUND_HALF_UP)
                             .multiply(BigDecimal.valueOf(100)).setScale(0, BigDecimal.ROUND_HALF_UP);
                     content = String.format("""
                             📊 预算预警
@@ -181,8 +186,8 @@ public class TransactionEventListener {
                             _%s_
                             """,
                             pct, item.getAmount().toPlainString(),
-                            item.getSpent().toPlainString(),
-                            item.getAmount().subtract(item.getSpent()).toPlainString(),
+                            spent.toPlainString(),
+                            item.getAmount().subtract(spent).toPlainString(),
                             LocalDate.now());
                 } else {
                     content = "预算阈值预警已触发\n\n━━━━━━━━━━━━━\n_" + LocalDate.now() + "_";

@@ -92,6 +92,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi, merchantApi } from '@/api'
+import { filterTreeByType, toCascaderOption } from '@/utils/categoryTree'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -153,19 +154,11 @@ const merchantOptions = ref([])
 const merchantLoading = ref(false)
 const merchantSearchTimer = ref(null)
 
-// 根据交易类型筛选分类（保持树形结构）
+// 根据交易类型筛选分类（保持树形结构；混合类型父分类只保留匹配的子分类）
 const categoryTree = computed(() => {
   const categoryType = form.value.type === 4 ? 1 : form.value.type
-  return allCategoryTree.value.filter(c => c.type === categoryType).map(toCascaderOption)
+  return filterTreeByType(allCategoryTree.value, categoryType).map(toCascaderOption)
 })
-
-function toCascaderOption(c) {
-  const opt = { label: c.name, value: c.id }
-  if (c.children?.length) {
-    opt.children = c.children.map(toCascaderOption)
-  }
-  return opt
-}
 
 // 类型变化时清空分类选择
 watch(() => form.value.type, () => {

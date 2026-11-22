@@ -11,6 +11,7 @@ import uk.gubin.budgetpilot.entity.Transaction;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 public interface TransactionMapper extends BaseMapper<Transaction> {
 
@@ -48,4 +49,19 @@ public interface TransactionMapper extends BaseMapper<Transaction> {
 
     @Update("UPDATE t_transaction SET category_id = #{targetId} WHERE category_id = #{sourceId}")
     int reassignCategory(@Param("sourceId") Long sourceId, @Param("targetId") Long targetId);
+
+    /**
+     * 日/周/月消费汇总下推到数据库，避免把整段交易拉回 Java 再求和。
+     * 返回列：totalSpent / cnt。
+     */
+    @Select("SELECT COALESCE(SUM(amount_base), 0) AS totalSpent, COUNT(*) AS cnt " +
+            "FROM t_transaction WHERE type = 1 AND is_confirmed = 1 " +
+            "AND transaction_date = #{date}")
+    Map<String, Object> sumDailyExpense(@Param("date") LocalDate date);
+
+    @Select("SELECT COALESCE(SUM(amount_base), 0) AS totalSpent, COUNT(*) AS cnt " +
+            "FROM t_transaction WHERE type = 1 AND is_confirmed = 1 " +
+            "AND transaction_date BETWEEN #{start} AND #{end}")
+    Map<String, Object> sumExpenseBetween(@Param("start") LocalDate start,
+                                          @Param("end") LocalDate end);
 }

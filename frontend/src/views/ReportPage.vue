@@ -107,6 +107,7 @@ import { useMessage } from 'naive-ui'
 import { reportApi, transactionApi } from '@/api'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
+import { formatNum } from '@/utils/display'
 
 const message = useMessage()
 const selectedMonth = ref(dayjs().format('YYYY-MM'))
@@ -349,10 +350,6 @@ async function loadAll() {
 
 function categoryLabel(c) {
   return c.parentName ? `${c.parentName}/${c.categoryName}` : c.categoryName
-}
-
-function formatNum(n) {
-  return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
 }
 
 function handleResize() {

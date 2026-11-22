@@ -91,6 +91,7 @@ import { useRouter } from 'vue-router'
 import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
 import dayjs from 'dayjs'
+import { formatNum } from '@/utils/display'
 
 const router = useRouter()
 const dialog = useDialog()
@@ -138,17 +139,15 @@ const reviewSubmitting = ref(false)
 const reviewActions = computed(() => {
   if (reviewRow.value?.type === 2) {
     return [
-      { value: 'COLLECT_LOAN', label: '收回借款（别人还我，不计收入）' },
-      { value: 'LOAN_IN', label: '借入（我向别人借，不计收入）' },
-      { value: 'SELF_IN', label: '本人账户转入（不计收入）' },
+      { value: 'COLLECT_LOAN', label: '收回借出款（别人还我，不计收入）' },
+      { value: 'LOAN_IN', label: '借入款（我向别人借，不计收入）' },
       { value: 'INCOME', label: '实际收入（选择收入分类）' },
       { value: 'KEEP', label: '保持待复核' }
     ]
   }
   return [
-    { value: 'LOAN_OUT', label: '借出（我借给别人，不计收支）' },
-    { value: 'REPAY_LOAN', label: '归还借款（我还别人，不计收支）' },
-    { value: 'SELF_OUT', label: '本人账户转出（不计收支）' },
+    { value: 'LOAN_OUT', label: '借出款（我借给别人，不计收支）' },
+    { value: 'REPAY_LOAN', label: '归还借入款（我还别人，不计收支）' },
     { value: 'EXPENSE', label: '实际支出（选择支出分类）' },
     { value: 'KEEP', label: '保持待复核' }
   ]
@@ -170,12 +169,10 @@ const reviewCategoryOptions = computed(() => {
 })
 
 const REVIEW_CATEGORY_PATHS = {
-  LOAN_OUT: '往来款/借出',
-  REPAY_LOAN: '往来款/还款',
-  SELF_OUT: '往来款/本人转出',
-  COLLECT_LOAN: '往来款收入/收回借款',
-  LOAN_IN: '往来款收入/借入',
-  SELF_IN: '往来款收入/本人转入'
+  LOAN_OUT: '往来款/借出款',
+  REPAY_LOAN: '往来款/归还借入款',
+  COLLECT_LOAN: '往来款/收回借出款',
+  LOAN_IN: '往来款/借入款'
 }
 
 function findCategoryByPath(path) {
@@ -424,11 +421,6 @@ function handleDelete(id) {
       }
     }
   })
-}
-
-function formatNum(n) {
-  if (n == null) return '0.00'
-  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 onMounted(async () => {

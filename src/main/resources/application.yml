@@ -36,7 +36,14 @@ mybatis-plus:
       logic-not-delete-value: 0
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 生产环境不要把 SQL 和结果行打到 stdout：日志量会膨胀到每天数十万行。
+    # 需要排查时把 uk.gubin.budgetpilot.mapper 调到 DEBUG 即可。
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    root: INFO
+    uk.gubin.budgetpilot.mapper: WARN
 
 sa-token:
   token-name: Authorization

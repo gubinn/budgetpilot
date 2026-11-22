@@ -161,7 +161,7 @@ public class DataInitializer {
             parentIdMap.put(row[0], cat.getId());
         }
 
-        // 往来款/借出：不计日常收支，用于待复核的对外转账
+        // 往来款：借贷/代付，不计日常收支；一个父分类下同时挂支出和收入子分类
         Category loanParent = new Category();
         loanParent.setUserId(0L);
         loanParent.setParentId(0L);
@@ -177,49 +177,19 @@ public class DataInitializer {
         categoryMapper.insert(loanParent);
         parentIdMap.put("往来款", loanParent.getId());
 
+        // 名称、排序、类型：借出/归还为支出，收回/借入为收入
         String[][] loanChildren = {
-                {"借出", "1"}, {"还款", "2"}, {"本人转出", "3"},
+                {"借出款", "1", "1"},
+                {"归还借入款", "2", "1"},
+                {"收回借出款", "3", "2"},
+                {"借入款", "4", "2"},
         };
         for (String[] row : loanChildren) {
             Category loan = new Category();
             loan.setUserId(0L);
             loan.setParentId(loanParent.getId());
             loan.setName(row[0]);
-            loan.setType(1);
-            loan.setIcon("transfer");
-            loan.setColor("#95A5A6");
-            loan.setIsSystem(true);
-            loan.setIsActive(true);
-            loan.setSortOrder(Integer.parseInt(row[1]));
-            loan.setBudgetType("NONE");
-            loan.setExcludeFromReports(true);
-            categoryMapper.insert(loan);
-        }
-
-        Category loanIncomeParent = new Category();
-        loanIncomeParent.setUserId(0L);
-        loanIncomeParent.setParentId(0L);
-        loanIncomeParent.setName("往来款收入");
-        loanIncomeParent.setType(2);
-        loanIncomeParent.setIcon("transfer");
-        loanIncomeParent.setColor("#95A5A6");
-        loanIncomeParent.setIsSystem(true);
-        loanIncomeParent.setIsActive(true);
-        loanIncomeParent.setSortOrder(5);
-        loanIncomeParent.setBudgetType("NONE");
-        loanIncomeParent.setExcludeFromReports(true);
-        categoryMapper.insert(loanIncomeParent);
-        parentIdMap.put("往来款收入", loanIncomeParent.getId());
-
-        String[][] loanIncomeChildren = {
-                {"收回借款", "1"}, {"借入", "2"}, {"本人转入", "3"},
-        };
-        for (String[] row : loanIncomeChildren) {
-            Category loan = new Category();
-            loan.setUserId(0L);
-            loan.setParentId(loanIncomeParent.getId());
-            loan.setName(row[0]);
-            loan.setType(2);
+            loan.setType(Integer.parseInt(row[2]));
             loan.setIcon("transfer");
             loan.setColor("#95A5A6");
             loan.setIsSystem(true);
@@ -300,7 +270,7 @@ public class DataInitializer {
             categoryMapper.insert(sub);
         }
 
-        log.info("Initialized {} system categories", parentIdMap.size() + subCategories.length + 6);
+        log.info("Initialized {} system categories", parentIdMap.size() + subCategories.length + 4);
     }
 
     /**

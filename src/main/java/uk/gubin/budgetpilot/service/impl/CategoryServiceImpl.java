@@ -108,9 +108,6 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     public List<CategoryVO> getTree(Integer type) {
         LambdaQueryWrapper<Category> query = new LambdaQueryWrapper<>();
         query.eq(Category::getIsActive, true);
-        if (type != null) {
-            query.eq(Category::getType, type);
-        }
         query.orderByAsc(Category::getSortOrder);
 
         List<Category> all = list(query);
@@ -119,6 +116,12 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         detectCircularReference(all);
 
         List<CategoryVO> tree = buildTree(all, 0L);
+        // 分类树允许一个父分类下同时挂支出/收入子分类（如「往来款」）。
+        // 按 type 查询时保留匹配的节点及其祖先容器，剪掉不匹配的兄弟节点。
+        if (type != null) {
+            tree = filterTreeByType(tree, type);
+        }
+
         Map<Long, Long> directCounts = new java.util.HashMap<>();
         for (var stat : transactionMapper.countGroupedByCategory()) {
             directCounts.put(stat.getCategoryId(), stat.getTxCount());
@@ -127,6 +130,21 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
             populateTransactionCount(root, directCounts);
         }
         return tree;
+    }
+
+    private List<CategoryVO> filterTreeByType(List<CategoryVO> nodes, Integer type) {
+        List<CategoryVO> result = new ArrayList<>();
+        for (CategoryVO node : nodes) {
+            List<CategoryVO> children = node.getChildren() == null
+                    ? new ArrayList<>()
+                    : filterTreeByType(node.getChildren(), type);
+            boolean selfMatches = type.equals(node.getType());
+            if (selfMatches || !children.isEmpty()) {
+                node.setChildren(children);
+                result.add(node);
+            }
+        }
+        return result;
     }
 
     private long populateTransactionCount(CategoryVO vo, Map<Long, Long> directCounts) {

@@ -109,6 +109,7 @@ import { ref, watch, onMounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { budgetApi, annualBudgetApi, categoryApi } from '@/api'
 import dayjs from 'dayjs'
+import { formatNum, getProgressStatus } from '@/utils/display'
 
 const message = useMessage()
 const budgetMode = ref('monthly')
@@ -260,11 +261,6 @@ async function handleCopy() {
 function getStatusType(status) {
   return { EXCEEDED: 'error', WARNING: 'warning', CAUTION: 'warning', NORMAL: 'success' }[status] || 'default'
 }
-function getProgressStatus(status) {
-  return { EXCEEDED: 'error', WARNING: 'warning', CAUTION: 'warning', NORMAL: 'success' }[status] || 'success'
-}
-function formatNum(n) { return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) }
-
 const pctClass = computed(() => {
   if (!budget.value) return ''
   if (budget.value.progressPct > 100) return 'red'

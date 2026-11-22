@@ -51,6 +51,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -309,7 +310,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
                             accountMap.get(t.getAccountId()),
                             category,
                             t.getMerchantId() != null ? merchantMap.get(t.getMerchantId()) : null,
-                            parent);
+                            parent, accountMap);
                 })
                 .collect(Collectors.toList());
 
@@ -337,9 +338,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
         ensureEditable(entity);
 
-        // 记录旧的交易日期和分类，用于跨月预算调整
+        // 记录旧的交易字段，用于预算重算
         LocalDate oldDate = entity.getTransactionDate();
         Long oldCategoryId = entity.getCategoryId();
+        Long oldAccountId = entity.getAccountId();
+        Integer oldType = entity.getType();
+        BigDecimal oldAmount = entity.getAmount();
         boolean wasConfirmed = Boolean.TRUE.equals(entity.getIsConfirmed());
 
         // 只有已确认的交易才需要回滚余额
@@ -410,8 +414,35 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             try { entity.setMetadata(objectMapper.writeValueAsString(dto.getMetadata())); } catch (Exception e) { log.warn("Failed to serialize metadata", e); }
         }
 
-        // 重新计算本位币金额
+        // 校验账户与金额：update 允许改账户/类型，必须和 create 使用同一套规则，
+        // 否则可能把交易改到不存在的账户，或产生缺少目标账户的转账。
         Account account = accountMapper.selectById(entity.getAccountId());
+        if (account == null) {
+            throw new BizException(ErrorCode.ACCOUNT_NOT_FOUND);
+        }
+        // 只改备注/分类时，历史交易所属账户可能已停用，允许继续编辑；
+        // 但把交易改到另一个账户时，目标账户必须是启用状态。
+        boolean accountChanged = !Objects.equals(oldAccountId, entity.getAccountId());
+        if (accountChanged && !account.getIsActive()) {
+            throw new BizException(ErrorCode.ACCOUNT_DISABLED);
+        }
+        if (entity.getType() == 3) {
+            if (entity.getTargetAccountId() == null) {
+                throw new BizException(ErrorCode.TRANSACTION_TARGET_ACCOUNT_REQUIRED);
+            }
+            if (entity.getAccountId().equals(entity.getTargetAccountId())
+                    && entity.getAmount().compareTo(BigDecimal.ZERO) > 0) {
+                throw new BizException(ErrorCode.TRANSACTION_SAME_ACCOUNT);
+            }
+            if (accountMapper.selectById(entity.getTargetAccountId()) == null) {
+                throw new BizException(ErrorCode.ACCOUNT_NOT_FOUND);
+            }
+        } else if (entity.getAmount() != null
+                && entity.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "非转账交易金额必须大于0");
+        }
+
+        // 重新计算本位币金额
         Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         if (category != null && entity.getType() != null && entity.getType() != 3) {
             int expectedCategoryType = entity.getType() == 4 ? 1 : entity.getType();
@@ -461,20 +492,27 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             merchantService.incrementUsage(entity.getMerchantId());
         }
 
-        // 跨月调整预算 spent：旧月退回，新月加上；退款方向相反
-        if (entity.getIsConfirmed() && (entity.getType() == 1 || entity.getType() == 4)) {
-            LocalDate newDate = entity.getTransactionDate();
-            String oldYearMonth = oldDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
-            String newYearMonth = newDate.format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"));
-            if (!oldYearMonth.equals(newYearMonth)) {
-                BigDecimal oldDelta = entity.getType() == 1 ? entity.getAmountBase().negate() : entity.getAmountBase();
-                BigDecimal newDelta = entity.getType() == 1 ? entity.getAmountBase() : entity.getAmountBase().negate();
-                if (oldCategoryId != null) {
-                    budgetService.updateItemSpent(oldCategoryId, oldYearMonth, oldDelta);
-                }
-                if (entity.getCategoryId() != null) {
-                    budgetService.updateItemSpent(entity.getCategoryId(), newYearMonth, newDelta);
-                }
+        // 预算 spent：编辑可能同时改变金额、分类、月份或类型，增量无法正确表达；
+        // 按交易事实重算旧/新两侧，幂等且不会重复累加。
+        String oldMonth = oldDate != null ? oldDate.format(MONTH_FMT) : null;
+        String newMonth = entity.getTransactionDate() != null
+                ? entity.getTransactionDate().format(MONTH_FMT) : null;
+        boolean budgetRelevantChange = !Objects.equals(oldType, entity.getType())
+                || oldAmount == null || entity.getAmount() == null
+                || oldAmount.compareTo(entity.getAmount()) != 0
+                || !Objects.equals(oldCategoryId, entity.getCategoryId())
+                || !Objects.equals(oldMonth, newMonth);
+        if (budgetRelevantChange) {
+            boolean oldAffectsBudget = wasConfirmed && oldCategoryId != null && oldMonth != null
+                    && oldType != null && (oldType == 1 || oldType == 4);
+            boolean newAffectsBudget = Boolean.TRUE.equals(entity.getIsConfirmed())
+                    && entity.getCategoryId() != null && newMonth != null
+                    && (entity.getType() == 1 || entity.getType() == 4);
+            if (oldAffectsBudget) {
+                budgetService.recalculateItemSpent(oldCategoryId, oldMonth);
+            }
+            if (newAffectsBudget) {
+                budgetService.recalculateItemSpent(entity.getCategoryId(), newMonth);
             }
         }
 
@@ -716,41 +754,46 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
     @Override
     public Map<String, Object> getDailySpent(LocalDate date) {
-        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getType, 1)
-                .eq(Transaction::getIsConfirmed, true)
-                .eq(Transaction::getTransactionDate, date);
-        List<Transaction> txs = baseMapper.selectList(query);
-        BigDecimal total = txs.stream().map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return Map.of("date", date.toString(), "totalSpent", total, "count", txs.size());
+        Map<String, Object> row = baseMapper.sumDailyExpense(date);
+        return Map.of("date", date.toString(), "totalSpent", mapTotal(row), "count", mapCount(row));
     }
 
     @Override
     public Map<String, Object> getMonthlySpent(String yearMonth) {
         LocalDate start = LocalDate.parse(yearMonth + "-01");
         LocalDate end = start.withDayOfMonth(start.lengthOfMonth());
-        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getType, 1)
-                .eq(Transaction::getIsConfirmed, true)
-                .ge(Transaction::getTransactionDate, start)
-                .le(Transaction::getTransactionDate, end);
-        List<Transaction> txs = baseMapper.selectList(query);
-        BigDecimal total = txs.stream().map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return Map.of("month", yearMonth, "totalSpent", total, "count", txs.size());
+        Map<String, Object> row = baseMapper.sumExpenseBetween(start, end);
+        return Map.of("month", yearMonth, "totalSpent", mapTotal(row), "count", mapCount(row));
     }
 
     @Override
     public Map<String, Object> getWeeklySpent(LocalDate date) {
         LocalDate weekStart = date.with(java.time.DayOfWeek.MONDAY);
         LocalDate weekEnd = date.with(java.time.DayOfWeek.SUNDAY);
-        LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
-        query.eq(Transaction::getType, 1)
-                .eq(Transaction::getIsConfirmed, true)
-                .ge(Transaction::getTransactionDate, weekStart)
-                .le(Transaction::getTransactionDate, weekEnd);
-        List<Transaction> txs = baseMapper.selectList(query);
-        BigDecimal total = txs.stream().map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return Map.of("weekStart", weekStart.toString(), "totalSpent", total, "count", txs.size());
+        Map<String, Object> row = baseMapper.sumExpenseBetween(weekStart, weekEnd);
+        return Map.of("weekStart", weekStart.toString(), "totalSpent", mapTotal(row), "count", mapCount(row));
+    }
+
+    private static Object mapValue(Map<String, Object> row, String key) {
+        if (row == null) return null;
+        Object value = row.get(key);
+        if (value != null) return value;
+        return row.entrySet().stream()
+                .filter(e -> key.equalsIgnoreCase(e.getKey()))
+                .map(Map.Entry::getValue)
+                .findFirst().orElse(null);
+    }
+
+    private static BigDecimal mapTotal(Map<String, Object> row) {
+        Object value = mapValue(row, "totalSpent");
+        if (value instanceof BigDecimal b) return b;
+        if (value instanceof Number n) return BigDecimal.valueOf(n.doubleValue());
+        return BigDecimal.ZERO;
+    }
+
+    private static int mapCount(Map<String, Object> row) {
+        Object value = mapValue(row, "cnt");
+        return value instanceof Number n ? n.intValue() : 0;
     }
 
     // ==================== Internal Methods ====================
@@ -844,21 +887,13 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
     }
 
-    private void applyBalance(Transaction entity) {
-        switch (entity.getType()) {
-            case 1 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
-            case 2 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
-            case 4 -> accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount());
-            case 3 -> {
-                accountMapper.adjustBalance(entity.getAccountId(), entity.getAmount().negate());
-                accountMapper.adjustBalance(entity.getTargetAccountId(), entity.getAmount());
-            }
-        }
-    }
-
+    
     private Map<Long, Account> loadAccounts(List<Transaction> transactions) {
+        // 同时加载转出账户和转入账户，避免 toVO 对每行转账再查一次目标账户。
         List<Long> ids = transactions.stream()
-                .map(Transaction::getAccountId).distinct().toList();
+                .flatMap(t -> java.util.stream.Stream.of(t.getAccountId(), t.getTargetAccountId()))
+                .filter(Objects::nonNull)
+                .distinct().toList();
         if (ids.isEmpty()) return Map.of();
         return accountMapper.selectBatchIds(ids).stream()
                 .collect(Collectors.toMap(Account::getId, a -> a));
@@ -970,6 +1005,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
     private TransactionVO toVO(Transaction entity, Account account, Category category,
                                Merchant merchant, Category parentCategory) {
+        return toVO(entity, account, category, merchant, parentCategory, null);
+    }
+
+    private TransactionVO toVO(Transaction entity, Account account, Category category,
+                               Merchant merchant, Category parentCategory,
+                               Map<Long, Account> accountLookup) {
         TransactionVO vo = new TransactionVO();
         vo.setId(entity.getId());
         vo.setExternalId(entity.getExternalId());
@@ -996,7 +1037,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             vo.setAccountName(account.getName());
         }
         if (entity.getTargetAccountId() != null) {
-            Account target = accountMapper.selectById(entity.getTargetAccountId());
+            Account target = accountLookup != null
+                    ? accountLookup.get(entity.getTargetAccountId())
+                    : accountMapper.selectById(entity.getTargetAccountId());
             if (target != null) vo.setTargetAccountName(target.getName());
         }
         if (category != null) {

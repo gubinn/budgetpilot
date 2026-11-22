@@ -107,6 +107,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi, merchantApi } from '@/api'
+import { filterTreeByType, toCascaderOption } from '@/utils/categoryTree'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -154,16 +155,8 @@ const merchantSearchTimer = ref(null)
 
 const categoryTree = computed(() => {
   const categoryType = form.value.type === 4 ? 1 : form.value.type
-  return allCategoryTree.value.filter(c => c.type === categoryType).map(toCascaderOption)
+  return filterTreeByType(allCategoryTree.value, categoryType).map(toCascaderOption)
 })
-
-function toCascaderOption(c) {
-  const opt = { label: c.name, value: c.id }
-  if (c.children?.length) {
-    opt.children = c.children.map(toCascaderOption)
-  }
-  return opt
-}
 
 watch(() => form.value.type, () => {
   if (form.value.categoryId) {

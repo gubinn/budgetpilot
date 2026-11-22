@@ -334,6 +334,52 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
     }
 
     @Override
+    public BigDecimal getCategorySpent(Long categoryId, String yearMonth) {
+        if (categoryId == null || yearMonth == null) return BigDecimal.ZERO;
+        Map<Long, Category> allCategories = loadAllCategories();
+        Category root = allCategories.get(categoryId);
+        if (root == null || !"DAILY".equals(root.getBudgetType())) return BigDecimal.ZERO;
+
+        Set<Long> ids = new LinkedHashSet<>();
+        ids.add(categoryId);
+        collectDescendants(categoryId, "DAILY", allCategories, ids);
+        YearMonth ym = YearMonth.parse(yearMonth);
+        return sumNetExpense(ids, ym.atDay(1), ym.atEndOfMonth());
+    }
+
+    @Override
+    @Transactional
+    public void recalculateItemSpent(Long categoryId, String yearMonth) {
+        if (categoryId == null || yearMonth == null) return;
+        Budget budget = getBudgetByMonth(yearMonth);
+        if (budget == null) return;
+
+        Map<Long, Category> allCategories = loadAllCategories();
+        YearMonth ym = YearMonth.parse(yearMonth);
+        LocalDate start = ym.atDay(1);
+        LocalDate end = ym.atEndOfMonth();
+
+        // 一笔交易可能命中父分类预算或子分类预算，沿分类链逐级重算，幂等。
+        for (Long id : categoryPathIds(categoryId)) {
+            Category itemCategory = allCategories.get(id);
+            if (itemCategory == null || !"DAILY".equals(itemCategory.getBudgetType())) continue;
+            BudgetItem item = budgetItemMapper.selectOne(new LambdaQueryWrapper<BudgetItem>()
+                    .eq(BudgetItem::getBudgetId, budget.getId())
+                    .eq(BudgetItem::getCategoryId, id));
+            if (item == null) continue;
+
+            Set<Long> ids = new LinkedHashSet<>();
+            ids.add(id);
+            collectDescendants(id, "DAILY", allCategories, ids);
+            BigDecimal spent = sumNetExpense(ids, start, end);
+            if (item.getSpent() == null || item.getSpent().compareTo(spent) != 0) {
+                item.setSpent(spent);
+                budgetItemMapper.updateById(item);
+            }
+        }
+    }
+
+    @Override
     public boolean exists(String yearMonth) {
         LambdaQueryWrapper<Budget> query = new LambdaQueryWrapper<>();
         query.eq(Budget::getYearMonth, yearMonth);

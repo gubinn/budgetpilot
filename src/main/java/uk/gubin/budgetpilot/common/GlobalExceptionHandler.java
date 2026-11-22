@@ -21,7 +21,13 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BizException.class)
     public Result<?> handleBizException(BizException e) {
-        log.warn("Business exception: {}", e.getDetailMessage());
+        // “预算未设置”是首页的正常查询结果，不是异常；降为 DEBUG，避免刷满日志。
+        if (e.getErrorCode() == ErrorCode.BUDGET_NOT_FOUND
+                || e.getErrorCode() == ErrorCode.ANNUAL_BUDGET_NOT_FOUND) {
+            log.debug("Business exception: {}", e.getDetailMessage());
+        } else {
+            log.warn("Business exception: {}", e.getDetailMessage());
+        }
         return Result.fail(e.getErrorCode().getCode(), e.getDetailMessage());
     }
 

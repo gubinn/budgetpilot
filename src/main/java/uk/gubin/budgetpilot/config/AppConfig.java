@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
 import cn.dev33.satoken.stp.StpUtil;
+import uk.gubin.budgetpilot.common.TenantContext;
 import net.sf.jsqlparser.expression.Expression;
 import net.sf.jsqlparser.expression.LongValue;
 import org.apache.ibatis.reflection.MetaObject;
@@ -54,6 +55,12 @@ public class AppConfig implements MetaObjectHandler {
                 new TenantLineHandler() {
                     @Override
                     public Expression getTenantId() {
+                        // 定时任务 / 异步线程通过 TenantContext 显式指定租户，
+                        // 否则 MyBatis-Plus 会拼出 user_id = null，查询恒为空。
+                        Long tenant = TenantContext.get();
+                        if (tenant != null) {
+                            return new LongValue(tenant);
+                        }
                         try {
                             long userId = StpUtil.getLoginIdAsLong();
                             return new LongValue(userId);
@@ -90,10 +97,15 @@ public class AppConfig implements MetaObjectHandler {
         this.strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
         // 自动填充当前用户的 userId（仅对存在 userId 字段的实体生效）
         if (metaObject.hasSetter("userId")) {
-            try {
-                this.strictInsertFill(metaObject, "userId", Long.class, StpUtil.getLoginIdAsLong());
-            } catch (Exception e) {
-                // 未登录时不填充（由 SaInterceptor 拦截请求，或 DataInitializer 等内部调用）
+            Long tenant = TenantContext.get();
+            if (tenant != null) {
+                this.strictInsertFill(metaObject, "userId", Long.class, tenant);
+            } else {
+                try {
+                    this.strictInsertFill(metaObject, "userId", Long.class, StpUtil.getLoginIdAsLong());
+                } catch (Exception e) {
+                    // 未登录时不填充（由 SaInterceptor 拦截请求，或 DataInitializer 等内部调用）
+                }
             }
         }
     }
@@ -122,6 +134,34 @@ public class AppConfig implements MetaObjectHandler {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("budget-async-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        // 异步事件（预算更新、预警）发生在请求线程提交之后，
+        // 必须把提交线程的租户复制过去，否则查询会被拼成 user_id = null。
+        executor.setTaskDecorator(runnable -> {
+            Long tenant = TenantContext.get();
+            if (tenant == null) {
+                try {
+                    tenant = StpUtil.getLoginIdAsLong();
+                } catch (Exception ignored) {
+                    // 非登录线程（如定时任务）由 TenantContext 显式设置
+                }
+            }
+            final Long captured = tenant;
+            return () -> {
+                Long previous = TenantContext.get();
+                if (captured != null) {
+                    TenantContext.set(captured);
+                }
+                try {
+                    runnable.run();
+                } finally {
+                    if (previous != null) {
+                        TenantContext.set(previous);
+                    } else {
+                        TenantContext.clear();
+                    }
+                }
+            };
+        });
         executor.initialize();
         return executor;
     }

@@ -144,8 +144,11 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { reportApi, budgetApi, annualBudgetApi, transactionApi, accountApi } from '@/api'
-import * as echarts from 'echarts'
 import dayjs from 'dayjs'
+import { formatNum, getProgressStatus } from '@/utils/display'
+
+// 图表库按需加载，避免首屏下载 1MB 的 echarts
+let echarts = null
 
 const router = useRouter()
 const message = useMessage()
@@ -192,6 +195,7 @@ watch(merchantPieMode, async () => {
 })
 
 onMounted(async () => {
+  echarts = await import('echarts')
   const now = dayjs()
   const month = now.format('YYYY-MM')
 
@@ -320,19 +324,6 @@ function renderMerchantPieChart() {
   merchantPieChart.value.resize()
 }
 
-function getProgressStatus(status) {
-  switch (status) {
-    case 'EXCEEDED': return 'error'
-    case 'WARNING': return 'warning'
-    case 'CAUTION': return 'warning'
-    default: return 'success'
-  }
-}
-
-function formatNum(n) {
-  if (n == null) return '0.00'
-  return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
 </script>
 
 <style scoped>

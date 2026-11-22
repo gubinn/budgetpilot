@@ -101,13 +101,33 @@ const budgetTypeOptions = [
 const budgetTypeLabels = Object.fromEntries(budgetTypeOptions.map(o => [o.value, o.label]))
 
 const parentOptions = computed(() => {
-  const roots = categories.value.filter(c => c.parentId === 0 && c.type === form.value.type)
+  // 混合类型父分类（如「往来款」）在收入/支出两种表单里都要可选
+  const roots = categories.value.filter(c => c.parentId === 0 && (
+    c.type === form.value.type ||
+    categories.value.some(child => child.parentId === c.id && child.type === form.value.type)
+  ))
   return [{ label: '顶级分类', value: 0 }, ...roots.map(c => ({ label: c.name, value: c.id }))]
 })
 
+// 按类型筛选时保留父级容器，避免子分类因为父分类类型不同而消失
+function includeAncestors(list, type) {
+  const byId = new Map(list.map(c => [c.id, c]))
+  const keep = new Set()
+  for (const c of list) {
+    if (c.type !== type) continue
+    keep.add(c.id)
+    let parent = byId.get(c.parentId)
+    while (parent) {
+      keep.add(parent.id)
+      parent = byId.get(parent.parentId)
+    }
+  }
+  return list.filter(c => keep.has(c.id))
+}
+
 const filteredCats = computed(() => {
   const filtered = filterType.value
-    ? categories.value.filter(c => c.type === filterType.value)
+    ? includeAncestors(categories.value, filterType.value)
     : categories.value
   // 排序：父级在前，子级紧跟在父级后面
   const sorted = []

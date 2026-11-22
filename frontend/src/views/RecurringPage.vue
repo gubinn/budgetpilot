@@ -156,6 +156,7 @@ import { useMessage, useDialog } from 'naive-ui'
 import { CheckmarkCircleOutline, AlarmOutline } from '@vicons/ionicons5'
 import { recurringApi, accountApi, categoryApi, systemApi, merchantApi } from '@/api'
 import dayjs from 'dayjs'
+import { formatNum } from '@/utils/display'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -205,10 +206,6 @@ function frequencyLabel(f) {
   return { DAILY: '每天', WEEKLY: '每周', MONTHLY: '每月', YEARLY: '每年' }[f] || f
 }
 
-function formatNum(n) {
-  return n == null ? '0.00' : Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2 })
-}
-
 function buildCategoryTree(list, parentId = 0) {
   return list
     .filter(c => c.parentId === parentId)
@@ -246,6 +243,7 @@ async function loadOptions() {
       })
     }
     flatten(catRes.data || [])
+    categories.value = flatCats
     categories.value = flatCats
     currencies.value = sysRes.data || ['CNY', 'USD', 'EUR']
     merchants.value = merchRes.data || []

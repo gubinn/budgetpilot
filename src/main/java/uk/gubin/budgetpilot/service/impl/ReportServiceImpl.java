@@ -193,6 +193,8 @@ public class ReportServiceImpl implements ReportService {
     public ReportVO trend(int months, Integer type) {
         ReportVO vo = new ReportVO();
         List<ReportVO.TrendItem> trend = new ArrayList<>();
+        // 分类树在循环外加载一次，避免每个月都全表读取分类
+        Map<Long, Category> trendCats = loadCategoryMap();
 
         for (int i = months - 1; i >= 0; i--) {
             YearMonth ym = YearMonth.now().minusMonths(i);
@@ -213,7 +215,6 @@ public class ReportServiceImpl implements ReportService {
 
             List<Transaction> txs = transactionMapper.selectList(query);
 
-            Map<Long, Category> trendCats = loadCategoryMap();
             BigDecimal income = txs.stream().filter(t -> t.getType() == 2)
                     .filter(t -> isReportableIncome(t, trendCats))
                     .map(Transaction::getAmountBase).reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -271,6 +272,7 @@ public class ReportServiceImpl implements ReportService {
         LocalDate end = ym.atEndOfMonth();
 
         List<ReportVO.AccountSummaryItem> items = new ArrayList<>();
+        Map<Long, Category> accountCats = loadCategoryMap();
         for (Account acc : accounts) {
             ReportVO.AccountSummaryItem item = new ReportVO.AccountSummaryItem();
             item.setAccountId(acc.getId());
@@ -284,7 +286,6 @@ public class ReportServiceImpl implements ReportService {
                     .eq(Transaction::getIsConfirmed, true)
                     .eq(Transaction::getReviewStatus, "REVIEWED")
                     .ge(Transaction::getTransactionDate, start).le(Transaction::getTransactionDate, end);
-            Map<Long, Category> accountCats = loadCategoryMap();
             item.setMonthIncome(transactionMapper.selectList(incomeQ).stream()
                     .filter(tx -> isReportableIncome(tx, accountCats))
                     .map(Transaction::getAmountBase)
@@ -537,7 +538,7 @@ public class ReportServiceImpl implements ReportService {
     }
 
     /**
-     * 只统计真实支出分类：排除“往来款/借出”等 budgetType=NONE 的流水。
+     * 只统计真实支出分类：排除“往来款/借出款”等 budgetType=NONE 的流水。
      * 收入分类的 budgetType 也是 NONE，但不会进入支出统计。
      */
     private boolean isReportableExpense(Transaction tx, Map<Long, Category> categories) {
