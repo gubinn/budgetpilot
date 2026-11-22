@@ -579,6 +579,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         BillChannel channel = BillChannel.of(batch.getChannel());
         if (channel != null) {
             List<Transaction> candidates = loadCandidateTransactions(batch);
+            releaseStaleChannelMarkers(candidates, channel);
             List<ReconciliationMatcher.ItemMatch> matches = matcher.match(refreshed, candidates, channel);
             applyMatches(refreshed, candidates, matches, batchId);
         }
@@ -808,6 +809,43 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         }
         // 同渠道的转账可以在两个账户的对账单里各核对一次（转出侧 / 转入侧）
         return Objects.equals(tx.getType(), 3);
+    }
+
+    /**
+     * 跨渠道对账时交易只保留最先写入的渠道标记。若该渠道的账单行已被重新匹配清掉，
+     * 而标记没有释放（因为其它渠道的账单行还引用着这笔流水），本渠道重匹配时会把
+     * 自己的旧标记当成「已对账」而跳过这笔流水，导致大量账单行无故变成待处理。
+     * 重匹配前把这类残留标记释放掉；其它渠道的标记不动。
+     */
+    private void releaseStaleChannelMarkers(List<Transaction> candidates, BillChannel channel) {
+        if (channel == null || candidates.isEmpty()) {
+            return;
+        }
+        List<Transaction> stale = candidates.stream()
+                .filter(tx -> Boolean.TRUE.equals(tx.getReconciled()))
+                .filter(tx -> BillChannel.of(tx.getReconcileChannel()) == channel)
+                .toList();
+        if (stale.isEmpty()) {
+            return;
+        }
+        Set<Long> ids = stale.stream().map(Transaction::getId).collect(Collectors.toSet());
+        Set<Long> referenced = itemMapper.selectList(new LambdaQueryWrapper<ReconciliationItem>()
+                        .in(ReconciliationItem::getMatchTransactionId, ids)
+                        .eq(ReconciliationItem::getMatchStatus, ReconcileConstants.STATUS_MATCHED)
+                        .eq(ReconciliationItem::getChannel, channel.name()))
+                .stream()
+                .map(ReconciliationItem::getMatchTransactionId)
+                .collect(Collectors.toSet());
+        for (Transaction tx : stale) {
+            if (referenced.contains(tx.getId())) {
+                continue;
+            }
+            transactionMapper.clearReconciled(tx.getId());
+            tx.setReconciled(false);
+            tx.setReconcileChannel(null);
+            tx.setReconcileBatchId(null);
+            tx.setReconciledAt(null);
+        }
     }
 
     private void clearTransactionIfUnreferenced(Long txId) {
