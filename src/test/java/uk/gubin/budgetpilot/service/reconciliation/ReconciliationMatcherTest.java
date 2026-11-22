@@ -252,6 +252,25 @@ class ReconciliationMatcherTest {
     }
 
     @Test
+    void matchesWalletTransferToDateOnlyCreatedTransaction() {
+        ReconciliationItem item = item(1L, "2026-01-17 17:37:09", "2.34",
+                ReconcileConstants.DIRECTION_NEUTRAL, "零钱充值", "招商银行(0611)");
+        item.setChannel(BillChannel.WECHAT.name());
+        Transaction tx = tx(10L, 3, "2.34", "2026-01-17", "12:00:00", "快捷支付 示例用户");
+        tx.setExtFields("{\"channel\":\"微信支付\"}");
+        tx.setReconciled(true);
+        tx.setReconcileChannel(BillChannel.CMB_DEBIT.name());
+
+        List<ReconciliationMatcher.ItemMatch> result = matcher.match(
+                List.of(item), List.of(tx), BillChannel.WECHAT);
+
+        assertThat(result).singleElement().satisfies(m -> {
+            assertThat(m.status()).isEqualTo(ReconcileConstants.STATUS_MATCHED);
+            assertThat(m.transactionId()).isEqualTo(10L);
+        });
+    }
+
+    @Test
     void ignoresZeroAmountAuthorizationRows() {
         ReconciliationItem item = item(1L, "2026-10-23 11:55:45", "0.00",
                 ReconcileConstants.DIRECTION_EXPENSE, "支付成功", "拼多多");

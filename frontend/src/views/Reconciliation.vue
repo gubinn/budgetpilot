@@ -8,10 +8,12 @@
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="7" label="账户范围">
             <n-select v-model:value="form.accountId" :options="importAccountOptions" clearable
-                      :placeholder="requiresAccount(form.channel) ? '选择银行账户（必选）' : '全部账户（可限定）'" />
+                      :disabled="form.channel === 'WECHAT'"
+                      :placeholder="form.channel === 'WECHAT' ? '微信账单按支付方式核对，无需限定账户'
+                        : requiresAccount(form.channel) ? '选择银行账户（必选）' : '全部账户（可限定）'" />
           </n-form-item-gi>
           <n-form-item-gi :span="24" :md="7" label="账单文件">
-            <n-upload :default-upload="false" :show-file-list="false" accept=".csv,.pdf"
+            <n-upload :default-upload="false" :show-file-list="false" accept=".csv,.pdf,.xlsx"
                       @change="onFileChange">
               <n-button>{{ fileName || fileButtonText }}</n-button>
             </n-upload>
@@ -35,8 +37,8 @@
         </template>
       </n-alert>
       <n-text depth="3" style="display: block; margin-top: 8px; font-size: 12px">
-        当前支持支付宝「交易记录明细查询」CSV、招商银行信用卡电子账单 PDF、
-        招商银行储蓄卡交易流水 PDF。微信支付账单后续开放。
+        当前支持支付宝「交易记录明细查询」CSV、微信支付「账单流水文件」XLSX、
+        招商银行信用卡电子账单 PDF、招商银行储蓄卡交易流水 PDF。
         账单只用于核对，不会修改交易金额、分类或余额。
       </n-text>
     </n-card>
@@ -221,7 +223,7 @@ const importResult = ref(null)
 
 const channelOptions = [
   { label: '支付宝', value: 'ALIPAY' },
-  { label: '微信支付（后续开放）', value: 'WECHAT', disabled: true },
+  { label: '微信支付', value: 'WECHAT' },
   { label: '招商银行储蓄卡', value: 'CMB_DEBIT' },
   { label: '招商银行信用卡', value: 'CMB_CREDIT' }
 ]
@@ -244,10 +246,16 @@ const importAccountOptions = computed(() => {
 const fileButtonText = computed(() => {
   if (form.value.channel === 'CMB_DEBIT') return '选择储蓄卡流水 PDF'
   if (form.value.channel === 'CMB_CREDIT') return '选择信用卡账单 PDF'
+  if (form.value.channel === 'WECHAT') return '选择微信支付账单 XLSX'
   return '选择支付宝账单 CSV'
 })
 
 watch(() => form.value.channel, (channel) => {
+  if (channel === 'WECHAT') {
+    // 微信账单里每笔的支付方式不同，限定单一账户会漏掉其它卡
+    form.value.accountId = null
+    return
+  }
   const type = bankAccountType(channel)
   if (type !== null) {
     const current = accounts.value.find(a => a.id === form.value.accountId)
@@ -460,7 +468,9 @@ const candidateColumns = [
   }
 ]
 
-const isTransfer = (row) => (row?.tradeStatus || '').includes('转账')
+const transferStatusKeywords = ['转账', '零钱充值', '零钱提现']
+const isTransfer = (row) =>
+  transferStatusKeywords.some(keyword => (row?.tradeStatus || '').includes(keyword))
 const createTypeLabel = computed(() => {
   const row = activeItem.value
   if (!row) return '-'
@@ -483,6 +493,7 @@ const createTypeTagType = computed(() => {
   return 'info'
 })
 const canCreate = (row) => row?.direction !== 'NEUTRAL'
+  || isTransfer(row)
   || (row?.tradeStatus || '').includes('退款')
 
 const canSubmitCreate = computed(() => {

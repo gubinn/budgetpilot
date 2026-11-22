@@ -12,7 +12,7 @@ import java.util.Locale;
  */
 public enum BillChannel {
     ALIPAY("支付宝", List.of("支付宝", "花呗", "淘宝")),
-    WECHAT("微信支付", List.of("财付通", "微信支付")),
+    WECHAT("微信支付", List.of("财付通", "微信支付", "微信")),
     CMB_DEBIT("招商银行储蓄卡", List.of()),
     CMB_CREDIT("招商银行信用卡", List.of());
 

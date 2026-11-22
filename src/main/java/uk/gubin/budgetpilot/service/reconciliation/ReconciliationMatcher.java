@@ -294,6 +294,13 @@ public class ReconciliationMatcher {
                 long diff = Math.abs(ChronoUnit.SECONDS.between(itemTime, txTime));
                 if (diff <= MATCH_WINDOW_SECONDS) {
                     candidates.add(new Candidate(diff, 0, tx));
+                } else if (isDateOnlyAdjustment(tx)) {
+                    // 补录的转账/退款往往只有日期（时分秒用 12:00 占位），
+                    // 金额与日期都一致时仍允许按日匹配，但排在精确时间候选之后
+                    long timeOffset = Math.abs(ChronoUnit.SECONDS.between(
+                            txTime.toLocalDate().atTime(LocalTime.NOON), txTime));
+                    candidates.add(new Candidate(MATCH_WINDOW_SECONDS + dayDiff * 172_800L + timeOffset,
+                            merchantScore(item, tx), tx));
                 }
             } else {
                 // 只有交易日的账单（招行信用卡）按整日匹配，跨日最多 1 天；
@@ -315,6 +322,12 @@ public class ReconciliationMatcher {
 
     private boolean hasTime(ReconciliationItem item) {
         return item.getPaidTime() != null || item.getCreatedTime() != null;
+    }
+
+    /** 补录的转账/退款没有真实时间，创建时用 12:00 占位 */
+    private boolean isDateOnlyAdjustment(Transaction tx) {
+        return (Objects.equals(tx.getType(), 3) || Objects.equals(tx.getType(), 4))
+                && (tx.getTransactionTime() == null || LocalTime.NOON.equals(tx.getTransactionTime()));
     }
 
     /**

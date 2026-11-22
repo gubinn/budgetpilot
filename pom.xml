@@ -85,6 +85,13 @@
             <version>1.11.0</version>
         </dependency>
 
+        <!-- 对账账单 XLSX 解析（微信支付账单） -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.2.5</version>
+        </dependency>
+
         <!-- 对账账单 PDF 解析（招行信用卡电子账单） -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>

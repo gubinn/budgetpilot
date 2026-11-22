@@ -168,7 +168,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             oldLinkedTxIds.forEach(this::clearTransactionIfUnreferenced);
 
             batch.setFileName(file.getOriginalFilename() == null
-                    ? channel.name() + ".csv" : file.getOriginalFilename());
+                    ? defaultFileName(channel) : file.getOriginalFilename());
             batch.setAccountId(accountId);
             batch.setBillAccount(bill.getBillAccount());
             batch.setPeriodStart(bill.getPeriodStart());
@@ -184,7 +184,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             batch = new ReconciliationBatch();
             batch.setChannel(channel.name());
             batch.setFileName(file.getOriginalFilename() == null
-                    ? channel.name() + ".csv" : file.getOriginalFilename());
+                    ? defaultFileName(channel) : file.getOriginalFilename());
             batch.setFileHash(fileHash);
             batch.setAccountId(accountId);
             batch.setBillAccount(bill.getBillAccount());
@@ -616,6 +616,15 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         return batch;
     }
 
+    /** 上传组件缺失文件名时的兜底名称，按渠道使用对应扩展名 */
+    private String defaultFileName(BillChannel channel) {
+        return switch (channel) {
+            case WECHAT -> "WECHAT.xlsx";
+            case CMB_DEBIT, CMB_CREDIT -> channel.name() + ".pdf";
+            default -> channel.name() + ".csv";
+        };
+    }
+
     private ReconciliationItem requireItem(Long itemId) {
         ReconciliationItem item = itemMapper.selectById(itemId);
         if (item == null) {
@@ -1008,6 +1017,9 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         if ("CMB_DEBIT".equals(item.getChannel())) {
             return cmbDebitExtFields(item);
         }
+        if ("WECHAT".equals(item.getChannel())) {
+            return wechatExtFields(item);
+        }
         String prefix = extPrefix(item.getChannel());
         Map<String, Object> ext = new LinkedHashMap<>();
         putIfText(ext, prefix + "交易号", item.getBillNo());
@@ -1051,6 +1063,22 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             ext.put("招行信用卡交易地金额", original + suffix);
         }
         putIfText(ext, "招行信用卡账单来源", item.getSource());
+        return ext;
+    }
+
+    /** 微信账单能提供的额外信息：支付方式、交易类型、当前状态、交易单号、昵称 */
+    private Map<String, Object> wechatExtFields(ReconciliationItem item) {
+        Map<String, String> raw = parseStringMap(item.getRawJson());
+        Map<String, Object> ext = new LinkedHashMap<>();
+        putIfText(ext, "微信昵称", raw.get("微信昵称"));
+        putIfText(ext, "微信支付方式", raw.get("支付方式"));
+        putIfText(ext, "微信交易类型", item.getTradeStatus());
+        putIfText(ext, "微信当前状态", item.getFundStatus());
+        putIfText(ext, "微信交易单号", item.getBillNo());
+        putIfText(ext, "微信商户单号", item.getMerchantOrderNo());
+        putIfText(ext, "微信商品", item.getSubject());
+        putIfText(ext, "微信备注", item.getRemark());
+        putIfText(ext, "微信账单来源", item.getSource());
         return ext;
     }
 

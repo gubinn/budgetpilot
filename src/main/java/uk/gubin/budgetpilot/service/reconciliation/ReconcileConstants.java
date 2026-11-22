@@ -39,6 +39,10 @@ public final class ReconcileConstants {
         if (status.contains("转账")) {
             return 3;
         }
+        // 微信零钱充值/提现是微信余额与银行卡之间的内部划转，不影响收支
+        if (status.contains("零钱充值") || status.contains("零钱提现")) {
+            return 3;
+        }
         return switch (direction == null ? "" : direction) {
             case DIRECTION_EXPENSE -> 1;
             case DIRECTION_INCOME -> 2;
@@ -75,7 +79,10 @@ public final class ReconcileConstants {
         // 普通收支也可能被记成转账；类型不同时仍允许金额、日期和对手信息去判断。
         if (expected == 3) {
             return (DIRECTION_EXPENSE.equals(direction) && transactionType == 1)
-                    || (DIRECTION_INCOME.equals(direction) && transactionType == 2);
+                    || (DIRECTION_INCOME.equals(direction) && transactionType == 2)
+                    // 微信零钱充值/提现没有收支方向，账本里可能记成收入或支出
+                    || (DIRECTION_NEUTRAL.equals(direction)
+                    && (transactionType == 1 || transactionType == 2));
         }
         return (expected == 1 || expected == 2) && transactionType == 3;
     }
