@@ -46,6 +46,11 @@ public class TransactionVO {
     private String reviewStatus;
     private Boolean isRecurring;
     private Long recurringId;
+    /** 是否已与渠道账单对账 */
+    private Boolean reconciled;
+    private String reconcileChannel;
+    private Long reconcileBatchId;
+    private LocalDateTime reconciledAt;
     private Map<String, Object> extFields;
     private Map<String, Object> metadata;
     private LocalDateTime createdAt;

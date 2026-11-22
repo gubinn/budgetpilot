@@ -24,6 +24,7 @@ const routes = [
       { path: '', redirect: '/dashboard' },
       { path: 'dashboard', name: 'Dashboard', component: loadView('Dashboard') },
       { path: 'transactions', name: 'Transactions', component: loadView('TransactionList') },
+      { path: 'reconciliation', name: 'Reconciliation', component: loadView('Reconciliation') },
       { path: 'transactions/add', name: 'AddTransaction', component: loadView('TransactionForm') },
       { path: 'transactions/edit/:id', name: 'EditTransaction', component: loadView('TransactionForm') },
       { path: 'accounts', name: 'Accounts', component: loadView('AccountList') },

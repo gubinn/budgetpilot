@@ -73,7 +73,7 @@ import { systemApi } from '@/api'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
   BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline,
-  PersonOutline, LogOutOutline, PeopleOutline
+  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline
 } from '@vicons/ionicons5'
 import { NIcon, useDialog } from 'naive-ui'
 
@@ -127,6 +127,7 @@ const menuOptions = computed(() => {
   return [
     { label: '首页', key: 'Dashboard', icon: renderIcon(HomeOutline) },
     { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
+    { label: '对账', key: 'Reconciliation', icon: renderIcon(GitCompareOutline) },
     { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
     { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
     { label: '商户', key: 'Merchants', icon: renderIcon(BusinessOutline) },
@@ -149,6 +150,7 @@ const pageTitle = computed(() => {
   const map = {
     Dashboard: '首页',
     Transactions: '交易记录',
+    Reconciliation: '账单对账',
     AddTransaction: '新增交易',
     EditTransaction: '编辑交易',
     Accounts: '账户管理',

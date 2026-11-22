@@ -61,7 +61,8 @@ class ExternalIdIdempotencyTest {
     void setUp() {
         service = new TransactionServiceImpl(
                 new ObjectMapper(), currencyRateService, accountMapper, categoryMapper,
-                merchantMapper, accountService, budgetService, merchantService,
+                merchantMapper, mock(uk.gubin.budgetpilot.service.reconciliation.ReconciliationStatsUpdater.class),
+                accountService, budgetService, merchantService,
                 eventPublisher, redisTemplate);
         ReflectionTestUtils.setField(service, "baseMapper", transactionMapper);
 

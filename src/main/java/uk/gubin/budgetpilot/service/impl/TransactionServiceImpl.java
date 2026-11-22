@@ -31,12 +31,14 @@ import uk.gubin.budgetpilot.event.TransactionEvent;
 import uk.gubin.budgetpilot.mapper.AccountMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.MerchantMapper;
+import uk.gubin.budgetpilot.service.reconciliation.ReconciliationStatsUpdater;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
 import uk.gubin.budgetpilot.service.AccountService;
 import uk.gubin.budgetpilot.service.BudgetService;
 import uk.gubin.budgetpilot.service.CurrencyRateService;
 import uk.gubin.budgetpilot.service.MerchantService;
 import uk.gubin.budgetpilot.service.TransactionService;
+import uk.gubin.budgetpilot.service.reconciliation.ReconcileConstants;
 import uk.gubin.budgetpilot.vo.MerchantVO;
 import uk.gubin.budgetpilot.vo.TransactionVO;
 
@@ -67,6 +69,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
     private final AccountMapper accountMapper;
     private final CategoryMapper categoryMapper;
     private final MerchantMapper merchantMapper;
+    private final ReconciliationStatsUpdater reconciliationStatsUpdater;
     private final AccountService accountService;
     private final BudgetService budgetService;
     private final MerchantService merchantService;
@@ -228,6 +231,7 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         }
 
         if (dto.getType() != null) query.eq(Transaction::getType, dto.getType());
+        if (dto.getReconciled() != null) query.eq(Transaction::getReconciled, dto.getReconciled());
         if (dto.getReviewStatus() != null && !dto.getReviewStatus().isBlank()) {
             query.eq(Transaction::getReviewStatus, dto.getReviewStatus().trim().toUpperCase());
         }
@@ -340,11 +344,14 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 记录旧的交易字段，用于预算重算
         LocalDate oldDate = entity.getTransactionDate();
+        LocalTime oldTime = entity.getTransactionTime();
+        String oldCurrency = entity.getCurrency();
         Long oldCategoryId = entity.getCategoryId();
         Long oldAccountId = entity.getAccountId();
         Integer oldType = entity.getType();
         BigDecimal oldAmount = entity.getAmount();
         boolean wasConfirmed = Boolean.TRUE.equals(entity.getIsConfirmed());
+        boolean wasReconciled = Boolean.TRUE.equals(entity.getReconciled());
 
         // 只有已确认的交易才需要回滚余额
         if (wasConfirmed) {
@@ -487,6 +494,25 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         baseMapper.updateById(entity);
 
+        // 对账是快照：金额/日期/时间/币种/账户/类型变了，原来的对账关系不再成立。
+        // 把账单行退回待处理，避免继续挂着「已对账」造成账实不符。
+        boolean reconcileRelevantChange = !Objects.equals(oldType, entity.getType())
+                || oldAmount == null || entity.getAmount() == null
+                || oldAmount.compareTo(entity.getAmount()) != 0
+                || !Objects.equals(oldCurrency, entity.getCurrency())
+                || !Objects.equals(oldDate, entity.getTransactionDate())
+                || !Objects.equals(oldTime, entity.getTransactionTime())
+                || !Objects.equals(oldAccountId, entity.getAccountId());
+        if (wasReconciled && reconcileRelevantChange) {
+            reconciliationStatsUpdater.detachTransaction(id, ReconcileConstants.IGNORE_TRANSACTION_CHANGED);
+            baseMapper.clearReconciled(id);
+            entity.setReconciled(false);
+            entity.setReconcileChannel(null);
+            entity.setReconcileBatchId(null);
+            entity.setReconciledAt(null);
+            log.info("Reconciliation detached because transaction {} was modified materially", id);
+        }
+
         // 更新商户使用统计
         if (entity.getMerchantId() != null && Boolean.TRUE.equals(entity.getIsConfirmed())) {
             merchantService.incrementUsage(entity.getMerchantId());
@@ -535,6 +561,10 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             rollbackBalance(entity);
         }
         baseMapper.deleteById(id);
+
+        if (Boolean.TRUE.equals(entity.getReconciled())) {
+            reconciliationStatsUpdater.detachTransaction(id, ReconcileConstants.IGNORE_TRANSACTION_CHANGED);
+        }
 
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.DELETE));
         registerCacheClearSync(entity.getTransactionDate());
@@ -1030,6 +1060,10 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         vo.setReviewStatus(entity.getReviewStatus());
         vo.setIsRecurring(entity.getIsRecurring());
         vo.setRecurringId(entity.getRecurringId());
+        vo.setReconciled(entity.getReconciled());
+        vo.setReconcileChannel(entity.getReconcileChannel());
+        vo.setReconcileBatchId(entity.getReconcileBatchId());
+        vo.setReconciledAt(entity.getReconciledAt());
         vo.setCreatedAt(entity.getCreatedAt());
         vo.setUpdatedAt(entity.getUpdatedAt());
 

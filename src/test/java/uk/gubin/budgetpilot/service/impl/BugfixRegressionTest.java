@@ -69,7 +69,8 @@ class BugfixRegressionTest {
         // @RequiredArgsConstructor generates constructor in field declaration order
         transactionService = new TransactionServiceImpl(
                 objectMapper, currencyRateService, accountMapper, categoryMapper,
-                mock(MerchantMapper.class), mock(AccountService.class), budgetService,
+                mock(MerchantMapper.class), mock(uk.gubin.budgetpilot.service.reconciliation.ReconciliationStatsUpdater.class),
+                mock(AccountService.class), budgetService,
                 merchantService, eventPublisher, redisTemplate);
         // Inject baseMapper into ServiceImpl's parent CrudRepository
         injectField(transactionService, "baseMapper", transactionMapper);

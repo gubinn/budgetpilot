@@ -21,6 +21,9 @@
           <n-form-item label="复核状态" :label-width="72" class="filter-field">
             <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable :consistent-menu-width="false" />
           </n-form-item>
+          <n-form-item label="对账状态" :label-width="72" class="filter-field">
+            <n-select v-model:value="filters.reconciled" :options="reconcileOptions" clearable :consistent-menu-width="false" />
+          </n-form-item>
           <n-form-item label="日期" :label-width="72" class="filter-field filter-date">
             <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 100%" />
           </n-form-item>
@@ -109,6 +112,7 @@ const filters = ref({
   tags: [],
   isConfirmed: null,
   reviewStatus: null,
+  reconciled: null,
   dateRange: null
 })
 
@@ -125,6 +129,10 @@ const confirmOptions = [
 const reviewOptions = [
   { label: '已复核', value: 'REVIEWED' },
   { label: '待复核', value: 'PENDING' }
+]
+const reconcileOptions = [
+  { label: '已对账', value: true },
+  { label: '未对账', value: false }
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
@@ -197,6 +205,10 @@ const pagination = ref({
 
 const typeLabels = { 1: '支出', 2: '收入', 3: '转账', 4: '退款' }
 const typeTagTypes = { 1: 'error', 2: 'success', 3: 'info', 4: 'warning' }
+const channelLabels = { ALIPAY: '支付宝', WECHAT: '微信', CMB: '招行' }
+function channelLabel(channel) {
+  return channelLabels[channel] || channel
+}
 
 const columns = [
   {
@@ -252,7 +264,7 @@ const columns = [
   },
   { title: '备注', key: 'note', ellipsis: { tooltip: true } },
   {
-    title: '状态', key: 'isConfirmed', width: 100,
+    title: '状态', key: 'isConfirmed', width: 140,
     render: (row) => h(NSpace, { size: 4 }, [
       h(NTag, {
         size: 'small',
@@ -261,6 +273,11 @@ const columns = [
       }, { default: () => row.isConfirmed ? '已入账' : '待入账' }),
       row.reviewStatus === 'PENDING'
         ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '待复核' })
+        : null,
+      row.reconciled
+        ? h(NTag, { size: 'small', type: 'info', bordered: false }, {
+          default: () => `已对账${row.reconcileChannel ? ':' + channelLabel(row.reconcileChannel) : ''}`
+        })
         : null
     ].filter(Boolean))
   },
@@ -306,7 +323,8 @@ async function loadData() {
       accountId: filters.value.accountId,
       categoryId: filters.value.categoryId,
       confirmed: filters.value.isConfirmed,
-      reviewStatus: filters.value.reviewStatus
+      reviewStatus: filters.value.reviewStatus,
+      reconciled: filters.value.reconciled
     }
     if (filters.value.tags?.length) {
       params.tags = filters.value.tags.join(',')
@@ -342,7 +360,7 @@ function onSizeChange(size) {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null, dateRange: null }
   loadData()
 }
 

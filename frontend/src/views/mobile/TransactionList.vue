@@ -14,6 +14,7 @@
       </div>
       <div class="filter-row">
         <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="标签" size="small" style="flex: 1" />
+        <n-select v-model:value="filters.reconciled" :options="reconcileOptions" placeholder="对账状态" size="small" style="flex: 1" clearable />
       </div>
       <div class="filter-actions">
         <n-button type="primary" size="small" @click="applyFilters">查询</n-button>
@@ -39,6 +40,7 @@
           <div class="tx-tags">
             <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待入账</n-tag>
             <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
+            <n-tag v-if="tx.reconciled" size="tiny" type="info" :bordered="false">已对账</n-tag>
             <n-button v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" secondary style="margin-left: 4px" @click.stop="openReview(tx)">复核</n-button>
             <n-tag v-for="tag in (tx.tags || [])" :key="tag" size="tiny" type="info" :bordered="false" style="margin-left: 4px">{{ tag }}</n-tag>
           </div>
@@ -123,6 +125,7 @@ const filters = ref({
   tags: [],
   isConfirmed: null,
   reviewStatus: null,
+  reconciled: null,
   dateRange: null
 })
 
@@ -139,6 +142,10 @@ const confirmOptions = [
 const reviewOptions = [
   { label: '已复核', value: 'REVIEWED' },
   { label: '待复核', value: 'PENDING' }
+]
+const reconcileOptions = [
+  { label: '已对账', value: true },
+  { label: '未对账', value: false }
 ]
 const accountOptions = ref([])
 const categoryOptions = ref([])
@@ -256,7 +263,7 @@ function applyFilters() {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, dateRange: null }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null, dateRange: null }
   pagination.value.page = 1
   loadData()
 }
@@ -276,7 +283,8 @@ async function loadData() {
       accountId: filters.value.accountId,
       categoryId: filters.value.categoryId,
       confirmed: filters.value.isConfirmed,
-      reviewStatus: filters.value.reviewStatus
+      reviewStatus: filters.value.reviewStatus,
+      reconciled: filters.value.reconciled
     }
     if (filters.value.tags?.length) {
       params.tags = filters.value.tags.join(',')

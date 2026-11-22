@@ -30,6 +30,21 @@ public interface TransactionMapper extends BaseMapper<Transaction> {
     @Update("UPDATE t_transaction SET merchant_id = #{targetId} WHERE merchant_id = #{sourceId}")
     int reassignMerchant(@Param("sourceId") Long sourceId, @Param("targetId") Long targetId);
 
+    /** 对账命中：写标记并合并扩展字段，不触碰金额/余额/预算 */
+    @Update("UPDATE t_transaction SET reconciled = 1, reconcile_channel = #{channel}, " +
+            "reconcile_batch_id = #{batchId}, reconciled_at = NOW(), ext_fields = #{extFields} " +
+            "WHERE id = #{id}")
+    int markReconciled(@Param("id") Long id, @Param("channel") String channel,
+                       @Param("batchId") Long batchId, @Param("extFields") String extFields);
+
+    @Update("UPDATE t_transaction SET reconciled = 0, reconcile_channel = NULL, " +
+            "reconcile_batch_id = NULL, reconciled_at = NULL WHERE id = #{id}")
+    int clearReconciled(@Param("id") Long id);
+
+    @Update("UPDATE t_transaction SET reconciled = 0, reconcile_channel = NULL, " +
+            "reconcile_batch_id = NULL, reconciled_at = NULL WHERE reconcile_batch_id = #{batchId}")
+    int clearReconciledByBatch(@Param("batchId") Long batchId);
+
     @Select("<script>" +
             "SELECT merchant_id AS merchantId, COUNT(*) AS txCount, MAX(transaction_date) AS lastDate " +
             "FROM t_transaction WHERE merchant_id IN " +

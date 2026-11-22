@@ -59,7 +59,7 @@ import { NIcon, useDialog } from 'naive-ui'
 import {
   HomeOutline, ReceiptOutline, WalletOutline,
   BarChartOutline, FolderOutline, AddOutline,
-  NotificationsOutline, PersonOutline, LogOutOutline
+  NotificationsOutline, PersonOutline, LogOutOutline, GitCompareOutline
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -70,6 +70,7 @@ const dialog = useDialog()
 const tabs = [
   { label: '首页', key: 'Dashboard', icon: HomeOutline },
   { label: '交易', key: 'Transactions', icon: ReceiptOutline },
+  { label: '对账', key: 'Reconciliation', icon: GitCompareOutline },
   { label: '账户', key: 'Accounts', icon: WalletOutline },
   { label: '报表', key: 'Reports', icon: BarChartOutline },
   { label: '分类', key: 'Categories', icon: FolderOutline }
@@ -82,6 +83,7 @@ const pageTitle = computed(() => {
   const map = {
     Dashboard: '首页',
     Transactions: '交易记录',
+    Reconciliation: '账单对账',
     AddTransaction: '新增交易',
     EditTransaction: '编辑交易',
     Accounts: '账户管理',

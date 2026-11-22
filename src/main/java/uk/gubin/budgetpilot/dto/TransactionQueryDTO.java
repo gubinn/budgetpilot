@@ -24,6 +24,8 @@ public class TransactionQueryDTO {
     private Boolean confirmed;
     /** PENDING / REVIEWED */
     private String reviewStatus;
+    /** 对账状态：true=已对账 false=未对账，null=全部 */
+    private Boolean reconciled;
     /** 扩展字段查询：按 key-value 匹配 */
     private String extKey;
     private String extValue;

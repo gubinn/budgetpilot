@@ -21,6 +21,24 @@ export const transactionApi = {
   extKeys: () => api.get('/transactions/ext-keys')
 }
 
+export const reconciliationApi = {
+  import: (formData) => api.post('/reconciliation/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000
+  }),
+  batches: () => api.get('/reconciliation/batches'),
+  batch: (id) => api.get(`/reconciliation/batches/${id}`),
+  items: (id, params) => api.get(`/reconciliation/batches/${id}/items`, { params }),
+  unmatchedTransactions: (id) => api.get(`/reconciliation/batches/${id}/transactions`),
+  rematch: (id) => api.post(`/reconciliation/batches/${id}/rematch`),
+  removeBatch: (id) => api.delete(`/reconciliation/batches/${id}`),
+  candidates: (itemId) => api.get(`/reconciliation/items/${itemId}/candidates`),
+  match: (itemId, transactionId) => api.post(`/reconciliation/items/${itemId}/match`, { transactionId }),
+  unmatch: (itemId) => api.post(`/reconciliation/items/${itemId}/unmatch`),
+  ignore: (itemId, reason) => api.post(`/reconciliation/items/${itemId}/ignore`, { reason }),
+  createTransaction: (itemId, data) => api.post(`/reconciliation/items/${itemId}/create-transaction`, data)
+}
+
 export const categoryApi = {
   tree: (type) => api.get('/categories/tree', { params: { type } }),
   get: (id) => api.get(`/categories/${id}`),

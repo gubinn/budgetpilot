@@ -151,6 +151,7 @@
 | `keyword` | string | 关键字搜索 |
 | `tags` | list | 标签列表（任意一个命中即可；可重复传参或逗号分隔） |
 | `confirmed` | boolean | 是否已确认 |
+| `reconciled` | boolean | 是否已与渠道账单对账 |
 | `extKey` | string | 扩展字段键（JSON path 的 key） |
 | `extValue` | string | 扩展字段值；只传 `extKey` 时按字段存在性过滤 |
 | `page` | int | 页码 (默认 1) |
@@ -201,6 +202,37 @@
 
 - `addTags` 与已有标签合并去重，不会覆盖用户已有标签；
 - `extFields` 按 key 合并，不会删除其他扩展字段。
+
+---
+
+### 2.1 对账管理 (ReconciliationController)
+
+**基础路径**: `/api/v1/reconciliation`
+
+| 方法 | 路径 | 功能 | 请求体 |
+|------|------|------|--------|
+| POST | `/api/v1/reconciliation/import` | 导入渠道账单（multipart） | `file` + `channel` + 可选 `accountId` |
+| GET | `/api/v1/reconciliation/batches` | 对账批次列表（最近 100 条） | - |
+| GET | `/api/v1/reconciliation/batches/{id}` | 批次详情 | - |
+| GET | `/api/v1/reconciliation/batches/{id}/items` | 账单明细分页 | `status` (`MATCHED`/`PENDING`/`IGNORED`/`AMBIGUOUS`) + `page` + `size` |
+| GET | `/api/v1/reconciliation/batches/{id}/transactions` | 流水有、账单无（账单周期内未匹配流水） | - |
+| POST | `/api/v1/reconciliation/batches/{id}/rematch` | 重新自动匹配（保留手工/补录） | - |
+| DELETE | `/api/v1/reconciliation/batches/{id}` | 删除批次（取消交易的对账标记，不删交易） | - |
+| GET | `/api/v1/reconciliation/items/{id}/candidates` | 账单行的候选流水 | - |
+| POST | `/api/v1/reconciliation/items/{id}/match` | 手工匹配 | `{ "transactionId": 123 }` |
+| POST | `/api/v1/reconciliation/items/{id}/unmatch` | 取消匹配 / 恢复忽略 | - |
+| POST | `/api/v1/reconciliation/items/{id}/ignore` | 忽略账单行 | `{ "reason": "人工忽略" }` |
+| POST | `/api/v1/reconciliation/items/{id}/create-transaction` | 账单项补录为交易并完成对账 | `{ "accountId": 1, "categoryId": 163, "confirmed": true }` |
+
+#### 导入说明
+
+- `channel` 取值：`ALIPAY`（已实现）、`WECHAT` / `CMB`（预留）。
+- 同一用户 + 渠道 + 文件 SHA-256 重复上传直接返回已有批次（`duplicate=true`）。
+- 解析支持支付宝「交易记录明细查询」CSV（GB18030/UTF-8，带 4 行说明和页脚汇总）。
+- 匹配按「金额精确 + 收支方向一致 + 时间 ±10 分钟」自动分配；同金额同时间多候选标记 `AMBIGUOUS`；一笔流水对应多笔账单时做 2~3 笔聚合匹配。
+- 命中后交易写入 `reconciled=1`、`reconcile_channel`、`reconcile_batch_id`、`reconciled_at`，并在 `ext_fields` 合并 `支付宝交易号`、`支付宝商家订单号`、`支付宝交易对方`、`支付宝商品名称` 等渠道字段。
+- 修改已对账交易的金额/日期/时间/币种/账户/类型，或删除交易，会自动解绑账单行并取消对账标记。
+- 补录会走正常交易创建流程，按所选账户实际增减余额。
 
 ---
 
