@@ -316,7 +316,8 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 {"信用卡还款提醒", 5, "{\"advance_days\": 3}"},
                 {"周期账单提醒", 6, "{\"advance_days\": 1}"},
                 {"月度预算未设定", 7, "{\"check_day\": 25}"},
-                {"待确认交易提醒", 8, "{\"min_count\": 1}"}
+                {"待确认交易提醒", 8, "{\"min_count\": 1}"},
+                {"卡券到期提醒", 10, "{\"advance_days\": 30}"}
         };
 
         // 预置规则跟随全局定时提醒渠道，避免全局已切到 WhatsApp、规则却还写死 Telegram

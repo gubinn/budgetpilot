@@ -41,6 +41,7 @@
     </div>
 
     <ReceivableEntry />
+    <PrepaidCardEntry />
 
     <!-- 新增/编辑弹窗 -->
     <n-drawer v-model:show="showCreate" :height="'75vh'" placement="bottom">
@@ -137,6 +138,7 @@ import { useDialog, useMessage } from 'naive-ui'
 import { accountApi } from '@/api'
 import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
 import ReceivableEntry from '@/components/receivable/ReceivableEntry.vue'
+import PrepaidCardEntry from '@/components/prepaid/PrepaidCardEntry.vue'
 import { AddOutline, EllipsisHorizontal, TrendingUpOutline, WalletOutline } from '@vicons/ionicons5'
 import { formatNum } from '@/utils/display'
 

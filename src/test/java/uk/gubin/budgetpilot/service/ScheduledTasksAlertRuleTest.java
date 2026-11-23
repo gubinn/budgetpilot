@@ -49,7 +49,8 @@ class ScheduledTasksAlertRuleTest {
                 mock(ConfigService.class),
                 mock(ApplicationEventPublisher.class),
                 new ObjectMapper(),
-                userMapper);
+                userMapper,
+                mock(PrepaidCardService.class));
     }
 
     @AfterEach

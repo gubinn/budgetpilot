@@ -55,7 +55,8 @@ class ScheduledTasksTenantTest {
                 mock(ConfigService.class),
                 mock(ApplicationEventPublisher.class),
                 mock(ObjectMapper.class),
-                userMapper);
+                userMapper,
+                mock(PrepaidCardService.class));
 
         List<Long> seen = new ArrayList<>();
         Method method = ScheduledTasks.class.getDeclaredMethod("forEachActiveUser", Consumer.class);

@@ -27,6 +27,7 @@
         :collapsed-icon-size="22"
         :options="menuOptions"
         :value="currentRoute"
+        :render-label="renderMenuLabel"
         @update:value="navigate"
       />
     </n-layout-sider>
@@ -70,11 +71,11 @@
 import { ref, computed, h, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { systemApi } from '@/api'
+import { systemApi, prepaidCardApi } from '@/api'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
   BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline,
-  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline, SwapHorizontalOutline
+  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline, SwapHorizontalOutline, TicketOutline
 } from '@vicons/ionicons5'
 import { NIcon, useDialog } from 'naive-ui'
 
@@ -88,6 +89,8 @@ const collapsed = ref(isCompact.value)
 
 const alertCount = ref(0)
 const alertRefreshTimer = ref(null)
+const expiringCardCount = ref(0)
+const cardRefreshTimer = ref(null)
 
 async function refreshAlertCount() {
   if (auth.isAdmin) {
@@ -99,6 +102,19 @@ async function refreshAlertCount() {
     alertCount.value = res.data?.length || 0
   } catch {
     alertCount.value = 0
+  }
+}
+
+async function refreshCardCount() {
+  if (auth.isAdmin) {
+    expiringCardCount.value = 0
+    return
+  }
+  try {
+    const res = await prepaidCardApi.summary()
+    expiringCardCount.value = res.data?.expiringSoonCount || 0
+  } catch {
+    expiringCardCount.value = 0
   }
 }
 
@@ -116,7 +132,9 @@ onMounted(() => {
   }
   window.addEventListener('resize', syncCompact)
   refreshAlertCount()
+  refreshCardCount()
   alertRefreshTimer.value = setInterval(refreshAlertCount, 60000)
+  cardRefreshTimer.value = setInterval(refreshCardCount, 300000)
 })
 
 onBeforeUnmount(() => {
@@ -124,9 +142,37 @@ onBeforeUnmount(() => {
   if (alertRefreshTimer.value) {
     clearInterval(alertRefreshTimer.value)
   }
+  if (cardRefreshTimer.value) {
+    clearInterval(cardRefreshTimer.value)
+  }
 })
 
 const renderIcon = (icon) => () => h(NIcon, null, { default: () => h(icon) })
+
+// 卡券包菜单上的到期计数：只在有卡即将到期时出现
+function renderMenuLabel(option) {
+  if (option.key !== 'PrepaidCards' || !expiringCardCount.value) {
+    return option.label
+  }
+  return h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } }, [
+    option.label,
+    h('span', {
+      style: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minWidth: '18px',
+        height: '18px',
+        padding: '0 5px',
+        borderRadius: '9px',
+        background: '#f59e0b',
+        color: '#fff',
+        fontSize: '11px',
+        lineHeight: '1'
+      }
+    }, String(expiringCardCount.value))
+  ])
+}
 
 const menuOptions = computed(() => {
   // Admin: only see Users menu
@@ -141,6 +187,7 @@ const menuOptions = computed(() => {
     { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
     { label: '对账', key: 'Reconciliation', icon: renderIcon(GitCompareOutline) },
     { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
+    { label: '卡券包', key: 'PrepaidCards', icon: renderIcon(TicketOutline) },
     { label: '往来款', key: 'Receivables', icon: renderIcon(SwapHorizontalOutline) },
     { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
     { label: '商户', key: 'Merchants', icon: renderIcon(BusinessOutline) },
@@ -167,6 +214,7 @@ const pageTitle = computed(() => {
     AddTransaction: '新增交易',
     EditTransaction: '编辑交易',
     Accounts: '账户管理',
+    PrepaidCards: '卡券包',
     Receivables: '往来款',
     Categories: '分类管理',
     Merchants: '商户管理',

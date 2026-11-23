@@ -17,6 +17,20 @@ export const receivableApi = {
   summary: () => api.get('/receivables/summary')
 }
 
+export const prepaidCardApi = {
+  list: (params) => api.get('/prepaid-cards', { params }),
+  summary: () => api.get('/prepaid-cards/summary'),
+  get: (id) => api.get(`/prepaid-cards/${id}`),
+  create: (data) => api.post('/prepaid-cards', data),
+  update: (id, data) => api.put(`/prepaid-cards/${id}`, data),
+  remove: (id) => api.delete(`/prepaid-cards/${id}`),
+  use: (id, data) => api.post(`/prepaid-cards/${id}/use`, data),
+  recharge: (id, data) => api.post(`/prepaid-cards/${id}/recharge`, data),
+  usages: (id) => api.get(`/prepaid-cards/${id}/usages`),
+  voidCard: (id) => api.post(`/prepaid-cards/${id}/void`),
+  restore: (id) => api.post(`/prepaid-cards/${id}/restore`)
+}
+
 export const transactionApi = {
   create: (data) => api.post('/transactions', data),
   list: (params) => api.get('/transactions', { params }),

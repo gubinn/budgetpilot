@@ -19,6 +19,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -45,6 +47,7 @@ public class ScheduledTasks {
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
     private final UserMapper userMapper;
+    private final PrepaidCardService prepaidCardService;
 
     /**
      * 每日 08:00 - 汇率更新
@@ -520,6 +523,68 @@ public class ScheduledTasks {
                 }
             }
         });
+    }
+
+    /**
+     * 每日 09:00 - 卡券到期提醒（规则 9）。
+     *
+     * <p>一张卡只在三个节点提醒：到期前 advance_days 天（默认 30）、
+     * 到期当天、过期次日（仍有余额时）。汇总成一条消息，不逐卡轰炸。</p>
+     */
+    @Scheduled(cron = "0 0 9 * * ?")
+    public void checkPrepaidCardExpiry() {
+        log.info("Scheduled: checking prepaid card expiry");
+        forEachActiveUser(userId -> {
+            AlertRule rule = findActiveRule(10);
+            if (rule == null) {
+                return;
+            }
+            int advanceDays = clamp(configInt(rule, "advance_days", 30), 1, 90);
+            LocalDate today = LocalDate.now();
+            List<String> lines = new ArrayList<>();
+
+            for (PrepaidCard card : prepaidCardService.listAll()) {
+                if (!Integer.valueOf(1).equals(card.getStatus())
+                        || card.getBalance() == null
+                        || card.getBalance().signum() <= 0
+                        || card.getExpiryDate() == null) {
+                    continue;
+                }
+                long days = ChronoUnit.DAYS.between(today, card.getExpiryDate());
+                String when;
+                if (days == advanceDays) {
+                    when = "还有 " + days + " 天到期";
+                } else if (days == 0) {
+                    when = "今天到期";
+                } else if (days == -1) {
+                    when = "已过期 1 天";
+                } else {
+                    continue;
+                }
+                String place = card.getChannel() == null || card.getChannel().isBlank()
+                        ? "" : "（" + card.getChannel() + "）";
+                lines.add("• " + card.getName() + " · " + card.getIssuer() + place
+                        + "\n  " + remainingText(card) + " · " + when);
+            }
+
+            if (lines.isEmpty()) {
+                return;
+            }
+            String title = "🎟️ 卡券到期提醒";
+            String content = title + "\n\n" + String.join("\n\n", lines)
+                    + "\n\n别让它们悄悄过期，有空去用掉吧。"
+                    + "\n\n━━━━━━━━━━━━━━\n_" + today + "_";
+            alertLogService.logAndNotify(rule.getId(), 10, title, content, ruleChannel(rule));
+            log.info("Prepaid card expiry alert sent: {} card(s)", lines.size());
+        });
+    }
+
+    private String remainingText(PrepaidCard card) {
+        BigDecimal balance = card.getBalance();
+        if (Integer.valueOf(2).equals(card.getUnit())) {
+            return "剩余 " + balance.stripTrailingZeros().toPlainString() + " 次/张";
+        }
+        return "余额 ¥" + balance.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     /**

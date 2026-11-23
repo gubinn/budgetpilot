@@ -28,6 +28,7 @@ const routes = [
       { path: 'transactions/add', name: 'AddTransaction', component: loadView('TransactionForm') },
       { path: 'transactions/edit/:id', name: 'EditTransaction', component: loadView('TransactionForm') },
       { path: 'accounts', name: 'Accounts', component: loadView('AccountList') },
+      { path: 'cards', name: 'PrepaidCards', component: loadView('PrepaidCardList') },
       { path: 'receivables', name: 'Receivables', component: loadView('ReceivableList') },
       { path: 'categories', name: 'Categories', component: loadView('CategoryList') },
       { path: 'merchants', name: 'Merchants', component: loadView('MerchantList') },

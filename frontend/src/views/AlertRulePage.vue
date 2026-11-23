@@ -48,6 +48,9 @@
         <n-form-item v-if="formData.type === 5" label="提前天数" path="advanceDays">
           <n-input-number v-model:value="formData.advanceDays" :min="1" :max="30" placeholder="还款日前几天提醒" />
         </n-form-item>
+        <n-form-item v-if="formData.type === 10" label="提前天数" path="advanceDays">
+          <n-input-number v-model:value="formData.advanceDays" :min="1" :max="90" placeholder="到期前多少天先提醒一次" />
+        </n-form-item>
         <n-form-item v-if="formData.type === 6" label="提前天数" path="advanceDays">
           <n-input-number v-model:value="formData.advanceDays" :min="1" :max="30" placeholder="账单日前几天提醒" />
         </n-form-item>
@@ -109,7 +112,8 @@ const typeOptions = [
   { label: '信用卡还款提醒', value: 5 },
   { label: '周期账单提醒', value: 6 },
   { label: '预算未设定提醒', value: 7 },
-  { label: '待确认交易提醒', value: 8 }
+  { label: '待确认交易提醒', value: 8 },
+  { label: '卡券到期提醒', value: 10 }
 ]
 
 const channelOptions = [
@@ -227,6 +231,8 @@ const handleCreate = async () => {
       config = { check_day: formData.value.checkDay }
     } else if (formData.value.type === 8) {
       config = { min_count: formData.value.minCount }
+    } else if (formData.value.type === 10) {
+      config = { advance_days: formData.value.advanceDays }
     }
 
     const payload = {

@@ -71,6 +71,13 @@ public enum ErrorCode {
     AUTH_OTP_RESEND_LIMIT(80114, "验证码发送过于频繁，请稍后再试"),
     AUTH_ADMIN_PUBLIC_FORBIDDEN(80115, "管理员账号仅允许内网登录"),
 
+    // 卡券包 90001-90099
+    PREPAID_CARD_NOT_FOUND(90001, "卡券不存在"),
+    PREPAID_CARD_BALANCE_NOT_ENOUGH(90002, "卡券余额/次数不足"),
+    PREPAID_CARD_VOIDED(90003, "卡券已作废，请先恢复"),
+    PREPAID_CARD_EXPIRED(90004, "卡券已过有效期，请先修改有效期"),
+    PREPAID_CARD_VALUE_INVALID(90005, "金额/次数格式不正确"),
+
     ;
 
     private final int code;

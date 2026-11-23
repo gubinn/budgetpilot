@@ -41,6 +41,7 @@ public class AlertRuleVO {
             case 6 -> "周期账单提醒";
             case 7 -> "预算未设定提醒";
             case 8 -> "待确认交易提醒";
+            case 10 -> "卡券到期提醒";
             default -> "未知类型";
         };
     }

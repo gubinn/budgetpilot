@@ -10,6 +10,7 @@
     <n-data-table :columns="columns" :data="accounts" :loading="loading" :scroll-x="isCompact ? 680 : 980" />
 
     <ReceivableEntry />
+    <PrepaidCardEntry />
 
     <!-- 新增/编辑弹窗 -->
     <n-modal v-model:show="showCreate" preset="card" :title="editingId ? '编辑账户' : '新增账户'" style="width: 500px">
@@ -97,6 +98,7 @@ import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { accountApi } from '@/api'
 import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
 import ReceivableEntry from '@/components/receivable/ReceivableEntry.vue'
+import PrepaidCardEntry from '@/components/prepaid/PrepaidCardEntry.vue'
 import { formatNum } from '@/utils/display'
 import { useCompactViewport } from '@/composables/useCompactViewport'
 

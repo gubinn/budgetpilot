@@ -743,6 +743,76 @@ PUT /api/v1/system/config/notify_channel
 
 ---
 
+### 8.1 卡券包 (PrepaidCardController)
+
+**基础路径**: `/api/v1/prepaid-cards`
+
+> 表外备忘台账：不关联账户、不生成交易、不计入总资产/预算/报表。用于记录购物卡、电影票、储值余额等容易忘在某个小程序里的钱。
+
+| 方法 | 路径 | 功能 | 请求体 |
+|------|------|------|--------|
+| GET | `/api/v1/prepaid-cards` | 卡券列表 | `state` / `keyword` / `channel` / `kind` / `source`（query，均可选） |
+| GET | `/api/v1/prepaid-cards/summary` | 汇总（可用余额、到期、过期、长期未用） | - |
+| GET | `/api/v1/prepaid-cards/{id}` | 卡券详情 | - |
+| GET | `/api/v1/prepaid-cards/{id}/usages` | 使用流水 | - |
+| POST | `/api/v1/prepaid-cards` | 新增卡券 | `PrepaidCardCreateDTO` |
+| PUT | `/api/v1/prepaid-cards/{id}` | 更新卡券（全量字段） | `PrepaidCardUpdateDTO` |
+| DELETE | `/api/v1/prepaid-cards/{id}` | 删除卡券及其流水 | - |
+| POST | `/api/v1/prepaid-cards/{id}/use` | 使用一次（扣减） | `PrepaidCardAdjustDTO` |
+| POST | `/api/v1/prepaid-cards/{id}/recharge` | 充值（增加） | `PrepaidCardAdjustDTO` |
+| POST | `/api/v1/prepaid-cards/{id}/void` | 作废 | - |
+| POST | `/api/v1/prepaid-cards/{id}/restore` | 恢复 | - |
+
+#### PrepaidCardCreateDTO
+
+```json
+{
+  "name": "卡券名称 (必填, <=60)",
+  "issuer": "发卡方/品牌 (必填, <=60)",
+  "channel": "微信小程序 / 支付宝 / 实体卡 / 短信邮件 / APP / 其他",
+  "accountHint": "所在账号提示，如：尾号1234的手机号",
+  "kind": "1-储值卡 2-礼品卡 3-兑换券 4-次数卡",
+  "unit": "1-金额 2-次数/张",
+  "currency": "CNY",
+  "faceValue": "面值/总次数",
+  "balance": "当前余额/剩余次数（不填则默认等于面值）",
+  "issueDate": "yyyy-MM-dd",
+  "expiryDate": "yyyy-MM-dd，null=长期有效",
+  "source": "1-单位发放 2-自购 3-赠送 4-其他",
+  "note": "备注 (<=200)"
+}
+```
+
+`PrepaidCardUpdateDTO` 字段相同，但为全量更新语义：未传的可选字段会被清空；作废/恢复请使用专门的 `/void`、`/restore` 接口。
+
+#### PrepaidCardAdjustDTO
+
+```json
+{
+  "value": "正数，金额或次数",
+  "occurredAt": "yyyy-MM-dd，默认今天",
+  "note": "备注 (<=100)"
+}
+```
+
+#### 状态 (state)
+
+| state | 说明 |
+|-------|------|
+| `ACTIVE` | 有效；`expiringSoon=true` 表示 30 天内到期 |
+| `USED_UP` | 已用完（余额/次数为 0） |
+| `EXPIRED` | 已过有效期且仍有余额 |
+| `VOID` | 已作废（status=2） |
+
+列表筛选 `state` 额外支持 `ALL`、`HAS_BALANCE`（有余额，含已过期）、`EXPIRING`（30 天内到期）。
+
+#### 与预警的关系
+
+- 预警规则类型 `type=10`「卡券到期提醒」，默认 `advance_days=30`；每日 09:00 在到期前 N 天、到期当天、过期次日（仍有余额）各发一次汇总提醒。
+- 告警日志中的 `alert_type=9` 仍用于月度预算总结，和卡券规则 type=10 不冲突。
+
+---
+
 ### 9. 认证与用户管理 (Auth & User)
 
 #### 9.1 认证接口
@@ -1060,6 +1130,11 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 80113 | 该账号未配置 Telegram 或 WhatsApp，无法公网登录 |
 | 80114 | 验证码发送过于频繁，请稍后再试 |
 | 80115 | 管理员账号仅允许内网登录 |
+| 90001 | 卡券不存在 |
+| 90002 | 卡券余额/次数不足 |
+| 90003 | 卡券已作废，请先恢复 |
+| 90004 | 卡券已过有效期，请先修改有效期 |
+| 90005 | 金额/次数格式不正确 |
 
 ---
 
@@ -1145,6 +1220,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | RecurringRuleController | `src/main/java/uk/gubin/budgetpilot/controller/RecurringRuleController.java` |
 | AlertRuleController | `src/main/java/uk/gubin/budgetpilot/controller/AlertRuleController.java` |
 | MerchantController | `src/main/java/uk/gubin/budgetpilot/controller/MerchantController.java` |
+| PrepaidCardController | `src/main/java/uk/gubin/budgetpilot/controller/PrepaidCardController.java` |
 | AuthController | `src/main/java/uk/gubin/budgetpilot/controller/AuthController.java` |
 | UserController | `src/main/java/uk/gubin/budgetpilot/controller/UserController.java` |
 
@@ -1154,4 +1230,4 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 
 ---
 
-*文档最后更新: 2026-04-30*
+*文档最后更新: 2026-11-24*
