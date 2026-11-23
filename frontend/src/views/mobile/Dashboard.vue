@@ -96,7 +96,7 @@
         <div class="budget-group-title">月度 · {{ currentMonth }}</div>
         <div class="budget-empty">
           <span>本月未设置预算</span>
-          <n-button text type="primary" size="small" @click="router.push('/budget')">去设置 →</n-button>
+          <n-button v-if="!auth.isReadOnly" text type="primary" size="small" @click="router.push('/budget')">去设置 →</n-button>
         </div>
       </template>
 
@@ -163,11 +163,13 @@ import { useMessage } from 'naive-ui'
 import { reportApi, budgetApi, annualBudgetApi, transactionApi, accountApi } from '@/api'
 import dayjs from 'dayjs'
 import { formatNum, getProgressStatus } from '@/utils/display'
+import { useAuthStore } from '@/stores/auth'
 
 // 图表库按需加载，避免首屏下载 1MB 的 echarts
 let echarts = null
 
 const router = useRouter()
+const auth = useAuthStore()
 const message = useMessage()
 const totalAssets = ref(0)
 const summaryCards = ref([])

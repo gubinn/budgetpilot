@@ -25,7 +25,7 @@
           </div>
           <div class="acc-currency">{{ acc.currency }}</div>
         </div>
-        <n-dropdown trigger="click" placement="bottom-end" :options="actionOptions(acc)" @select="key => handleAction(key, acc)">
+        <n-dropdown v-if="!auth.isReadOnly" trigger="click" placement="bottom-end" :options="actionOptions(acc)" @select="key => handleAction(key, acc)">
           <button class="m-more" aria-label="账户操作">
             <n-icon :size="18"><EllipsisHorizontal /></n-icon>
           </button>
@@ -36,7 +36,7 @@
       <div class="m-empty-cta">
         <div class="cta-icon"><n-icon :size="26"><WalletOutline /></n-icon></div>
         <div class="cta-text">还没有账户<br />添加银行卡、信用卡或钱包后开始记账</div>
-        <n-button type="primary" round @click="openCreate">新增账户</n-button>
+        <n-button v-if="!auth.isReadOnly" type="primary" round @click="openCreate">新增账户</n-button>
       </div>
     </div>
 
@@ -122,7 +122,7 @@
     </n-modal>
 
     <!-- 底部新增按钮 -->
-    <div v-if="accounts.length" class="fab">
+    <div v-if="accounts.length && !auth.isReadOnly" class="fab">
       <n-button type="primary" circle size="large" aria-label="新增账户" @click="openCreate">
         <template #icon><n-icon :size="24"><AddOutline /></n-icon></template>
       </n-button>
@@ -141,7 +141,9 @@ import ReceivableEntry from '@/components/receivable/ReceivableEntry.vue'
 import PrepaidCardEntry from '@/components/prepaid/PrepaidCardEntry.vue'
 import { AddOutline, EllipsisHorizontal, TrendingUpOutline, WalletOutline } from '@vicons/ionicons5'
 import { formatNum } from '@/utils/display'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const dialog = useDialog()
 const message = useMessage()
 const loading = ref(false)

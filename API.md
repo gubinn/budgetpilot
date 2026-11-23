@@ -813,6 +813,73 @@ PUT /api/v1/system/config/notify_channel
 
 ---
 
+### 8.2 只读共享 (ReadonlyShareController)
+
+**基础路径**: `/api/v1/shares`
+
+> 账本主人生成带有效期和可选 PIN 的链接，家人无需注册账号即可只读查看。只读令牌以 `ro_` 开头，服务端无条件拒绝写请求。
+
+| 方法 | 路径 | 鉴权 | 功能 |
+|------|------|------|------|
+| GET | `/api/v1/shares` | 主人登录 | 分享列表（不含明文分享码） |
+| POST | `/api/v1/shares` | 主人登录 | 生成分享，返回一次明文链接和 PIN |
+| DELETE | `/api/v1/shares/{id}` | 主人登录 | 撤销分享并踢掉已建立的只读会话 |
+| GET | `/api/v1/shares/public/{code}` | 免登录 | 打开分享页时检查链接状态、是否需要 PIN |
+| POST | `/api/v1/shares/public/{code}/verify` | 免登录 | 校验 PIN，返回只读令牌 |
+
+#### ReadonlyShareCreateDTO
+
+```json
+{
+  "label": "分享备注，如：给媳妇看",
+  "expiresInDays": "1 / 7 / 30，范围 1-90",
+  "pin": "4-6 位数字；留空表示免 PIN"
+}
+```
+
+#### 生成结果（只返回一次明文）
+
+```json
+{
+  "id": 1,
+  "label": "给媳妇看",
+  "code": "43 位 URL-safe 随机码",
+  "path": "/share/{code}",
+  "pin": "2468 或 null",
+  "expiresAt": "2026-12-01 12:00:00"
+}
+```
+
+#### ReadonlyShareVerifyDTO
+
+```json
+{ "pin": "2468" }
+```
+
+#### 只读会话响应
+
+```json
+{
+  "token": "ro_1_...",
+  "ownerName": "顾斌",
+  "shareId": 1,
+  "expiresAt": "2026-11-25 01:00:00",
+  "readOnly": true
+}
+```
+
+#### 只读令牌规则
+
+- 令牌前缀固定为 `ro_`，最长 12 小时，且不超过分享到期时间。
+- 仅允许 `GET/HEAD/OPTIONS`，以及 `GET /api/v1/auth/info`、`POST /api/v1/auth/logout`。
+- 明确拒绝：`/api/v1/users/**`、`/api/v1/shares/**`（`/public/**` 除外）、`/api/v1/system/config*`、`/api/v1/system/alerts`、`/api/v1/auth/api-key*`，以及与只读页面无关的 `/api/v1/reconciliation/**`、`/api/v1/recurring-rules/**`、`/api/v1/alert-rules/**`、`/api/v1/merchants/**`。
+- 其他写请求（POST/PUT/PATCH/DELETE）一律返回 HTTP 403、业务码 `80002`。
+- 撤销后再次访问返回 HTTP 401；分享最多 90 天有效。
+- 分享页的 `/public/**` 接口免登录，但按 IP 限流；PIN 连续失败 5 次锁 15 分钟。
+- Sa-Token 只从 `Authorization` 请求头读取令牌，Cookie 和表单参数中的令牌不会被接受。
+
+---
+
 ### 9. 认证与用户管理 (Auth & User)
 
 #### 9.1 认证接口
@@ -1135,6 +1202,11 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 90003 | 卡券已作废，请先恢复 |
 | 90004 | 卡券已过有效期，请先修改有效期 |
 | 90005 | 金额/次数格式不正确 |
+| 91001 | 链接无效或已过期 |
+| 91002 | 请输入 PIN |
+| 91003 | PIN 不正确 |
+| 91004 | 尝试次数过多，请稍后再试 |
+| 91005 | 分享不存在 |
 
 ---
 
@@ -1221,6 +1293,7 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | AlertRuleController | `src/main/java/uk/gubin/budgetpilot/controller/AlertRuleController.java` |
 | MerchantController | `src/main/java/uk/gubin/budgetpilot/controller/MerchantController.java` |
 | PrepaidCardController | `src/main/java/uk/gubin/budgetpilot/controller/PrepaidCardController.java` |
+| ReadonlyShareController | `src/main/java/uk/gubin/budgetpilot/controller/ReadonlyShareController.java` |
 | AuthController | `src/main/java/uk/gubin/budgetpilot/controller/AuthController.java` |
 | UserController | `src/main/java/uk/gubin/budgetpilot/controller/UserController.java` |
 

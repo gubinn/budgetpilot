@@ -23,8 +23,14 @@ import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.User;
 import uk.gubin.budgetpilot.entity.UserConfig;
 import uk.gubin.budgetpilot.ingress.IngressType;
+import uk.gubin.budgetpilot.mapper.AccountBalanceSnapshotMapper;
 import uk.gubin.budgetpilot.mapper.AlertRuleMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
+import uk.gubin.budgetpilot.mapper.PrepaidCardMapper;
+import uk.gubin.budgetpilot.mapper.PrepaidCardUsageMapper;
+import uk.gubin.budgetpilot.mapper.ReadonlyShareMapper;
+import uk.gubin.budgetpilot.mapper.ReconciliationBatchMapper;
+import uk.gubin.budgetpilot.mapper.ReconciliationItemMapper;
 import uk.gubin.budgetpilot.mapper.UserConfigMapper;
 import uk.gubin.budgetpilot.mapper.UserMapper;
 import uk.gubin.budgetpilot.vo.LoginVO;
@@ -54,6 +60,12 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final uk.gubin.budgetpilot.mapper.MerchantMapper merchantMapper;
     private final uk.gubin.budgetpilot.mapper.RecurringRuleMapper recurringRuleMapper;
     private final uk.gubin.budgetpilot.mapper.AlertLogMapper alertLogMapper;
+    private final AccountBalanceSnapshotMapper accountBalanceSnapshotMapper;
+    private final ReconciliationItemMapper reconciliationItemMapper;
+    private final ReconciliationBatchMapper reconciliationBatchMapper;
+    private final PrepaidCardMapper prepaidCardMapper;
+    private final PrepaidCardUsageMapper prepaidCardUsageMapper;
+    private final ReadonlyShareMapper readonlyShareMapper;
     private final ConfigService configService;
     private final StringRedisTemplate redisTemplate;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
@@ -364,14 +376,24 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         // 清理年度预算
         annualBudgetItemMapper.deleteByUserId(id);
         annualBudgetMapper.deleteByUserId(id);
+        // 清对账明细和批次（先明细后批次，避免留下悬空批次）
+        reconciliationItemMapper.deleteByUserId(id);
+        reconciliationBatchMapper.deleteByUserId(id);
         // 清理交易
         transactionMapper.deleteByUserId(id);
+        // 清卡券使用流水和卡券（先流水后卡券）
+        prepaidCardUsageMapper.deleteByUserId(id);
+        prepaidCardMapper.deleteByUserId(id);
         // 清理商户别名
         merchantAliasMapper.deleteByUserId(id);
         // 清理商户
         merchantMapper.deleteByUserId(id);
         // 清理账户
         accountMapper.deleteByUserId(id);
+        // 清理净资产月度快照
+        accountBalanceSnapshotMapper.deleteByUserId(id);
+        // 清理只读分享链接
+        readonlyShareMapper.deleteByUserId(id);
         // 清理分类
         categoryMapper.deleteByUserId(id);
         // 清理用户配置

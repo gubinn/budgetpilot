@@ -163,7 +163,9 @@ import TransactionFormBody from '@/components/transaction/TransactionFormBody.vu
 import { OptionsOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const dialog = useDialog()
 const message = useMessage()
 
@@ -389,7 +391,7 @@ function renderExtDetail(row) {
   ])
 }
 
-const columns = [
+const allColumns = [
   {
     type: 'expand',
     key: 'expand',
@@ -511,6 +513,10 @@ const columns = [
     ].filter(Boolean))
   }
 ]
+
+const columns = computed(() => auth.isReadOnly
+  ? allColumns.filter(column => column.key !== 'actions')
+  : allColumns)
 
 async function loadData() {
   loading.value = true

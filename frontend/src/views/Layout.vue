@@ -44,22 +44,27 @@
           </div>
         </div>
         <div class="topbar-right">
-          <n-badge :value="alertCount" :show="alertCount > 0">
+          <n-badge v-if="!auth.isReadOnly" :value="alertCount" :show="alertCount > 0">
             <n-button quaternary circle size="small" @click="router.push('/alerts')">
               <template #icon><n-icon><notifications-outline /></n-icon></template>
             </n-button>
           </n-badge>
-          <n-button type="primary" size="small" @click="router.push('/transactions/add')" class="add-btn">
+          <n-button v-if="!auth.isReadOnly" type="primary" size="small" @click="router.push('/transactions/add')" class="add-btn">
             <template #icon><n-icon><add-outline /></n-icon></template>
             <span class="add-text">记一笔</span>
           </n-button>
-          <n-dropdown :options="userDropdownOptions" @select="handleUserSelect" trigger="click">
+          <n-dropdown v-if="!auth.isReadOnly" :options="userDropdownOptions" @select="handleUserSelect" trigger="click">
             <button class="avatar-trigger" type="button" :aria-label="auth.nickname || '账户'">
               {{ userInitial }}
             </button>
           </n-dropdown>
         </div>
       </n-layout-header>
+      <div v-if="auth.isReadOnly" class="readonly-strip">
+        <n-icon :size="15"><EyeOutline /></n-icon>
+        <span>只读查看 · {{ auth.readonlyOwnerName }} 的账本</span>
+        <n-button text size="tiny" class="readonly-exit" @click="exitReadonly">退出</n-button>
+      </div>
       <n-layout-content class="content">
         <router-view />
       </n-layout-content>
@@ -75,7 +80,7 @@ import { systemApi, prepaidCardApi } from '@/api'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
   BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline,
-  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline, SwapHorizontalOutline, TicketOutline
+  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline, SwapHorizontalOutline, TicketOutline, EyeOutline
 } from '@vicons/ionicons5'
 import { NIcon, useDialog } from 'naive-ui'
 
@@ -93,7 +98,7 @@ const expiringCardCount = ref(0)
 const cardRefreshTimer = ref(null)
 
 async function refreshAlertCount() {
-  if (auth.isAdmin) {
+  if (auth.isAdmin || auth.isReadOnly) {
     alertCount.value = 0
     return
   }
@@ -174,6 +179,10 @@ function renderMenuLabel(option) {
   ])
 }
 
+const readonlyMenuKeys = new Set([
+  'Dashboard', 'Transactions', 'Accounts', 'PrepaidCards', 'Receivables', 'Reports'
+])
+
 const menuOptions = computed(() => {
   // Admin: only see Users menu
   if (auth.isAdmin) {
@@ -182,7 +191,7 @@ const menuOptions = computed(() => {
     ]
   }
   // Non-admin: all menus except Users
-  return [
+  const options = [
     { label: '首页', key: 'Dashboard', icon: renderIcon(HomeOutline) },
     { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
     { label: '对账', key: 'Reconciliation', icon: renderIcon(GitCompareOutline) },
@@ -197,6 +206,9 @@ const menuOptions = computed(() => {
     { label: '报表', key: 'Reports', icon: renderIcon(BarChartOutline) },
     { label: '设置', key: 'Settings', icon: renderIcon(SettingsOutline) }
   ]
+  return auth.isReadOnly
+    ? options.filter(option => readonlyMenuKeys.has(option.key))
+    : options
 })
 
 const currentRoute = computed(() => route.name || 'Dashboard')
@@ -241,6 +253,16 @@ const navigate = (key) => {
   if (isCompact.value) {
     collapsed.value = true
   }
+}
+
+async function exitReadonly() {
+  const code = auth.readonlyShareCode
+  try {
+    await auth.logout()
+  } catch {
+    // 即使退出接口失败，本地令牌也已经清掉
+  }
+  router.push(code ? `/share/${code}` : '/login')
 }
 
 async function handleUserSelect(key) {
@@ -366,6 +388,21 @@ async function handleUserSelect(key) {
 }
 .content {
   padding: 24px;
+}
+
+.readonly-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  background: #fffbeb;
+  border-bottom: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 12px;
+}
+.readonly-exit {
+  margin-left: auto;
+  color: #b45309;
 }
 
 .sider-scrim {

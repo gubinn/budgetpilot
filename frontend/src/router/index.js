@@ -10,11 +10,21 @@ function loadView(name) {
   }
 }
 
+const READONLY_ALLOWED = new Set([
+  'Dashboard', 'Transactions', 'Accounts', 'PrepaidCards', 'Receivables', 'Reports'
+])
+
 const routes = [
   {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/LoginPage.vue')
+  },
+  {
+    path: '/share/:code',
+    name: 'ShareAccess',
+    component: () => import('@/views/ShareAccessPage.vue'),
+    meta: { public: true }
   },
   {
     path: '/',
@@ -51,6 +61,11 @@ const router = createRouter({
 let authInit = false
 
 router.beforeEach(async (to, from, next) => {
+  if (to.meta.public) {
+    next()
+    return
+  }
+
   if (!authInit) {
     authInit = true
     const auth = useAuthStore()
@@ -60,6 +75,21 @@ router.beforeEach(async (to, from, next) => {
   }
 
   const token = localStorage.getItem('token')
+  let readonly = null
+  try {
+    readonly = JSON.parse(localStorage.getItem('readonly') || 'null')
+  } catch {
+    readonly = null
+  }
+
+  if (readonly && !token) {
+    next(`/share/${readonly.shareCode}`)
+    return
+  }
+  if (readonly && !READONLY_ALLOWED.has(to.name)) {
+    next({ name: 'Dashboard' })
+    return
+  }
   // 对账在手机端不提供入口，直接跳回交易列表
   if (to.name === 'Reconciliation' && window.innerWidth < 768) {
     next({ name: 'Transactions' })

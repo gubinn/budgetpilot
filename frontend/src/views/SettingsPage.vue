@@ -22,6 +22,13 @@
       </n-card>
     </n-gi>
 
+    <!-- 只读共享账本 -->
+    <n-gi :span="2">
+      <n-card title="只读共享" hoverable>
+        <ReadonlySharePanel />
+      </n-card>
+    </n-gi>
+
     <!-- 我的 Telegram 配置（公网登录验证码） -->
     <n-gi>
       <n-card title="我的 Telegram 通知" hoverable>
@@ -179,6 +186,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { systemApi, authApi, userApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import ReadonlySharePanel from '@/components/share/ReadonlySharePanel.vue'
 
 const message = useMessage()
 const auth = useAuthStore()

@@ -6,6 +6,23 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
+function redirectWhenSessionInvalid() {
+  let readonly = null
+  try {
+    readonly = JSON.parse(localStorage.getItem('readonly') || 'null')
+  } catch {
+    readonly = null
+  }
+  localStorage.removeItem('token')
+  if (readonly?.shareCode && !window.location.pathname.startsWith('/share/')) {
+    // 保留 readonly，分享页据此展示“会话已过期”并允许重新验证
+    window.location.href = `/share/${readonly.shareCode}?expired=1`
+    return
+  }
+  const redirect = new URLSearchParams(window.location.search).get('redirect')
+  window.location.href = '/login?redirect=' + encodeURIComponent(redirect || window.location.pathname)
+}
+
 // 请求拦截
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
@@ -20,9 +37,7 @@ api.interceptors.response.use(
   res => {
     // 业务层错误码 80001 = 未登录/登录过期
     if (res.data?.code === 80001) {
-      localStorage.removeItem('token')
-      const redirect = new URLSearchParams(window.location.search).get('redirect')
-      window.location.href = '/login?redirect=' + encodeURIComponent(redirect || window.location.pathname)
+      redirectWhenSessionInvalid()
       return Promise.reject(new Error('未登录'))
     }
     if (res.data.code !== 0) {
@@ -34,8 +49,7 @@ api.interceptors.response.use(
   err => {
     // HTTP 401
     if (err.response?.status === 401) {
-      localStorage.removeItem('token')
-      window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname)
+      redirectWhenSessionInvalid()
       return Promise.reject(new Error('未登录'))
     }
     console.error('HTTP Error:', err)

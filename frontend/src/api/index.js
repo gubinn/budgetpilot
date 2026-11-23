@@ -17,6 +17,14 @@ export const receivableApi = {
   summary: () => api.get('/receivables/summary')
 }
 
+export const shareApi = {
+  list: () => api.get('/shares'),
+  create: (data) => api.post('/shares', data),
+  revoke: (id) => api.delete(`/shares/${id}`),
+  check: (code) => api.get(`/shares/public/${code}`),
+  verify: (code, data) => api.post(`/shares/public/${code}/verify`, data)
+}
+
 export const prepaidCardApi = {
   list: (params) => api.get('/prepaid-cards', { params }),
   summary: () => api.get('/prepaid-cards/summary'),

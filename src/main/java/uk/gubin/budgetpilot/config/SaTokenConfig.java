@@ -25,7 +25,9 @@ public class SaTokenConfig implements WebMvcConfigurer {
                         "/api/v1/auth/login",
                         "/api/v1/auth/verify",
                         "/api/v1/auth/otp/resend",
-                        "/api/v1/auth/ingress"
+                        "/api/v1/auth/ingress",
+                        // 只读分享页免登录；写保护由 ReadonlyFilter 负责
+                        "/api/v1/shares/public/**"
                 );
     }
 
@@ -39,6 +41,9 @@ public class SaTokenConfig implements WebMvcConfigurer {
     public void addViewControllers(ViewControllerRegistry registry) {
         // SPA fallback: 所有非 API 路由返回 index.html
         registry.addViewController("/{spring:[^\\.]*}")
+                .setViewName("forward:/index.html");
+        // 只读分享链接是两段路径，需要单独兜底
+        registry.addViewController("/share/**")
                 .setViewName("forward:/index.html");
     }
 

@@ -24,6 +24,12 @@
       <div class="config-hint">公网登录验证码按该渠道发送；选择「两者都发」时需要同时配置 Telegram 和 WhatsApp。</div>
     </div>
 
+    <!-- 只读共享账本 -->
+    <div class="section-card">
+      <h3 class="section-title">只读共享</h3>
+      <ReadonlySharePanel />
+    </div>
+
     <!-- 我的 Telegram -->
     <div class="section-card">
       <h3 class="section-title">我的 Telegram 通知</h3>
@@ -155,6 +161,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useMessage } from 'naive-ui'
 import { systemApi, authApi, userApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import ReadonlySharePanel from '@/components/share/ReadonlySharePanel.vue'
 
 const message = useMessage()
 const auth = useAuthStore()

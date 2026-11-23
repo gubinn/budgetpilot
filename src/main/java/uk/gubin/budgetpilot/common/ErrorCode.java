@@ -78,6 +78,13 @@ public enum ErrorCode {
     PREPAID_CARD_EXPIRED(90004, "卡券已过有效期，请先修改有效期"),
     PREPAID_CARD_VALUE_INVALID(90005, "金额/次数格式不正确"),
 
+    // 只读共享 91001-91099
+    SHARE_LINK_INVALID(91001, "链接无效或已过期"),
+    SHARE_PIN_REQUIRED(91002, "请输入 PIN"),
+    SHARE_PIN_WRONG(91003, "PIN 不正确"),
+    SHARE_TOO_MANY_ATTEMPTS(91004, "尝试次数过多，请稍后再试"),
+    SHARE_NOT_FOUND(91005, "分享不存在"),
+
     ;
 
     private final int code;

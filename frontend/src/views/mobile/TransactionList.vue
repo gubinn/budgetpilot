@@ -65,7 +65,7 @@
             </span>
           </div>
           <div class="tx-card">
-            <div v-for="tx in group.items" :key="tx.id" class="tx-row" @click="openEdit(tx)">
+            <div v-for="tx in group.items" :key="tx.id" class="tx-row" @click="!auth.isReadOnly && openEdit(tx)">
               <div class="tx-main">
                 <div class="tx-title m-ellipsis">
                   <span class="tx-cat" :style="{ color: tx.parentCategoryColor || tx.categoryColor }">
@@ -86,7 +86,7 @@
                   <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
                   <n-tag v-if="tx.reconciled" size="tiny" type="info" :bordered="false">已对账</n-tag>
                   <n-tag v-for="tag in (tx.tags || []).slice(0, 2)" :key="tag" size="tiny" :bordered="false">{{ tag }}</n-tag>
-                  <button v-if="tx.reviewStatus === 'PENDING'" class="review-link" @click.stop="openReview(tx)">去复核</button>
+                  <button v-if="!auth.isReadOnly && tx.reviewStatus === 'PENDING'" class="review-link" @click.stop="openReview(tx)">去复核</button>
                 </div>
               </div>
               <div class="tx-side">
@@ -221,7 +221,9 @@ import MobileTransactionFormBody from '@/components/transaction/MobileTransactio
 import { OptionsOutline, ReceiptOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const message = useMessage()
 const loading = ref(false)
 const transactions = ref([])

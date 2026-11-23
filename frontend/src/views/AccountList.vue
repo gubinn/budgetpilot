@@ -3,7 +3,7 @@
     <template #header-extra>
       <n-space>
         <n-button @click="showSnapshots = true">净资产快照</n-button>
-        <n-button type="primary" @click="openCreate">新增账户</n-button>
+        <n-button v-if="!auth.isReadOnly" type="primary" @click="openCreate">新增账户</n-button>
       </n-space>
     </template>
 
@@ -101,7 +101,9 @@ import ReceivableEntry from '@/components/receivable/ReceivableEntry.vue'
 import PrepaidCardEntry from '@/components/prepaid/PrepaidCardEntry.vue'
 import { formatNum } from '@/utils/display'
 import { useCompactViewport } from '@/composables/useCompactViewport'
+import { useAuthStore } from '@/stores/auth'
 
+const auth = useAuthStore()
 const dialog = useDialog()
 const message = useMessage()
 const loading = ref(false)
@@ -156,9 +158,14 @@ const currencyOptions = [
 const isCompact = useCompactViewport()
 
 const columns = computed(() => {
-  if (!isCompact.value) return allColumns
-  // iPad 竖屏：隐藏信用额度和扩展字段，保证名称和操作列可见
-  return allColumns.filter(c => c.key !== 'creditLimit' && c.key !== 'extFields')
+  let cols = isCompact.value
+    // iPad 竖屏：隐藏信用额度和扩展字段，保证名称和操作列可见
+    ? allColumns.filter(c => c.key !== 'creditLimit' && c.key !== 'extFields')
+    : allColumns
+  if (auth.isReadOnly) {
+    cols = cols.filter(c => c.key !== 'actions')
+  }
+  return cols
 })
 
 const allColumns = [

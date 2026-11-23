@@ -6,7 +6,7 @@
           <div class="head-title">卡券包</div>
           <div class="head-sub">表外备忘 · 不计入总资产</div>
         </div>
-        <n-button type="primary" @click="openCreate">
+        <n-button v-if="!auth.isReadOnly" type="primary" @click="openCreate">
           <template #icon><n-icon><AddOutline /></n-icon></template>
           记一张卡券
         </n-button>
@@ -134,6 +134,7 @@
                     </div>
                   </div>
                   <n-dropdown
+                    v-if="!auth.isReadOnly"
                     trigger="click"
                     placement="bottom-end"
                     :options="tileOptions(card)"
@@ -155,7 +156,7 @@
                   <span class="p-expiry" :class="expiryClass(card)">{{ expiryText(card) }}</span>
                 </div>
 
-                <div class="p-actions" @click.stop>
+                <div v-if="!auth.isReadOnly" class="p-actions" @click.stop>
                   <n-button size="tiny" secondary :disabled="card.state !== 'ACTIVE'" @click="openAdjust(card, 'use')">
                     用一次
                   </n-button>
@@ -182,7 +183,7 @@
         <div class="empty-icon"><n-icon :size="30"><TicketOutline /></n-icon></div>
         <div class="empty-title">把散落在各个小程序里的钱，收进这里</div>
         <div class="empty-sub">购物卡、电影票、储值余额……记一笔有效期，到期前我会提醒你。</div>
-        <n-button type="primary" round @click="openCreate">记一张卡券</n-button>
+        <n-button v-if="!auth.isReadOnly" type="primary" round @click="openCreate">记一张卡券</n-button>
       </div>
     </n-card>
 
@@ -271,7 +272,7 @@
         </template>
 
         <template #footer>
-          <div v-if="detailCard" class="detail-actions">
+          <div v-if="detailCard && !auth.isReadOnly" class="detail-actions">
             <n-button type="primary" :disabled="detailCard.state !== 'ACTIVE'" @click="openAdjust(detailCard, 'use')">用一次</n-button>
             <n-button :disabled="detailCard.state === 'EXPIRED' || detailCard.state === 'VOID'" @click="openAdjust(detailCard, 'recharge')">充值</n-button>
             <n-button quaternary @click="editFromDetail">编辑</n-button>
@@ -396,8 +397,10 @@ import { prepaidCardApi } from '@/api'
 import PrepaidCardFormBody from '@/components/prepaid/PrepaidCardFormBody.vue'
 import { formatNum } from '@/utils/display'
 import { useCompactViewport } from '@/composables/useCompactViewport'
+import { useAuthStore } from '@/stores/auth'
 
 const message = useMessage()
+const auth = useAuthStore()
 const dialog = useDialog()
 const isMobile = useCompactViewport(767)
 

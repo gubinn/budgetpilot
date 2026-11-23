@@ -57,6 +57,13 @@ sa-token:
   is-concurrent: true
   token-style: uuid
   is-log: false
+  # 只从 Authorization 请求头读令牌。
+  # 只读共享会话依赖 ro_ 前缀做写保护，关闭 body/cookie 读取，
+  # 避免把只读令牌塞进表单参数绕过过滤器。
+  is-read-body: false
+  is-read-cookie: false
+  # 登录后在响应头返回令牌，便于脚本/API Key 调用取用
+  is-write-header: true
 
 # 应用配置
 budgetpilot:

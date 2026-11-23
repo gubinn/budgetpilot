@@ -10,21 +10,27 @@
         <span class="logo-word">BudgetPilot</span>
       </div>
       <div class="header-right">
-        <n-badge :value="alertCount" :show="alertCount > 0">
+        <n-badge v-if="!auth.isReadOnly" :value="alertCount" :show="alertCount > 0">
           <n-button quaternary circle size="small" @click="router.push('/alerts')">
             <template #icon><n-icon><NotificationsOutline /></n-icon></template>
           </n-button>
         </n-badge>
-        <n-button type="primary" size="small" round @click="router.push('/transactions/add')">
+        <n-button v-if="!auth.isReadOnly" type="primary" size="small" round @click="router.push('/transactions/add')">
           <template #icon><n-icon><AddOutline /></n-icon></template>
         </n-button>
-        <n-dropdown :options="userDropdownOptions" @select="handleUserSelect" trigger="click">
+        <n-dropdown v-if="!auth.isReadOnly" :options="userDropdownOptions" @select="handleUserSelect" trigger="click">
           <n-button quaternary circle size="small">
             <template #icon><n-icon><PersonOutline /></n-icon></template>
           </n-button>
         </n-dropdown>
       </div>
     </header>
+
+    <div v-if="auth.isReadOnly" class="readonly-strip">
+      <n-icon :size="14"><EyeOutline /></n-icon>
+      <span>只读查看 · {{ auth.readonlyOwnerName }} 的账本</span>
+      <button class="readonly-exit" @click="exitReadonly">退出</button>
+    </div>
 
     <!-- 页面标题 -->
     <div class="page-title-bar">
@@ -63,7 +69,7 @@ import {
   HomeOutline, ReceiptOutline, WalletOutline,
   BarChartOutline, FolderOutline, AddOutline,
   NotificationsOutline, PersonOutline, LogOutOutline,
-  ChevronBackOutline
+  ChevronBackOutline, EyeOutline
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -71,7 +77,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const dialog = useDialog()
 
-const tabs = [
+const allTabs = [
   { label: '首页', key: 'Dashboard', icon: HomeOutline },
   { label: '交易', key: 'Transactions', icon: ReceiptOutline },
   { label: '账户', key: 'Accounts', icon: WalletOutline },
@@ -79,13 +85,27 @@ const tabs = [
   { label: '分类', key: 'Categories', icon: FolderOutline }
 ]
 
+const tabs = computed(() => auth.isReadOnly
+  ? allTabs.filter(tab => tab.key !== 'Categories')
+  : allTabs)
+
 const currentRoute = computed(() => route.name || 'Dashboard')
-const isTabPage = computed(() => tabs.some(t => t.key === route.name))
+const isTabPage = computed(() => tabs.value.some(t => t.key === route.name))
 const alertCount = ref(0)
 
 function goBack() {
   if (window.history.length > 1) router.back()
   else router.push('/dashboard')
+}
+
+async function exitReadonly() {
+  const code = auth.readonlyShareCode
+  try {
+    await auth.logout()
+  } catch {
+    // 即使退出接口失败，本地令牌也已经清掉
+  }
+  router.push(code ? `/share/${code}` : '/login')
 }
 
 const pageTitle = computed(() => {
@@ -210,6 +230,27 @@ async function handleUserSelect(key) {
 
 .mobile-content {
   padding: 12px 16px 20px;
+}
+
+.readonly-strip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 12px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 12px;
+}
+.readonly-exit {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: #b45309;
+  font-size: 12px;
+  padding: 0;
 }
 
 .tab-bar {
