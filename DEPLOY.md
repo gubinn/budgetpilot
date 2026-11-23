@@ -1658,6 +1658,30 @@ SELECT COUNT(*) FROM t_transaction t JOIN t_category c ON c.id=t.category_id
 WHERE t.user_id=2 AND c.is_active=0; -- 应为 0
 ```
 
+### 净资产月快照表迁移（2026-11-23）
+
+报表新增 `t_account_balance_snapshot`，用于月度净资产趋势和账户页的「净资产快照」。表为空也能启动；首次查询会自动补齐最近 12 个月，也可以先建表再部署。
+
+```bash
+# 1. 备份
+mysqldump -ubudgetpilot -p budgetpilot > budgetpilot-backup-$(date +%F).sql
+
+# 2. 执行迁移
+mysql -ubudgetpilot -p budgetpilot < sql/migrations/20261123_account_balance_snapshot.sql
+
+# 3. 部署新代码并重启
+# 4. 可选：清理报表缓存
+redis-cli --scan --pattern 'report:*' | xargs -r redis-cli del
+```
+
+验证：
+
+```sql
+SHOW TABLES LIKE 't_account_balance_snapshot';
+SELECT snapshot_month, COUNT(*), ROUND(SUM(balance),2)
+FROM t_account_balance_snapshot GROUP BY snapshot_month ORDER BY snapshot_month DESC;
+```
+
 ### 商户别名表迁移（旧版本升级）
 
 `t_merchant_alias` 用于保存支付渠道原始商户名，指向归一化后的聚合商户。先执行迁移，再部署新代码。

@@ -2,6 +2,8 @@ package uk.gubin.budgetpilot.service.impl;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +19,14 @@ import uk.gubin.budgetpilot.mapper.AccountMapper;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.MerchantMapper;
 import uk.gubin.budgetpilot.mapper.TransactionMapper;
+import uk.gubin.budgetpilot.service.AccountSnapshotService;
+import uk.gubin.budgetpilot.service.AnnualBudgetService;
+import uk.gubin.budgetpilot.service.BudgetService;
 import uk.gubin.budgetpilot.service.ReportService;
+import uk.gubin.budgetpilot.vo.AnnualBudgetProgressVO;
+import uk.gubin.budgetpilot.vo.BudgetProgressVO;
+import uk.gubin.budgetpilot.vo.NetWorthSnapshotVO;
+import uk.gubin.budgetpilot.vo.ReportOverviewVO;
 import uk.gubin.budgetpilot.vo.ReportVO;
 
 import java.math.BigDecimal;
@@ -25,6 +34,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -38,6 +48,9 @@ public class ReportServiceImpl implements ReportService {
     private final CategoryMapper categoryMapper;
     private final AccountMapper accountMapper;
     private final MerchantMapper merchantMapper;
+    private final BudgetService budgetService;
+    private final AnnualBudgetService annualBudgetService;
+    private final AccountSnapshotService accountSnapshotService;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
 
@@ -273,9 +286,14 @@ public class ReportServiceImpl implements ReportService {
 
     @Override
     public ReportVO categoryDetail(String month, Long categoryId) {
+        YearMonth ym = YearMonth.parse(month);
+        return categoryDetail(ym.atDay(1), ym.atEndOfMonth(), categoryId, "ALL");
+    }
+
+    @Override
+    public ReportVO categoryDetail(LocalDate start, LocalDate end, Long categoryId, String scope) {
         ReportVO vo = new ReportVO();
 
-        YearMonth ym = YearMonth.parse(month);
         List<Long> catIds = new ArrayList<>();
         catIds.add(categoryId);
         catIds.addAll(getChildCategoryIds(categoryId));
@@ -285,19 +303,25 @@ public class ReportServiceImpl implements ReportService {
                 .eq(Transaction::getReviewStatus, "REVIEWED")
                 .in(Transaction::getType, 1, 4)
                 .in(Transaction::getCategoryId, catIds)
-                .ge(Transaction::getTransactionDate, ym.atDay(1))
-                .le(Transaction::getTransactionDate, ym.atEndOfMonth())
-                .orderByDesc(Transaction::getTransactionDate);
+                .ge(Transaction::getTransactionDate, start)
+                .le(Transaction::getTransactionDate, end)
+                .orderByDesc(Transaction::getTransactionDate)
+                .last("LIMIT 500");
 
         List<Transaction> txs = transactionMapper.selectList(query);
+        Map<Long, Category> cats = loadCategoryMap();
+        String reportScope = scope == null ? "ALL" : scope.trim().toUpperCase(Locale.ROOT);
+        List<Transaction> filtered = txs.stream()
+                .filter(tx -> "ALL".equals(reportScope) || reportScope.equals(scopeOf(tx, cats)))
+                .toList();
 
         // 批量加载账户，避免 N+1
-        List<Long> accIds = txs.stream().map(Transaction::getAccountId).distinct().toList();
+        List<Long> accIds = filtered.stream().map(Transaction::getAccountId).distinct().toList();
         Map<Long, Account> accMap = accIds.isEmpty() ? Map.of()
                 : accountMapper.selectBatchIds(accIds).stream().collect(Collectors.toMap(Account::getId, a -> a));
 
         List<ReportVO.CategoryDetailItem> items = new ArrayList<>();
-        for (Transaction tx : txs) {
+        for (Transaction tx : filtered) {
             ReportVO.CategoryDetailItem item = new ReportVO.CategoryDetailItem();
             item.setId(tx.getId());
             item.setType(tx.getType());
@@ -559,6 +583,751 @@ public class ReportServiceImpl implements ReportService {
         }
         items.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
         return items;
+    }
+
+    // ==================== 报表聚合（月度复盘） ====================
+
+    @Override
+    public ReportOverviewVO overview(String startDate, String endDate,
+                                     String compare, String scope, int level) {
+        LocalDate start = parseReportDate(startDate, "startDate");
+        LocalDate end = parseReportDate(endDate, "endDate");
+        if (end.isBefore(start)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "结束日期不能早于开始日期");
+        }
+        String cmp = compare == null ? "PREV" : compare.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("PREV", "YOY", "NONE").contains(cmp)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "compare 只能为 PREV、YOY 或 NONE");
+        }
+        String reportScope = scope == null ? "ALL" : scope.trim().toUpperCase(Locale.ROOT);
+        if (!Set.of("ALL", "DAILY", "FIXED", "SPECIAL").contains(reportScope)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "scope 只能为 ALL、DAILY、FIXED 或 SPECIAL");
+        }
+        int reportLevel = level == 2 ? 2 : 1;
+        long days = ChronoUnit.DAYS.between(start, end) + 1;
+        YearMonth endMonth = YearMonth.from(end);
+        YearMonth currentMonth = YearMonth.now();
+
+        YearMonth startMonth = YearMonth.from(start);
+        boolean fullMonthPeriod = start.equals(startMonth.atDay(1))
+                && end.equals(startMonth.atEndOfMonth());
+        LocalDate cmpStart = null;
+        LocalDate cmpEnd = null;
+        if ("PREV".equals(cmp)) {
+            if (fullMonthPeriod) {
+                // 整月报表按“上一个自然月”对比，符合“环比上月”的直觉
+                YearMonth prevMonth = startMonth.minusMonths(1);
+                cmpStart = prevMonth.atDay(1);
+                cmpEnd = prevMonth.atEndOfMonth();
+            } else {
+                cmpEnd = start.minusDays(1);
+                cmpStart = cmpEnd.minusDays(days - 1);
+            }
+        } else if ("YOY".equals(cmp)) {
+            cmpStart = start.minusYears(1);
+            cmpEnd = end.minusYears(1);
+        }
+
+        YearMonth trendStartMonth = endMonth.minusMonths(11);
+        LocalDate queryStart = trendStartMonth.atDay(1);
+        if (cmpStart != null && cmpStart.isBefore(queryStart)) {
+            queryStart = cmpStart;
+        }
+        LocalDate queryEnd = end;
+        if (cmpEnd != null && cmpEnd.isAfter(queryEnd)) {
+            queryEnd = cmpEnd;
+        }
+
+        List<Transaction> all = transactionMapper.selectList(
+                new LambdaQueryWrapper<Transaction>()
+                        .eq(Transaction::getIsConfirmed, true)
+                        .eq(Transaction::getReviewStatus, "REVIEWED")
+                        .ge(Transaction::getTransactionDate, queryStart)
+                        .le(Transaction::getTransactionDate, queryEnd));
+        Map<Long, Category> catMap = loadCategoryMap();
+
+        List<Transaction> currentExpenses = reportableExpenses(all, start, end, catMap);
+        List<Transaction> currentIncomes = reportableIncomes(all, start, end, catMap);
+        List<Transaction> prevExpenses = cmpStart == null ? null
+                : reportableExpenses(all, cmpStart, cmpEnd, catMap);
+        List<Transaction> prevIncomes = cmpStart == null ? null
+                : reportableIncomes(all, cmpStart, cmpEnd, catMap);
+
+        BigDecimal expenseAll = netOf(currentExpenses);
+        BigDecimal income = sumBase(currentIncomes);
+        BigDecimal net = income.subtract(expenseAll);
+        List<Transaction> selected = filterScope(currentExpenses, reportScope, catMap);
+        BigDecimal selectedExpense = netOf(selected);
+
+        BigDecimal prevExpenseAll = prevExpenses == null ? null : netOf(prevExpenses);
+        BigDecimal prevIncome = prevIncomes == null ? null : sumBase(prevIncomes);
+        BigDecimal prevNet = prevExpenseAll == null ? null : prevIncome.subtract(prevExpenseAll);
+        List<Transaction> prevSelected = prevExpenses == null ? null
+                : filterScope(prevExpenses, reportScope, catMap);
+        BigDecimal prevSelectedExpense = prevSelected == null ? null : netOf(prevSelected);
+
+        ReportOverviewVO vo = new ReportOverviewVO();
+        ReportOverviewVO.Period period = buildPeriod(start, end, days, cmpStart, cmpEnd, currentMonth);
+        vo.setPeriod(period);
+        vo.setKpis(buildKpis(income, selectedExpense, expenseAll, net,
+                prevIncome, prevSelectedExpense, prevExpenseAll, prevNet,
+                selected.size(), (int) days, cmpStart != null));
+        vo.setScopes(buildScopes(currentExpenses, catMap));
+
+        // ---- 月度预算 ----
+        YearMonth periodMonth = startMonth;
+        boolean fullMonth = fullMonthPeriod;
+        ReportOverviewVO.BudgetBlock budgetBlock = new ReportOverviewVO.BudgetBlock();
+        budgetBlock.setMonth(periodMonth.toString());
+        budgetBlock.setExists(false);
+        BudgetProgressVO budgetProgress = null;
+        if (fullMonth && budgetService.exists(periodMonth.toString())) {
+            try {
+                budgetProgress = budgetService.getProgress(periodMonth.toString());
+            } catch (Exception e) {
+                log.warn("Load budget progress failed for {}: {}", periodMonth, e.getMessage());
+            }
+        }
+        if (budgetProgress != null) {
+            budgetBlock.setExists(true);
+            budgetBlock.setTotal(scale2(budgetProgress.getTotalBudget()));
+            budgetBlock.setSpent(scale2(budgetProgress.getTotalSpent()));
+            budgetBlock.setRemaining(scale2(budgetProgress.getRemaining()));
+            budgetBlock.setPct(scale1(budgetProgress.getProgressPct()));
+            budgetBlock.setItems(mapBudgetItems(budgetProgress));
+        }
+        vo.setBudget(budgetBlock);
+
+        vo.setCategories(buildCategoryRank(selected, prevSelected, catMap,
+                reportLevel, null, selectedExpense, budgetProgress));
+        vo.setTrend(buildOverviewTrend(all, catMap, trendStartMonth, endMonth));
+        vo.setDaily(buildDaily(currentExpenses, catMap));
+        vo.setMerchants(buildOverviewMerchants(selected, catMap, reportScope));
+        vo.setAnnualBudget(buildAnnualBlock(endMonth.getYear()));
+        vo.setAccounts(buildAccountBlock(endMonth));
+
+        ReportOverviewVO.DataStates states = new ReportOverviewVO.DataStates();
+        states.setBudgetMissing(fullMonth && !budgetBlock.isExists());
+        states.setPartialMonth(period.isPartialMonth());
+        states.setMultiCurrency(currentExpenses.stream().anyMatch(tx ->
+                tx.getCurrency() != null && !"CNY".equals(tx.getCurrency())));
+        states.setNoData(expenseAll.signum() == 0 && income.signum() == 0);
+        vo.setDataStates(states);
+
+        vo.setInsights(buildInsights(vo, reportScope));
+        return vo;
+    }
+
+    @Override
+    public NetWorthSnapshotVO netWorthSnapshot(String month) {
+        YearMonth ym;
+        if (month == null || month.isBlank()) {
+            ym = YearMonth.now().minusMonths(1);
+        } else {
+            try {
+                ym = YearMonth.parse(month);
+            } catch (Exception e) {
+                throw new BizException(ErrorCode.PARAM_ERROR, "月份格式不正确，应为 yyyy-MM");
+            }
+        }
+        return accountSnapshotService.snapshotDetail(getUserId(), ym);
+    }
+
+    private ReportOverviewVO.Period buildPeriod(LocalDate start, LocalDate end, long days,
+                                                LocalDate cmpStart, LocalDate cmpEnd,
+                                                YearMonth currentMonth) {
+        ReportOverviewVO.Period p = new ReportOverviewVO.Period();
+        p.setStartDate(start.toString());
+        p.setEndDate(end.toString());
+        p.setLabel(periodLabel(start, end));
+        p.setDays((int) days);
+        p.setPartialMonth(YearMonth.from(end).equals(currentMonth)
+                && !end.isBefore(LocalDate.now()));
+        if (cmpStart != null) {
+            p.setCompareStartDate(cmpStart.toString());
+            p.setCompareEndDate(cmpEnd.toString());
+            p.setCompareLabel(periodLabel(cmpStart, cmpEnd));
+        }
+        return p;
+    }
+
+    private String periodLabel(LocalDate start, LocalDate end) {
+        YearMonth sm = YearMonth.from(start);
+        YearMonth em = YearMonth.from(end);
+        if (sm.equals(em) && start.getDayOfMonth() == 1 && end.equals(em.atEndOfMonth())) {
+            return sm.getYear() + "年" + sm.getMonthValue() + "月";
+        }
+        return start + " ~ " + end;
+    }
+
+    private ReportOverviewVO.Kpis buildKpis(BigDecimal income, BigDecimal expense,
+                                            BigDecimal expenseAll, BigDecimal net,
+                                            BigDecimal prevIncome, BigDecimal prevExpense,
+                                            BigDecimal prevExpenseAll, BigDecimal prevNet,
+                                            int transactionCount, int days, boolean hasPrev) {
+        ReportOverviewVO.Kpis k = new ReportOverviewVO.Kpis();
+        k.setIncome(scale2(income));
+        k.setExpense(scale2(expense));
+        k.setExpenseAll(scale2(expenseAll));
+        k.setNet(scale2(net));
+        k.setSavingsRate(income.signum() == 0 ? BigDecimal.ZERO
+                : scale1(net.divide(income, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100))));
+        k.setAvgDaily(scale2(expense.divide(BigDecimal.valueOf(Math.max(days, 1)), 4, RoundingMode.HALF_UP)));
+        k.setTransactionCount(transactionCount);
+        if (!hasPrev) {
+            return k;
+        }
+        k.setPrevIncome(scale2(prevIncome));
+        k.setPrevExpense(scale2(prevExpense));
+        k.setPrevExpenseAll(scale2(prevExpenseAll));
+        k.setPrevNet(scale2(prevNet));
+        BigDecimal prevRate = prevIncome.signum() == 0 ? null
+                : prevNet.divide(prevIncome, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
+        k.setPrevSavingsRate(prevRate);
+        BigDecimal prevAvg = prevExpense.divide(BigDecimal.valueOf(Math.max(days, 1)), 4, RoundingMode.HALF_UP);
+        k.setPrevAvgDaily(scale2(prevAvg));
+        k.setIncomeChangePct(overviewChangePct(income, prevIncome));
+        k.setExpenseChangePct(overviewChangePct(expense, prevExpense));
+        k.setNetChangePct(prevNet.signum() > 0 ? overviewChangePct(net, prevNet) : null);
+        if (prevRate != null) {
+            k.setSavingsRateChangePp(k.getSavingsRate().subtract(prevRate).setScale(1, RoundingMode.HALF_UP));
+        }
+        k.setAvgDailyChangePct(prevAvg.signum() > 0 ? overviewChangePct(k.getAvgDaily(), prevAvg) : null);
+        return k;
+    }
+
+    private BigDecimal overviewChangePct(BigDecimal current, BigDecimal prev) {
+        if (prev == null || prev.signum() <= 0) {
+            return null;
+        }
+        return current.subtract(prev).divide(prev, 4, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
+    }
+
+    private List<ReportOverviewVO.ScopeItem> buildScopes(List<Transaction> txs,
+                                                         Map<Long, Category> cats) {
+        Map<String, ReportOverviewVO.ScopeItem> map = new LinkedHashMap<>();
+        for (String s : List.of("DAILY", "FIXED", "SPECIAL")) {
+            ReportOverviewVO.ScopeItem item = new ReportOverviewVO.ScopeItem();
+            item.setScope(s);
+            map.put(s, item);
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (Transaction tx : txs) {
+            ReportOverviewVO.ScopeItem item = map.get(scopeOf(tx, cats));
+            if (item == null) continue;
+            BigDecimal delta = netDelta(tx);
+            item.setAmount(item.getAmount().add(delta));
+            if (tx.getType() != null && tx.getType() == 1) {
+                item.setCount(item.getCount() + 1);
+            }
+            total = total.add(delta);
+        }
+        for (ReportOverviewVO.ScopeItem item : map.values()) {
+            item.setAmount(scale2(item.getAmount()));
+            item.setShare(total.signum() == 0 ? BigDecimal.ZERO
+                    : scale1(item.getAmount().divide(total, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))));
+        }
+        return new ArrayList<>(map.values());
+    }
+
+    private List<ReportOverviewVO.CategoryItem> buildCategoryRank(
+            List<Transaction> current, List<Transaction> prev, Map<Long, Category> cats,
+            int level, Long parentFilter, BigDecimal shareTotal, BudgetProgressVO budgetProgress) {
+        Map<Long, List<Transaction>> grouped = new LinkedHashMap<>();
+        for (Transaction tx : current) {
+            Category cat = cats.get(tx.getCategoryId());
+            if (cat == null) continue;
+            Long parentId = topParentId(cat);
+            if (parentFilter != null && !parentFilter.equals(parentId)) continue;
+            Long groupId = level == 1 ? parentId : cat.getId();
+            grouped.computeIfAbsent(groupId, k -> new ArrayList<>()).add(tx);
+        }
+        Map<Long, BigDecimal> prevAmounts = new HashMap<>();
+        if (prev != null) {
+            for (Transaction tx : prev) {
+                Category cat = cats.get(tx.getCategoryId());
+                if (cat == null) continue;
+                Long parentId = topParentId(cat);
+                if (parentFilter != null && !parentFilter.equals(parentId)) continue;
+                Long groupId = level == 1 ? parentId : cat.getId();
+                prevAmounts.merge(groupId, netDelta(tx), BigDecimal::add);
+            }
+        }
+
+        List<ReportOverviewVO.CategoryItem> items = new ArrayList<>();
+        for (Map.Entry<Long, List<Transaction>> entry : grouped.entrySet()) {
+            Long groupId = entry.getKey();
+            List<Transaction> txs = entry.getValue();
+            BigDecimal amount = netOf(txs);
+            if (amount.compareTo(new BigDecimal("0.004")) <= 0) continue;
+
+            ReportOverviewVO.CategoryItem item = new ReportOverviewVO.CategoryItem();
+            item.setCategoryId(groupId);
+            item.setAmount(scale2(amount));
+            item.setCount((int) txs.stream().filter(t -> t.getType() != null && t.getType() == 1).count());
+            item.setShare(shareTotal.signum() == 0 ? BigDecimal.ZERO
+                    : scale1(amount.divide(shareTotal, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100))));
+
+            Category cat = cats.get(groupId);
+            if (cat != null) {
+                item.setName(cat.getName());
+                item.setColor(cat.getColor());
+                if (level == 2) {
+                    Category parent = cats.get(cat.getParentId());
+                    if (parent != null) {
+                        item.setParentId(parent.getId());
+                        item.setParentName(parent.getName());
+                    }
+                }
+            }
+            Map<String, BigDecimal> scopeAmounts = new HashMap<>();
+            for (Transaction tx : txs) {
+                scopeAmounts.merge(scopeOf(tx, cats), netDelta(tx), BigDecimal::add);
+            }
+            item.setScope(scopeAmounts.entrySet().stream()
+                    .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("DAILY"));
+
+            if (prev != null) {
+                BigDecimal prevAmount = prevAmounts.getOrDefault(groupId, BigDecimal.ZERO);
+                item.setPrevAmount(scale2(prevAmount));
+                if (prevAmount.signum() > 0) {
+                    item.setDeltaPct(scale1(amount.subtract(prevAmount)
+                            .divide(prevAmount, 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100))));
+                }
+            }
+            if (level == 1 && budgetProgress != null) {
+                budgetProgress.getItems().stream()
+                        .filter(bi -> groupId.equals(bi.getCategoryId()))
+                        .findFirst()
+                        .ifPresent(bi -> {
+                            item.setBudgetAmount(scale2(bi.getBudget()));
+                            item.setBudgetPct(scale1(bi.getProgressPct()));
+                        });
+            }
+            if (level == 1) {
+                List<ReportOverviewVO.CategoryItem> children = buildCategoryRank(
+                        current, prev, cats, 2, groupId, amount, null);
+                if (!children.isEmpty()) {
+                    item.setChildren(children);
+                }
+            }
+            items.add(item);
+        }
+        items.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
+        return items;
+    }
+
+    private Long topParentId(Category cat) {
+        if (cat.getParentId() != null && cat.getParentId() != 0) {
+            return cat.getParentId();
+        }
+        return cat.getId();
+    }
+
+    private List<ReportOverviewVO.TrendItem> buildOverviewTrend(
+            List<Transaction> all, Map<Long, Category> cats, YearMonth from, YearMonth to) {
+        List<ReportOverviewVO.TrendItem> list = new ArrayList<>();
+        for (YearMonth ym = from; !ym.isAfter(to); ym = ym.plusMonths(1)) {
+            LocalDate start = ym.atDay(1);
+            LocalDate end = ym.atEndOfMonth();
+            ReportOverviewVO.TrendItem item = new ReportOverviewVO.TrendItem();
+            item.setMonth(ym.toString());
+            for (Transaction tx : all) {
+                if (tx.getTransactionDate() == null
+                        || tx.getTransactionDate().isBefore(start)
+                        || tx.getTransactionDate().isAfter(end)) {
+                    continue;
+                }
+                if (tx.getType() != null && tx.getType() == 2) {
+                    if (isReportableIncome(tx, cats)) {
+                        item.setIncome(item.getIncome().add(tx.getAmountBase()));
+                    }
+                    continue;
+                }
+                if (tx.getType() == null || (tx.getType() != 1 && tx.getType() != 4)
+                        || !isReportableExpense(tx, cats)) {
+                    continue;
+                }
+                BigDecimal delta = netDelta(tx);
+                String scope = scopeOf(tx, cats);
+                item.setExpense(item.getExpense().add(delta));
+                if ("FIXED".equals(scope)) {
+                    item.setFixed(item.getFixed().add(delta));
+                } else if ("SPECIAL".equals(scope)) {
+                    item.setSpecial(item.getSpecial().add(delta));
+                } else {
+                    item.setDaily(item.getDaily().add(delta));
+                }
+            }
+            item.setIncome(scale2(item.getIncome()));
+            item.setExpense(scale2(item.getExpense()));
+            item.setDaily(scale2(item.getDaily()));
+            item.setFixed(scale2(item.getFixed()));
+            item.setSpecial(scale2(item.getSpecial()));
+            list.add(item);
+        }
+        return list;
+    }
+
+    private List<ReportOverviewVO.DailyItem> buildDaily(List<Transaction> txs,
+                                                        Map<Long, Category> cats) {
+        Map<LocalDate, ReportOverviewVO.DailyItem> map = new TreeMap<>();
+        for (Transaction tx : txs) {
+            if (tx.getTransactionDate() == null) continue;
+            ReportOverviewVO.DailyItem item = map.computeIfAbsent(tx.getTransactionDate(), d -> {
+                ReportOverviewVO.DailyItem di = new ReportOverviewVO.DailyItem();
+                di.setDate(d.toString());
+                return di;
+            });
+            BigDecimal delta = netDelta(tx);
+            item.setExpense(item.getExpense().add(delta));
+            item.setCount(item.getCount() + 1);
+            String scope = scopeOf(tx, cats);
+            if ("FIXED".equals(scope)) {
+                item.setFixed(item.getFixed().add(delta));
+            } else if ("SPECIAL".equals(scope)) {
+                item.setSpecial(item.getSpecial().add(delta));
+            } else {
+                item.setDaily(item.getDaily().add(delta));
+            }
+        }
+        List<ReportOverviewVO.DailyItem> list = new ArrayList<>(map.values());
+        for (ReportOverviewVO.DailyItem item : list) {
+            item.setExpense(scale2(item.getExpense()));
+            item.setDaily(scale2(item.getDaily()));
+            item.setFixed(scale2(item.getFixed()));
+            item.setSpecial(scale2(item.getSpecial()));
+        }
+        return list;
+    }
+
+    private List<ReportOverviewVO.MerchantItem> buildOverviewMerchants(
+            List<Transaction> txs, Map<Long, Category> cats, String scope) {
+        Map<Long, List<Transaction>> grouped = new LinkedHashMap<>();
+        for (Transaction tx : txs) {
+            if (tx.getMerchantId() != null) {
+                grouped.computeIfAbsent(tx.getMerchantId(), k -> new ArrayList<>()).add(tx);
+            }
+        }
+        if (grouped.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, String> names = merchantMapper.selectBatchIds(grouped.keySet()).stream()
+                .collect(Collectors.toMap(Merchant::getId, Merchant::getName, (a, b) -> a));
+        List<ReportOverviewVO.MerchantItem> items = new ArrayList<>();
+        for (Map.Entry<Long, List<Transaction>> entry : grouped.entrySet()) {
+            String name = names.get(entry.getKey());
+            if (name == null || name.isBlank()) continue;
+            List<Transaction> list = entry.getValue();
+            ReportOverviewVO.MerchantItem item = new ReportOverviewVO.MerchantItem();
+            item.setMerchantId(entry.getKey());
+            item.setName(name);
+            item.setAmount(scale2(netOf(list)));
+            item.setCount((int) list.stream()
+                    .filter(t -> t.getType() != null && t.getType() == 1).count());
+            Map<String, Integer> categoryCounts = new HashMap<>();
+            for (Transaction tx : list) {
+                Category cat = cats.get(tx.getCategoryId());
+                if (cat != null) {
+                    categoryCounts.merge(cat.getName(), 1, Integer::sum);
+                }
+            }
+            item.setCategoryName(categoryCounts.entrySet().stream()
+                    .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse(""));
+            Map<String, BigDecimal> scopeAmounts = new HashMap<>();
+            for (Transaction tx : list) {
+                scopeAmounts.merge(scopeOf(tx, cats), netDelta(tx), BigDecimal::add);
+            }
+            item.setScope(scopeAmounts.entrySet().stream()
+                    .max(Map.Entry.comparingByValue()).map(Map.Entry::getKey).orElse("DAILY"));
+            items.add(item);
+        }
+        items.sort((a, b) -> b.getAmount().compareTo(a.getAmount()));
+        return items.stream().limit(20).toList();
+    }
+
+    private ReportOverviewVO.AnnualBlock buildAnnualBlock(int year) {
+        ReportOverviewVO.AnnualBlock block = new ReportOverviewVO.AnnualBlock();
+        block.setYear(year);
+        String y = String.valueOf(year);
+        if (!annualBudgetService.exists(y)) {
+            return block;
+        }
+        try {
+            AnnualBudgetProgressVO p = annualBudgetService.getProgress(y);
+            block.setTotal(scale2(p.getTotalBudget()));
+            block.setSpent(scale2(p.getTotalSpent()));
+            block.setRemaining(scale2(p.getRemaining()));
+            block.setPct(scale1(p.getProgressPct()));
+            LocalDate today = LocalDate.now();
+            BigDecimal timePct;
+            if (year < today.getYear()) {
+                timePct = BigDecimal.valueOf(100);
+            } else if (year > today.getYear()) {
+                timePct = BigDecimal.ZERO;
+            } else {
+                timePct = BigDecimal.valueOf(today.getDayOfYear())
+                        .divide(BigDecimal.valueOf(today.lengthOfYear()), 4, RoundingMode.HALF_UP)
+                        .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
+            }
+            block.setTimePct(timePct);
+            List<ReportOverviewVO.AnnualBlock.Item> items = new ArrayList<>();
+            for (AnnualBudgetProgressVO.ItemProgress bi : p.getItems()) {
+                ReportOverviewVO.AnnualBlock.Item item = new ReportOverviewVO.AnnualBlock.Item();
+                item.setCategoryId(bi.getCategoryId());
+                item.setName(bi.getCategoryName());
+                item.setAmount(scale2(bi.getBudget()));
+                item.setSpent(scale2(bi.getSpent()));
+                item.setPct(scale1(bi.getProgressPct()));
+                items.add(item);
+            }
+            block.setItems(items);
+        } catch (Exception e) {
+            log.warn("Load annual budget failed for {}: {}", year, e.getMessage());
+        }
+        return block;
+    }
+
+    private ReportOverviewVO.AccountBlock buildAccountBlock(YearMonth endMonth) {
+        ReportOverviewVO.AccountBlock block = new ReportOverviewVO.AccountBlock();
+        List<Account> accounts = accountMapper.selectList(
+                new LambdaQueryWrapper<Account>().eq(Account::getIsActive, true));
+        Map<String, BigDecimal> groupSums = new HashMap<>();
+        BigDecimal assets = BigDecimal.ZERO;
+        BigDecimal liabilities = BigDecimal.ZERO;
+        List<ReportOverviewVO.AccountBlock.Item> items = new ArrayList<>();
+        for (Account account : accounts) {
+            BigDecimal balance = account.getCurrentBalance() == null
+                    ? BigDecimal.ZERO : account.getCurrentBalance();
+            ReportOverviewVO.AccountBlock.Item item = new ReportOverviewVO.AccountBlock.Item();
+            item.setId(account.getId());
+            item.setName(account.getName());
+            item.setType(accountTypeLabel(account.getType()));
+            item.setCurrency(account.getCurrency());
+            item.setBalance(scale2(balance));
+            items.add(item);
+            groupSums.merge(item.getType(), balance, BigDecimal::add);
+            if (balance.signum() >= 0) {
+                assets = assets.add(balance);
+            } else {
+                liabilities = liabilities.add(balance.abs());
+            }
+        }
+        items.sort((a, b) -> b.getBalance().abs().compareTo(a.getBalance().abs()));
+        block.setNetWorth(scale2(assets.subtract(liabilities)));
+        block.setAssets(scale2(assets));
+        block.setLiabilities(scale2(liabilities));
+        List<ReportOverviewVO.AccountBlock.Group> groups = new ArrayList<>();
+        for (String type : List.of("储蓄卡", "信用卡", "投资账户", "电子钱包", "现金", "未知")) {
+            if (groupSums.containsKey(type)) {
+                ReportOverviewVO.AccountBlock.Group group = new ReportOverviewVO.AccountBlock.Group();
+                group.setType(type);
+                group.setBalance(scale2(groupSums.get(type)));
+                groups.add(group);
+            }
+        }
+        block.setGroups(groups);
+        block.setAccounts(items);
+        block.setNetWorthTrend(accountSnapshotService.netWorthTrend(getUserId(), endMonth, 12));
+        return block;
+    }
+
+    private List<ReportOverviewVO.BudgetBlock.Item> mapBudgetItems(BudgetProgressVO p) {
+        List<ReportOverviewVO.BudgetBlock.Item> items = new ArrayList<>();
+        if (p.getItems() == null) {
+            return items;
+        }
+        for (BudgetProgressVO.ItemProgress bi : p.getItems()) {
+            ReportOverviewVO.BudgetBlock.Item item = new ReportOverviewVO.BudgetBlock.Item();
+            item.setCategoryId(bi.getCategoryId());
+            item.setName(bi.getCategoryName());
+            item.setAmount(scale2(bi.getBudget()));
+            item.setSpent(scale2(bi.getSpent()));
+            item.setPct(scale1(bi.getProgressPct()));
+            items.add(item);
+        }
+        return items;
+    }
+
+    private List<ReportOverviewVO.InsightItem> buildInsights(ReportOverviewVO vo, String scope) {
+        List<ReportOverviewVO.InsightItem> insights = new ArrayList<>();
+        ReportOverviewVO.BudgetBlock budget = vo.getBudget();
+
+        if (budget != null && budget.isExists() && budget.getTotal().signum() > 0) {
+            BigDecimal over = budget.getSpent().subtract(budget.getTotal());
+            ReportOverviewVO.InsightItem item = new ReportOverviewVO.InsightItem();
+            if (over.signum() > 0) {
+                item.setTone("bad");
+                item.setTitle("日常超支 " + money(over));
+                List<ReportOverviewVO.BudgetBlock.Item> overs = budget.getItems().stream()
+                        .filter(bi -> bi.getSpent().compareTo(bi.getAmount()) > 0)
+                        .sorted((a, b) -> b.getSpent().subtract(b.getAmount())
+                                .compareTo(a.getSpent().subtract(a.getAmount())))
+                        .limit(3).toList();
+                BigDecimal overSum = overs.stream()
+                        .map(bi -> bi.getSpent().subtract(bi.getAmount()))
+                        .reduce(BigDecimal.ZERO, BigDecimal::add);
+                item.setText("日常支出占预算的 " + budget.getPct().toPlainString() + "%。"
+                        + (overs.isEmpty() ? "" : "超支主要来自"
+                        + overs.stream().map(ReportOverviewVO.BudgetBlock.Item::getName)
+                        .collect(Collectors.joining("、"))
+                        + "，合计超出 " + money(overSum) + "。"));
+            } else {
+                item.setTone("good");
+                item.setTitle("日常还剩 " + money(over.abs()));
+                item.setText("日常支出占预算的 " + budget.getPct().toPlainString()
+                        + "%，按当前节奏可以撑到月底。");
+            }
+            insights.add(item);
+        } else {
+            ReportOverviewVO.CategoryItem top = vo.getCategories().stream()
+                    .max(Comparator.comparing(ReportOverviewVO.CategoryItem::getAmount))
+                    .orElse(null);
+            ReportOverviewVO.InsightItem item = new ReportOverviewVO.InsightItem();
+            item.setTone("neutral");
+            if (top == null) {
+                item.setTitle("本期暂无支出");
+                item.setText("换个区间，或在交易页确认本月流水是否已入账。");
+            } else {
+                item.setTitle(top.getName() + " 是本期最大分类");
+                item.setText(money(top.getAmount()) + "，占当前范围的 "
+                        + top.getShare().toPlainString() + "%。设置月度预算后可以跟踪超支。");
+            }
+            insights.add(item);
+        }
+
+        BigDecimal fixed = BigDecimal.ZERO;
+        BigDecimal special = BigDecimal.ZERO;
+        BigDecimal all = BigDecimal.ZERO;
+        if (vo.getScopes() != null) {
+            for (ReportOverviewVO.ScopeItem s : vo.getScopes()) {
+                all = all.add(s.getAmount());
+                if ("FIXED".equals(s.getScope())) fixed = s.getAmount();
+                if ("SPECIAL".equals(s.getScope())) special = s.getAmount();
+            }
+        }
+        ReportOverviewVO.InsightItem structure = new ReportOverviewVO.InsightItem();
+        structure.setTone("neutral");
+        if (all.signum() == 0) {
+            structure.setTitle("固定与专项占 0%");
+            structure.setText("本期没有支出记录。");
+        } else {
+            BigDecimal fixedShare = fixed.divide(all, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
+            BigDecimal specialShare = special.divide(all, 4, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100)).setScale(1, RoundingMode.HALF_UP);
+            BigDecimal dailyShare = BigDecimal.valueOf(100).subtract(fixedShare).subtract(specialShare);
+            structure.setTitle("固定与专项占 " + fixedShare.add(specialShare).setScale(0, RoundingMode.HALF_UP) + "%");
+            structure.setText("固定支出 " + money(fixed) + "（" + fixedShare.toPlainString()
+                    + "%），专项 " + money(special) + "（" + specialShare.toPlainString()
+                    + "%），日常只占 " + dailyShare.setScale(1, RoundingMode.HALF_UP) + "%。");
+        }
+        insights.add(structure);
+
+        ReportOverviewVO.CategoryItem topChange = vo.getCategories().stream()
+                .filter(c -> c.getPrevAmount() != null && c.getPrevAmount().signum() > 0)
+                .max(Comparator.comparing(c -> c.getAmount().subtract(c.getPrevAmount())))
+                .orElse(null);
+        ReportOverviewVO.InsightItem change = new ReportOverviewVO.InsightItem();
+        if (topChange != null) {
+            BigDecimal diff = topChange.getAmount().subtract(topChange.getPrevAmount());
+            change.setTone(diff.signum() > 0 ? "warn" : "good");
+            change.setTitle(topChange.getName() + "环比 "
+                    + (topChange.getDeltaPct() == null ? "—"
+                    : (diff.signum() > 0 ? "+" : "") + topChange.getDeltaPct().toPlainString() + "%"));
+            change.setText("较上期" + (diff.signum() > 0 ? "增加 " : "减少 ") + money(diff.abs())
+                    + "，是本口径下变化最大的分类。");
+        } else {
+            change.setTone("neutral");
+            change.setTitle("暂无可比变化");
+            change.setText("所选区间没有可比较的上一期数据，换一个月份或对比方式试试。");
+        }
+        insights.add(change);
+        return insights;
+    }
+
+    private List<Transaction> reportableExpenses(List<Transaction> all, LocalDate start,
+                                                 LocalDate end, Map<Long, Category> cats) {
+        return all.stream()
+                .filter(t -> inRange(t, start, end))
+                .filter(t -> t.getType() != null && (t.getType() == 1 || t.getType() == 4))
+                .filter(t -> isReportableExpense(t, cats))
+                .toList();
+    }
+
+    private List<Transaction> reportableIncomes(List<Transaction> all, LocalDate start,
+                                                LocalDate end, Map<Long, Category> cats) {
+        return all.stream()
+                .filter(t -> inRange(t, start, end))
+                .filter(t -> t.getType() != null && t.getType() == 2)
+                .filter(t -> isReportableIncome(t, cats))
+                .toList();
+    }
+
+    private boolean inRange(Transaction tx, LocalDate start, LocalDate end) {
+        return tx.getTransactionDate() != null
+                && !tx.getTransactionDate().isBefore(start)
+                && !tx.getTransactionDate().isAfter(end);
+    }
+
+    private List<Transaction> filterScope(List<Transaction> txs, String scope,
+                                          Map<Long, Category> cats) {
+        if ("ALL".equals(scope)) {
+            return txs;
+        }
+        return txs.stream().filter(t -> scope.equals(scopeOf(t, cats))).toList();
+    }
+
+    private String scopeOf(Transaction tx, Map<Long, Category> cats) {
+        Category cat = tx.getCategoryId() == null ? null : cats.get(tx.getCategoryId());
+        if (cat == null || cat.getBudgetType() == null) {
+            return "DAILY";
+        }
+        if ("FIXED".equals(cat.getBudgetType())) {
+            return "FIXED";
+        }
+        if ("SPECIAL".equals(cat.getBudgetType())) {
+            return "SPECIAL";
+        }
+        return "DAILY";
+    }
+
+    private BigDecimal netDelta(Transaction tx) {
+        BigDecimal amount = tx.getAmountBase() == null ? BigDecimal.ZERO : tx.getAmountBase();
+        return tx.getType() != null && tx.getType() == 4 ? amount.negate() : amount;
+    }
+
+    private BigDecimal netOf(List<Transaction> txs) {
+        return txs.stream().map(this::netDelta).reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private LocalDate parseReportDate(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, field + " 不能为空");
+        }
+        try {
+            return LocalDate.parse(value);
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "日期格式不正确，应为 yyyy-MM-dd");
+        }
+    }
+
+    private BigDecimal scale2(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal scale1(BigDecimal v) {
+        return v == null ? BigDecimal.ZERO : v.setScale(1, RoundingMode.HALF_UP);
+    }
+
+    private String money(BigDecimal v) {
+        return "¥" + String.format("%,.0f", v == null ? BigDecimal.ZERO : v);
     }
 
     @Override

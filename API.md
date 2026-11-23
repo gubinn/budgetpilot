@@ -524,9 +524,11 @@
 
 | 方法 | 路径 | 功能 | Query 参数 |
 |------|------|------|-------------|
+| GET | `/api/v1/reports/overview` | 报表聚合（KPI/结构/排行/趋势/日历/预算/账户/洞察） | `startDate`, `endDate` (yyyy-MM-dd, 必填), `compare` (PREV/YOY/NONE，默认 PREV), `scope` (ALL/DAILY/FIXED/SPECIAL，默认 ALL), `level` (1/2，默认 1) |
+| GET | `/api/v1/reports/net-worth` | 某月净资产快照（每账户余额 + 环比） | `month` (yyyy-MM，可选，默认上一个已结束月份) |
 | GET | `/api/v1/reports/monthly-summary` | 月度汇总 | `month` (yyyy-MM, 必填), `level` (1=一级汇总, 2=二级明细, 默认 1) |
 | GET | `/api/v1/reports/yearly-summary` | 年度汇总 | `year` (yyyy, 必填), `level` (1/2, 默认 1) |
-| GET | `/api/v1/reports/category-detail` | 分类明细 | `month`, `categoryId` |
+| GET | `/api/v1/reports/category-detail` | 分类明细 | `categoryId` (必填), `month` 或 `startDate`+`endDate`, `scope` (ALL/DAILY/FIXED/SPECIAL，默认 ALL) |
 | GET | `/api/v1/reports/trend` | 趋势分析 | `months` (默认12), `type` (可选) |
 | GET | `/api/v1/reports/compare` | 对比分析 | `month`, `compareWith` |
 | GET | `/api/v1/reports/account-summary` | 账户概况 | - |

@@ -1,7 +1,10 @@
 <template>
   <n-card title="账户管理">
     <template #header-extra>
-      <n-button type="primary" @click="openCreate">新增账户</n-button>
+      <n-space>
+        <n-button @click="showSnapshots = true">净资产快照</n-button>
+        <n-button type="primary" @click="openCreate">新增账户</n-button>
+      </n-space>
     </template>
 
     <n-data-table :columns="columns" :data="accounts" :loading="loading" />
@@ -82,6 +85,7 @@
         </n-form-item>
       </n-form>
     </n-modal>
+  <NetWorthSnapshot v-model:show="showSnapshots" />
   </n-card>
 </template>
 
@@ -89,6 +93,7 @@
 import { ref, h, onMounted, computed } from 'vue'
 import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { accountApi } from '@/api'
+import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
 import { formatNum } from '@/utils/display'
 
 const dialog = useDialog()
@@ -96,6 +101,7 @@ const message = useMessage()
 const loading = ref(false)
 const accounts = ref([])
 const showCreate = ref(false)
+const showSnapshots = ref(false)
 const editingId = ref(null)
 const submitting = ref(false)
 const formRef = ref(null)

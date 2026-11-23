@@ -6,6 +6,8 @@ import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.service.ReportService;
+import uk.gubin.budgetpilot.vo.NetWorthSnapshotVO;
+import uk.gubin.budgetpilot.vo.ReportOverviewVO;
 import uk.gubin.budgetpilot.vo.ReportVO;
 
 import java.time.LocalDate;
@@ -29,6 +31,43 @@ public class ReportController {
             LocalDate.parse(month + "-01", DateTimeFormatter.ISO_LOCAL_DATE);
         } catch (DateTimeParseException e) {
             throw new BizException(ErrorCode.PARAM_ERROR, "月份格式不正确，应为 yyyy-MM");
+        }
+    }
+
+    /** 某个月的净资产快照：每个账户月末余额 + 环比变化 */
+    @GetMapping("/net-worth")
+    public Result<NetWorthSnapshotVO> netWorth(
+            @RequestParam(required = false) String month) {
+        if (month != null && !month.isBlank()) {
+            validateMonth(month);
+        }
+        return Result.ok(reportService.netWorthSnapshot(month));
+    }
+
+    /** 报表聚合：一次返回月报页所需的全部数据 */
+    @GetMapping("/overview")
+    public Result<ReportOverviewVO> overview(
+            @RequestParam String startDate,
+            @RequestParam String endDate,
+            @RequestParam(defaultValue = "PREV") String compare,
+            @RequestParam(defaultValue = "ALL") String scope,
+            @RequestParam(defaultValue = "1") Integer level) {
+        LocalDate start = parseDate(startDate);
+        LocalDate end = parseDate(endDate);
+        if (end.isBefore(start)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "结束日期不能早于开始日期");
+        }
+        if (level == null || (level != 1 && level != 2)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "level 只能为 1 或 2");
+        }
+        return Result.ok(reportService.overview(startDate, endDate, compare, scope, level));
+    }
+
+    private LocalDate parseDate(String value) {
+        try {
+            return LocalDate.parse(value);
+        } catch (Exception e) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "日期格式不正确，应为 yyyy-MM-dd");
         }
     }
 
@@ -56,8 +95,25 @@ public class ReportController {
 
     @GetMapping("/category-detail")
     public Result<ReportVO> categoryDetail(
-            @RequestParam String month,
-            @RequestParam Long categoryId) {
+            @RequestParam(required = false) String month,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam Long categoryId,
+            @RequestParam(defaultValue = "ALL") String scope) {
+        if (startDate != null || endDate != null) {
+            if (startDate == null || endDate == null) {
+                throw new BizException(ErrorCode.PARAM_ERROR, "startDate 与 endDate 必须同时提供");
+            }
+            LocalDate start = parseDate(startDate);
+            LocalDate end = parseDate(endDate);
+            if (end.isBefore(start)) {
+                throw new BizException(ErrorCode.PARAM_ERROR, "结束日期不能早于开始日期");
+            }
+            return Result.ok(reportService.categoryDetail(start, end, categoryId, scope));
+        }
+        if (month == null || month.isBlank()) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "month 与 startDate/endDate 至少提供一组");
+        }
         validateMonth(month);
         return Result.ok(reportService.categoryDetail(month, categoryId));
     }

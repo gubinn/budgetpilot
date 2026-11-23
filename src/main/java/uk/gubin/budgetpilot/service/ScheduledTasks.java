@@ -37,6 +37,7 @@ public class ScheduledTasks {
     private final TransactionMapper transactionMapper;
     private final CategoryMapper categoryMapper;
     private final AlertLogService alertLogService;
+    private final AccountSnapshotService accountSnapshotService;
     private final ConfigService configService;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
@@ -193,25 +194,25 @@ public class ScheduledTasks {
      * 作为转账目标账户时增加转入金额。</p>
      */
     static BigDecimal calculateCalibratedBalance(BigDecimal initialBalance, Long accountId, List<Transaction> txs) {
-        BigDecimal balance = initialBalance == null ? BigDecimal.ZERO : initialBalance;
-        for (Transaction tx : txs) {
-            if (tx.getAmount() == null || tx.getType() == null) {
-                continue;
-            }
-            boolean outgoing = accountId.equals(tx.getAccountId());
-            if (outgoing) {
-                switch (tx.getType()) {
-                    case 1 -> balance = balance.subtract(tx.getAmount()); // 支出
-                    case 2 -> balance = balance.add(tx.getAmount());      // 收入
-                    case 3 -> balance = balance.subtract(tx.getAmount()); // 转出
-                    case 4 -> balance = balance.add(tx.getAmount());      // 退款
-                    default -> { }
-                }
-            } else if (tx.getType() == 3 && accountId.equals(tx.getTargetAccountId())) {
-                balance = balance.add(tx.getAmount()); // 转入
-            }
+        return uk.gubin.budgetpilot.common.BalanceCalculator.balanceAt(initialBalance, accountId, txs);
+    }
+
+    /**
+     * 每日 02:50 - 最近 12 个已结束月份的账户月末余额快照。
+     *
+     * <p>放在余额校准（02:30）之后，保证用的是校准后的 current_balance。
+     * 重刷 12 个月是为了覆盖迟到导入的历史流水和手工改账；
+     * 单次只有十几条账户 × 12 个月，成本可以忽略。</p>
+     */
+    @Scheduled(cron = "0 50 2 * * ?")
+    public void snapshotRecentAccountBalances() {
+        YearMonth prev = YearMonth.now().minusMonths(1);
+        List<YearMonth> months = new java.util.ArrayList<>();
+        for (int i = 11; i >= 0; i--) {
+            months.add(prev.minusMonths(i));
         }
-        return balance;
+        log.info("Scheduled: snapshotting {} months of account balances", months.size());
+        forEachActiveUser(userId -> accountSnapshotService.snapshotMonths(userId, months));
     }
 
     /**

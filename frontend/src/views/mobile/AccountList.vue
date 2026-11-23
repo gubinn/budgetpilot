@@ -1,5 +1,9 @@
 <template>
   <div class="mobile-accounts">
+    <div class="snapshot-bar">
+      <n-button size="small" secondary block @click="showSnapshots = true">查看净资产月度快照</n-button>
+    </div>
+
     <!-- 账户卡片列表 -->
     <div v-if="accounts.length" class="account-list">
       <div v-for="acc in accounts" :key="acc.id" class="account-card">
@@ -110,6 +114,8 @@
         新增账户
       </n-button>
     </div>
+
+    <NetWorthSnapshot v-model:show="showSnapshots" mobile />
   </div>
 </template>
 
@@ -117,6 +123,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { accountApi } from '@/api'
+import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
 import { AddOutline } from '@vicons/ionicons5'
 import { formatNum } from '@/utils/display'
 
@@ -125,6 +132,7 @@ const message = useMessage()
 const loading = ref(false)
 const accounts = ref([])
 const showCreate = ref(false)
+const showSnapshots = ref(false)
 const editingId = ref(null)
 const submitting = ref(false)
 const formRef = ref(null)
@@ -308,6 +316,7 @@ onMounted(loadData)
 }
 
 .account-list { display: flex; flex-direction: column; gap: 10px; }
+.snapshot-bar { margin-bottom: 10px; }
 
 .account-card {
   background: #fff;

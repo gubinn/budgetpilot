@@ -489,7 +489,8 @@ class BugfixRegressionTest {
         @DisplayName("月度汇总 - 批量加载分类")
         void monthlySummary_BatchLoadCategories() {
             ReportServiceImpl reportService = new ReportServiceImpl(
-                    transactionMapper, categoryMapper, accountMapper, null, objectMapper, redisTemplate);
+                    transactionMapper, categoryMapper, accountMapper, null,
+                    null, null, null, objectMapper, redisTemplate);
 
             Transaction tx = new Transaction();
             tx.setId(1L);
@@ -504,14 +505,14 @@ class BugfixRegressionTest {
 
             when(transactionMapper.selectList(any())).thenReturn(List.of(tx));
             lenient().when(accountMapper.selectBatchIds(anyCollection())).thenReturn(List.of(debitAccount));
-            when(categoryMapper.selectBatchIds(anyCollection())).thenReturn(List.of(category));
+            when(categoryMapper.selectList(any())).thenReturn(List.of(category));
             ValueOperations<String, String> valueOps = mock(ValueOperations.class);
             when(redisTemplate.opsForValue()).thenReturn(valueOps);
             when(valueOps.get(anyString())).thenReturn(null);
 
             reportService.monthlySummary("2026-04");
 
-            verify(categoryMapper).selectBatchIds(anyCollection());
+            verify(categoryMapper, atLeastOnce()).selectList(any());
             verify(categoryMapper, never()).selectById(any());
         }
     }

@@ -8,6 +8,7 @@
 |------|------|
 | [CHANGELOG.md](CHANGELOG.md) | 变更记录、升级顺序、运维事实、踩坑经验 |
 | [API.md](API.md) | 内部 API 文档 |
+| [REPORTING.md](REPORTING.md) | 报表口径、聚合接口与净资产月快照 |
 | [API_EXTERNAL.md](API_EXTERNAL.md) | 面向外部系统的 API 文档（API Key 鉴权、幂等） |
 | [DEPLOY.md](DEPLOY.md) | Docker / 裸机部署、数据库迁移 |
 | [budgetpilot-design-v2-final.md](budgetpilot-design-v2-final.md) | 系统设计文档 |

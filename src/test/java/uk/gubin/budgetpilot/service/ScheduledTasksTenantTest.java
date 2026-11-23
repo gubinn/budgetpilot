@@ -51,6 +51,7 @@ class ScheduledTasksTenantTest {
                 mock(TransactionMapper.class),
                 mock(CategoryMapper.class),
                 mock(AlertLogService.class),
+                mock(AccountSnapshotService.class),
                 mock(ConfigService.class),
                 mock(ApplicationEventPublisher.class),
                 mock(ObjectMapper.class),
