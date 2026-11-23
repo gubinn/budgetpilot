@@ -65,7 +65,7 @@
             </span>
           </div>
           <div class="tx-card">
-            <div v-for="tx in group.items" :key="tx.id" class="tx-row" @click="router.push(`/transactions/edit/${tx.id}`)">
+            <div v-for="tx in group.items" :key="tx.id" class="tx-row" @click="openEdit(tx)">
               <div class="tx-main">
                 <div class="tx-title m-ellipsis">
                   <span class="tx-cat" :style="{ color: tx.parentCategoryColor || tx.categoryColor }">
@@ -167,6 +167,18 @@
       </n-drawer-content>
     </n-drawer>
 
+    <!-- 编辑弹窗：留在列表页，筛选条件不丢 -->
+    <n-drawer v-model:show="showEdit" placement="bottom" :height="'88vh'">
+      <n-drawer-content title="编辑交易" closable>
+        <MobileTransactionFormBody
+          v-if="showEdit"
+          :transaction-id="editingId"
+          @saved="onEditSaved"
+          @cancel="showEdit = false"
+        />
+      </n-drawer-content>
+    </n-drawer>
+
     <!-- 复核弹窗 -->
     <n-drawer v-model:show="showReview" placement="bottom" :height="'78vh'" class="review-drawer">
       <n-drawer-content title="复核交易" closable>
@@ -203,14 +215,13 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
+import MobileTransactionFormBody from '@/components/transaction/MobileTransactionFormBody.vue'
 import { OptionsOutline, ReceiptOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
 
-const router = useRouter()
 const message = useMessage()
 const loading = ref(false)
 const transactions = ref([])
@@ -272,6 +283,9 @@ const sheetRange = computed({
     if (customRange.value) datePreset.value = 'custom'
   }
 })
+
+const showEdit = ref(false)
+const editingId = ref(null)
 
 const showReview = ref(false)
 const reviewRow = ref(null)
@@ -428,6 +442,16 @@ function findCategoryByPath(path) {
     list = found.children
   }
   return found
+}
+
+function openEdit(tx) {
+  editingId.value = tx.id
+  showEdit.value = true
+}
+
+function onEditSaved() {
+  showEdit.value = false
+  reload()
 }
 
 function openReview(row) {

@@ -1,38 +1,71 @@
 <template>
   <n-card>
     <div class="filter-bar">
-      <n-form :model="filters" label-placement="left" :show-feedback="false" class="filter-form">
-        <div class="filter-grid">
-          <n-form-item label="类型" :label-width="72" class="filter-field">
-            <n-select v-model:value="filters.type" :options="typeOptions" clearable :consistent-menu-width="false" />
-          </n-form-item>
-          <n-form-item label="账户" :label-width="72" class="filter-field">
-            <n-select v-model:value="filters.accountId" :options="accountOptions" clearable :consistent-menu-width="false" />
-          </n-form-item>
-          <n-form-item label="分类" :label-width="72" class="filter-field">
-            <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="选择分类" clearable :consistent-menu-width="false" key-field="value" label-field="label" children-field="children" />
-          </n-form-item>
-          <n-form-item label="标签" :label-width="72" class="filter-field">
-            <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="选择标签" :consistent-menu-width="false" />
-          </n-form-item>
-          <n-form-item label="入账状态" :label-width="72" class="filter-field">
-            <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable :consistent-menu-width="false" />
-          </n-form-item>
-          <n-form-item label="复核状态" :label-width="72" class="filter-field">
-            <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable :consistent-menu-width="false" />
-          </n-form-item>
-          <n-form-item label="对账状态" :label-width="72" class="filter-field">
-            <n-select v-model:value="filters.reconciled" :options="reconcileOptions" clearable :consistent-menu-width="false" />
-          </n-form-item>
-          <n-form-item label="日期" :label-width="72" class="filter-field filter-date">
-            <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 100%" />
-          </n-form-item>
+      <!-- 常用条件直接露出，复杂条件收起 -->
+      <div class="quick-bar">
+        <div class="chip-line">
+          <button
+            v-for="p in datePresets"
+            :key="p.value"
+            class="q-chip"
+            :class="{ active: datePreset === p.value }"
+            @click="chooseDatePreset(p.value)"
+          >{{ p.label }}</button>
         </div>
-        <div class="filter-actions">
-          <n-button @click="resetFilters">重置</n-button>
-          <n-button type="primary" @click="applyFilters">查询</n-button>
+        <button class="q-chip filter-switch" :class="{ active: moreOpen }" @click="moreOpen = !moreOpen">
+          <n-icon :size="15"><OptionsOutline /></n-icon>
+          筛选
+          <span v-if="advancedCount" class="filter-count">{{ advancedCount }}</span>
+        </button>
+      </div>
+
+      <div class="chip-line type-line">
+        <button
+          v-for="opt in typeOptions"
+          :key="String(opt.value)"
+          class="q-chip"
+          :class="{ active: filters.type === opt.value }"
+          @click="setType(opt.value)"
+        >{{ opt.label }}</button>
+      </div>
+
+      <div v-if="filterChips.length" class="chip-line applied-line">
+        <button v-for="chip in filterChips" :key="chip.key" class="q-chip ghost" @click="clearChip(chip.key)">
+          {{ chip.label }}
+          <span class="chip-x">×</span>
+        </button>
+        <button class="q-chip ghost clear-chip" @click="resetFilters">清空筛选</button>
+      </div>
+
+      <n-collapse-transition :show="moreOpen">
+        <div class="more-panel">
+          <n-form :model="filters" label-placement="left" :show-feedback="false">
+            <div class="filter-grid">
+              <n-form-item label="账户" :label-width="72" class="filter-field">
+                <n-select v-model:value="filters.accountId" :options="accountOptions" clearable :consistent-menu-width="false" @update:value="applyFilters" />
+              </n-form-item>
+              <n-form-item label="分类" :label-width="72" class="filter-field">
+                <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="选择分类" clearable :consistent-menu-width="false" key-field="value" label-field="label" children-field="children" @update:value="applyFilters" />
+              </n-form-item>
+              <n-form-item label="标签" :label-width="72" class="filter-field">
+                <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="选择标签" :consistent-menu-width="false" @update:value="applyFilters" />
+              </n-form-item>
+              <n-form-item label="入账状态" :label-width="72" class="filter-field">
+                <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" clearable :consistent-menu-width="false" @update:value="applyFilters" />
+              </n-form-item>
+              <n-form-item label="复核状态" :label-width="72" class="filter-field">
+                <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" clearable :consistent-menu-width="false" @update:value="applyFilters" />
+              </n-form-item>
+              <n-form-item label="对账状态" :label-width="72" class="filter-field">
+                <n-select v-model:value="filters.reconciled" :options="reconcileOptions" clearable :consistent-menu-width="false" @update:value="applyFilters" />
+              </n-form-item>
+              <n-form-item label="日期" :label-width="72" class="filter-field filter-date">
+                <n-date-picker v-model:value="filterDateRange" type="daterange" value-format="yyyy-MM-dd" clearable style="width: 100%" />
+              </n-form-item>
+            </div>
+          </n-form>
         </div>
-      </n-form>
+      </n-collapse-transition>
     </div>
 
     <n-data-table
@@ -101,18 +134,36 @@
         </n-space>
       </template>
     </n-modal>
+
+    <!-- 编辑弹窗：不离开列表，保留当前查询条件 -->
+    <n-modal v-model:show="showEdit" preset="card" title="编辑交易" class="edit-modal" style="width: 620px" :mask-closable="false">
+      <TransactionFormBody
+        v-if="showEdit"
+        ref="editFormRef"
+        :transaction-id="editingId"
+        :actions="false"
+        @saved="onEditSaved"
+        @cancel="showEdit = false"
+      />
+      <template #footer>
+        <n-space justify="end">
+          <n-button @click="showEdit = false">取消</n-button>
+          <n-button type="primary" :loading="editFormRef?.submitting" @click="editFormRef?.submit()">保存</n-button>
+        </n-space>
+      </template>
+    </n-modal>
   </n-card>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, h } from 'vue'
-import { useRouter } from 'vue-router'
 import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
+import TransactionFormBody from '@/components/transaction/TransactionFormBody.vue'
+import { OptionsOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
 
-const router = useRouter()
 const dialog = useDialog()
 const message = useMessage()
 
@@ -134,11 +185,43 @@ const filters = ref({
   tags: [],
   isConfirmed: null,
   reviewStatus: null,
-  reconciled: null,
-  dateRange: defaultDateRange()
+  reconciled: null
+})
+
+// 日期快捷选项；自定义日期在展开的筛选面板里选
+const datePresets = [
+  { label: '近30天', value: '30d' },
+  { label: '本月', value: 'month' },
+  { label: '上月', value: 'lastMonth' },
+  { label: '全部', value: 'all' },
+  { label: '自定义', value: 'custom' }
+]
+const datePreset = ref('30d')
+const customRange = ref(defaultDateRange())
+const moreOpen = ref(false)
+
+const effectiveRange = computed(() => {
+  const today = dayjs()
+  switch (datePreset.value) {
+    case 'month':
+      return [today.startOf('month').format('YYYY-MM-DD'), today.format('YYYY-MM-DD')]
+    case 'lastMonth': {
+      const prev = today.subtract(1, 'month')
+      return [prev.startOf('month').format('YYYY-MM-DD'), prev.endOf('month').format('YYYY-MM-DD')]
+    }
+    case '30d':
+      return [today.subtract(29, 'day').format('YYYY-MM-DD'), today.format('YYYY-MM-DD')]
+    case 'all':
+      return null
+    case 'custom':
+      return customRange.value
+    default:
+      return null
+  }
 })
 
 const typeOptions = [
+  { label: '全部', value: null },
   { label: '支出', value: 1 },
   { label: '收入', value: 2 },
   { label: '转账', value: 3 },
@@ -159,6 +242,60 @@ const reconcileOptions = [
 const accountOptions = ref([])
 const categoryOptions = ref([])
 const tagOptions = ref([])
+
+const filterDateRange = computed({
+  get: () => customRange.value,
+  set: (val) => {
+    customRange.value = val?.length === 2 ? val : null
+    if (customRange.value) datePreset.value = 'custom'
+    applyFilters()
+  }
+})
+
+const categoryNameMap = computed(() => {
+  const map = new Map()
+  const walk = (list) => {
+    for (const c of list || []) {
+      map.set(c.id, c.name)
+      if (c.children?.length) walk(c.children)
+    }
+  }
+  walk(categories.value)
+  return map
+})
+
+// 已生效的复杂条件，可逐个点掉
+const filterChips = computed(() => {
+  const chips = []
+  if (filters.value.accountId) {
+    const acc = accountOptions.value.find(a => a.value === filters.value.accountId)
+    chips.push({ key: 'accountId', label: `账户：${acc?.label || filters.value.accountId}` })
+  }
+  if (filters.value.categoryId) {
+    chips.push({ key: 'categoryId', label: `分类：${categoryNameMap.value.get(filters.value.categoryId) || filters.value.categoryId}` })
+  }
+  if (filters.value.tags?.length) {
+    chips.push({ key: 'tags', label: `标签：${filters.value.tags.join('、')}` })
+  }
+  if (filters.value.isConfirmed !== null) {
+    chips.push({ key: 'isConfirmed', label: filters.value.isConfirmed ? '已入账' : '待入账' })
+  }
+  if (filters.value.reviewStatus) {
+    chips.push({ key: 'reviewStatus', label: filters.value.reviewStatus === 'REVIEWED' ? '已复核' : '待复核' })
+  }
+  if (filters.value.reconciled !== null) {
+    chips.push({ key: 'reconciled', label: filters.value.reconciled ? '已对账' : '未对账' })
+  }
+  if (datePreset.value === 'custom' && customRange.value) {
+    chips.push({ key: 'date', label: `${customRange.value[0]} 至 ${customRange.value[1]}` })
+  }
+  return chips
+})
+const advancedCount = computed(() => filterChips.value.filter(c => c.key !== 'date').length)
+
+const showEdit = ref(false)
+const editingId = ref(null)
+const editFormRef = ref(null)
 
 const showReview = ref(false)
 const reviewRow = ref(null)
@@ -369,7 +506,7 @@ const columns = [
       row.reviewStatus === 'PENDING'
         ? h(NButton, { size: 'small', type: 'warning', onClick: () => openReview(row) }, { default: () => '复核' })
         : null,
-      h(NButton, { size: 'small', type: 'primary', onClick: () => router.push(`/transactions/edit/${row.id}`) }, { default: () => '编辑' }),
+      h(NButton, { size: 'small', type: 'primary', onClick: () => openEdit(row) }, { default: () => '编辑' }),
       h(NButton, { size: 'small', type: 'error', onClick: () => handleDelete(row.id) }, { default: () => '删除' })
     ].filter(Boolean))
   }
@@ -391,9 +528,10 @@ async function loadData() {
     if (filters.value.tags?.length) {
       params.tags = filters.value.tags.join(',')
     }
-    if (filters.value.dateRange?.length === 2) {
-      params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
-      params.endDate = dayjs(filters.value.dateRange[1]).format('YYYY-MM-DD')
+    const range = effectiveRange.value
+    if (range?.length === 2) {
+      params.startDate = range[0]
+      params.endDate = range[1]
     }
     const [res, sumRes] = await Promise.all([
       transactionApi.list(params),
@@ -414,6 +552,35 @@ function applyFilters() {
   loadData()
 }
 
+function chooseDatePreset(value) {
+  if (value === 'custom') {
+    moreOpen.value = true
+    if (!customRange.value?.length) customRange.value = defaultDateRange()
+    datePreset.value = 'custom'
+    applyFilters()
+    return
+  }
+  datePreset.value = value
+  applyFilters()
+}
+
+function setType(value) {
+  filters.value.type = value
+  applyFilters()
+}
+
+function clearChip(key) {
+  if (key === 'date') {
+    datePreset.value = '30d'
+    customRange.value = defaultDateRange()
+  } else if (key === 'tags') {
+    filters.value.tags = []
+  } else {
+    filters.value[key] = null
+  }
+  applyFilters()
+}
+
 function onPageChange(page) {
   pagination.value.page = page
   loadData()
@@ -426,8 +593,20 @@ function onSizeChange(size) {
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null, dateRange: defaultDateRange() }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null }
+  datePreset.value = '30d'
+  customRange.value = defaultDateRange()
   pagination.value.page = 1
+  loadData()
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  showEdit.value = true
+}
+
+function onEditSaved() {
+  showEdit.value = false
   loadData()
 }
 
@@ -541,7 +720,96 @@ onMounted(async () => {
   border: 1px solid var(--bp-line);
   border-radius: 12px;
 }
-/* 查询条件统一为等宽网格，标签定宽，控件占满单元格 */
+/* 快捷条件：日期与类型用 chip，复杂条件收进「筛选」 */
+.quick-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chip-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.type-line {
+  margin-top: 8px;
+}
+.applied-line {
+  margin-top: 10px;
+}
+.q-chip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.q-chip:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+.q-chip.active {
+  background: var(--bp-primary);
+  border-color: var(--bp-primary);
+  color: #fff;
+}
+.q-chip.ghost {
+  height: 26px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: #eef2f7;
+  color: #475569;
+  font-size: 12px;
+}
+.q-chip.ghost:hover {
+  background: #e2e8f0;
+}
+.chip-x {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.55;
+  margin-left: 2px;
+}
+.clear-chip {
+  color: #94a3b8;
+}
+.filter-switch {
+  margin-left: auto;
+}
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--bp-primary);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+}
+.q-chip.active .filter-count {
+  background: rgba(255, 255, 255, 0.24);
+}
+.more-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+}
+/* 复杂条件统一为等宽网格，标签定宽，控件占满单元格 */
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -556,12 +824,6 @@ onMounted(async () => {
 /* 日期区间跨度更大，避免两个日期挤在一起被截断 */
 .filter-date {
   grid-column: span 2;
-}
-.filter-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
 }
 /* 日期列：日期为主，时间用弱化的第二行显示 */
 :deep(.date-time) {
@@ -625,6 +887,16 @@ onMounted(async () => {
   min-width: 0;
   color: #333;
   word-break: break-all;
+}
+/* 编辑弹窗：内容多时在弹窗内滚动，保存按钮始终可见（弹窗被 teleport 到 body，需用全局选择器） */
+:global(.edit-modal) {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+}
+:global(.edit-modal .n-card-content) {
+  overflow-y: auto;
+  min-height: 0;
 }
 .summary-bar {
   display: flex;
