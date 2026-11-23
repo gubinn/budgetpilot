@@ -19,6 +19,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
 
+    private final ConfigService configService;
+
     public List<AlertRule> getActiveRules() {
         LambdaQueryWrapper<AlertRule> query = new LambdaQueryWrapper<>();
         query.eq(AlertRule::getIsActive, true);
@@ -40,7 +42,7 @@ public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
         rule.setName(dto.getName());
         rule.setType(dto.getType());
         rule.setConfig(dto.getConfig());
-        rule.setNotifyChannel(dto.getNotifyChannel() != null ? dto.getNotifyChannel() : "TELEGRAM");
+        rule.setNotifyChannel(resolveChannel(dto.getNotifyChannel()));
         rule.setIsActive(dto.getIsActive() != null ? dto.getIsActive() : true);
         baseMapper.insert(rule);
         log.info("Created alert rule: {}", rule.getName());
@@ -55,7 +57,7 @@ public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
         if (dto.getName() != null) rule.setName(dto.getName());
         if (dto.getType() != null) rule.setType(dto.getType());
         if (dto.getConfig() != null) rule.setConfig(dto.getConfig());
-        if (dto.getNotifyChannel() != null) rule.setNotifyChannel(dto.getNotifyChannel());
+        if (dto.getNotifyChannel() != null) rule.setNotifyChannel(resolveChannel(dto.getNotifyChannel()));
         if (dto.getIsActive() != null) rule.setIsActive(dto.getIsActive());
         baseMapper.updateById(rule);
         log.info("Updated alert rule: {}", rule.getName());
@@ -71,5 +73,16 @@ public class AlertRuleService extends ServiceImpl<AlertRuleMapper, AlertRule> {
         baseMapper.updateById(rule);
         log.info("Toggled alert rule {}: active={}", rule.getName(), rule.getIsActive());
         return rule;
+    }
+
+    /**
+     * 未指定渠道时跟随全局定时提醒渠道（t_config.notify_channel）。
+     */
+    private String resolveChannel(String requested) {
+        if (requested != null && !requested.isBlank()) {
+            return requested;
+        }
+        String channel = configService.get("notify_channel");
+        return (channel == null || channel.isBlank()) ? "TELEGRAM" : channel;
     }
 }

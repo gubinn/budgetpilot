@@ -623,7 +623,7 @@ WhatsApp 推送走官方 **Agent Platform API**（`https://api.whatsapp.com/agen
 
 `whatsapp_to` 使用 Agent Platform 的接收者格式 `user:<id>`，纯数字会自动补全 `user:` 前缀。
 
-定时提醒的默认渠道由 `t_config.notify_channel` 决定（`TELEGRAM` / `WHATSAPP` / `BOTH` / `APP`，默认 `TELEGRAM`）；单条预警规则可在规则中单独指定渠道。
+定时提醒的默认渠道由 `t_config.notify_channel` 决定（`TELEGRAM` / `WHATSAPP` / `BOTH` / `APP`，默认 `TELEGRAM`）；单条预警规则可在规则中覆盖。月度预算总结没有对应规则，固定使用全局渠道。
 
 > `t_config` 中的 Telegram / WhatsApp 配置仅用于**系统定时提醒与预警**，不用于用户公网登录验证码；后者只读 `t_user_config`（见 9.3）。
 
@@ -704,6 +704,8 @@ PUT /api/v1/system/config/notify_channel
 
 **基础路径**: `/api/v1/alert-rules`
 
+> 规则类型、触发时机和通知渠道的完整说明见 [ALERT_RULES.md](ALERT_RULES.md)。
+
 | 方法 | 路径 | 功能 | 请求体 |
 |------|------|------|--------|
 | GET | `/api/v1/alert-rules` | 获取规则列表 | - |
@@ -720,7 +722,7 @@ PUT /api/v1/system/config/notify_channel
   "name": "规则名称 (必填)",
   "type": "规则类型 (必填)",
   "config": "规则配置 (必填, JSON字符串)",
-  "notifyChannel": "通知渠道 (默认 TELEGRAM)",
+  "notifyChannel": "通知渠道 (默认跟随全局 notify_channel)",
   "isActive": "是否激活 (默认 true)"
 }
 ```
@@ -1103,11 +1105,16 @@ curl http://127.0.0.1:6060/api/v1/accounts \
 | 1 | 预算阈值预警 | `{ "threshold_pct": 80 }` |
 | 2 | 单笔大额预警 | `{ "max_amount": "1000" }` |
 | 3 | 日消费上限 | `{ "daily_limit": "500" }` |
-| 4 | 周消费异常 | 自动检测（阈值50%） |
+| 4 | 周消费异常 | `{ "deviation_pct": 50 }` |
 | 5 | 信用卡还款提醒 | `{ "advance_days": 3 }` |
 | 6 | 周期账单提醒 | `{ "advance_days": 1 }` |
 | 7 | 预算未设定提醒 | `{ "check_day": 25 }` |
 | 8 | 待确认交易提醒 | `{ "min_count": 1 }` |
+| 9 | 月度预算总结（仅日志，无对应规则） | 系统消息，`rule_id=0` |
+
+定时任务会读取当前用户对应类型的**启用规则**及配置：规则停用后不再提醒；
+规则被删除时对应定时提醒也会跳过。提醒渠道优先使用规则自身的 `notify_channel`，
+未设置时回落到全局 `notify_channel`；月度总结没有对应规则，固定使用全局渠道。
 
 ### 通知渠道 (NotifyChannel)
 

@@ -55,6 +55,9 @@
           <n-form-item v-if="formData.type === 3" label="日消费上限">
             <n-input-number v-model:value="formData.dailyLimit" :min="1" placeholder="每日消费上限" />
           </n-form-item>
+          <n-form-item v-if="formData.type === 4" label="偏离阈值">
+            <n-input-number v-model:value="formData.deviationPct" :min="1" :max="500" placeholder="如 50 表示偏离 50%" />
+          </n-form-item>
           <n-form-item v-if="formData.type === 5 || formData.type === 6" label="提前天数">
             <n-input-number v-model:value="formData.advanceDays" :min="1" :max="30" />
           </n-form-item>
@@ -97,9 +100,9 @@ const submitting = ref(false)
 const formRef = ref(null)
 
 const formData = ref({
-  name: '', type: null, notifyChannel: 'TELEGRAM',
+  name: '', type: null, notifyChannel: '',
   threshold: 80, maxAmount: 1000, dailyLimit: 500,
-  advanceDays: 3, checkDay: 25, minCount: 1
+  deviationPct: 50, advanceDays: 3, checkDay: 25, minCount: 1
 })
 
 const typeOptions = [
@@ -114,6 +117,7 @@ const typeOptions = [
 ]
 
 const channelOptions = [
+  { label: '跟随系统默认', value: '' },
   { label: 'Telegram', value: 'TELEGRAM' },
   { label: 'WhatsApp', value: 'WHATSAPP' },
   { label: '两者都发', value: 'BOTH' },
@@ -171,6 +175,7 @@ const handleCreate = async () => {
     if (formData.value.type === 1) config = { threshold_pct: formData.value.threshold }
     else if (formData.value.type === 2) config = { max_amount: String(formData.value.maxAmount) }
     else if (formData.value.type === 3) config = { daily_limit: String(formData.value.dailyLimit) }
+    else if (formData.value.type === 4) config = { deviation_pct: formData.value.deviationPct }
     else if (formData.value.type === 5) config = { advance_days: formData.value.advanceDays }
     else if (formData.value.type === 6) config = { advance_days: formData.value.advanceDays }
     else if (formData.value.type === 7) config = { check_day: formData.value.checkDay }
@@ -183,7 +188,7 @@ const handleCreate = async () => {
     message.success('创建成功')
     showCreateModal.value = false
     loadRules()
-    formData.value = { name: '', type: null, notifyChannel: 'TELEGRAM', threshold: 80, maxAmount: 1000, dailyLimit: 500, advanceDays: 3, checkDay: 25, minCount: 1 }
+    formData.value = { name: '', type: null, notifyChannel: '', threshold: 80, maxAmount: 1000, dailyLimit: 500, deviationPct: 50, advanceDays: 3, checkDay: 25, minCount: 1 }
   } catch (e) { message.error('创建失败: ' + e.message) } finally { submitting.value = false }
 }
 

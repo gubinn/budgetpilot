@@ -86,6 +86,12 @@ public class ScheduledTasks {
     public void checkCreditCardRepayment() {
         log.info("Scheduled: checking credit card repayment");
         forEachActiveUser(userId -> {
+            AlertRule rule = findActiveRule(5);
+            if (rule == null) {
+                return;
+            }
+            int advanceDays = clamp(configInt(rule, "advance_days", 3), 0, 30);
+
             LambdaQueryWrapper<Account> query = new LambdaQueryWrapper<>();
             query.eq(Account::getType, 3)
                     .eq(Account::getIsActive, true)
@@ -96,7 +102,6 @@ public class ScheduledTasks {
             LocalDate today = LocalDate.now();
 
             for (Account card : creditCards) {
-                int advanceDays = 3;
                 LocalDate paymentDate = getPaymentDate(card, today);
                 long daysUntil = java.time.temporal.ChronoUnit.DAYS.between(today, paymentDate);
 
@@ -120,7 +125,7 @@ public class ScheduledTasks {
                             card.getCurrentBalance() != null ? card.getCurrentBalance().toPlainString() : "0",
                             daysUntil,
                             LocalDate.now());
-                    alertLogService.logAndNotify(5L, 5, title, content, defaultChannel());
+                    alertLogService.logAndNotify(rule.getId(), 5, title, content, ruleChannel(rule));
                 }
             }
         });
@@ -133,7 +138,11 @@ public class ScheduledTasks {
     public void checkUpcomingRecurring() {
         log.info("Scheduled: checking upcoming recurring rules");
         forEachActiveUser(userId -> {
-            int advanceDays = 1;
+            AlertRule rule = findActiveRule(6);
+            if (rule == null) {
+                return;
+            }
+            int advanceDays = clamp(configInt(rule, "advance_days", 1), 1, 30);
             LocalDate upcoming = LocalDate.now().plusDays(advanceDays);
 
             List<RecurringRule> upcomingRules = recurringRuleService.list(
@@ -142,21 +151,21 @@ public class ScheduledTasks {
                             .eq(RecurringRule::getNextExecute, upcoming));
             log.info("Upcoming recurring rules: {}", upcomingRules.size());
 
-            for (RecurringRule rule : upcomingRules) {
+            for (RecurringRule recurring : upcomingRules) {
                 String title = "📋 周期账单提醒";
                 String content = String.format("""
                         📋 周期账单提醒
 
                         • 名称: %s
                         • 金额: ¥%s
-                        • 执行日期: 明天
+                        • 执行日期: %d 天后
 
                         ━━━━━━━━━━━━━━
                         _%s_
                         """,
-                        rule.getName(), rule.getAmount().toPlainString(),
+                        recurring.getName(), recurring.getAmount().toPlainString(), advanceDays,
                         LocalDate.now());
-                alertLogService.logAndNotify(6L, 6, title, content, defaultChannel());
+                alertLogService.logAndNotify(rule.getId(), 6, title, content, ruleChannel(rule));
             }
         });
     }
@@ -223,6 +232,12 @@ public class ScheduledTasks {
         log.info("Scheduled: checking budget progress");
         String currentMonth = YearMonth.now().toString();
         forEachActiveUser(userId -> {
+            AlertRule rule = findActiveRule(1);
+            if (rule == null) {
+                return;
+            }
+            int threshold = clamp(configInt(rule, "threshold_pct", 80), 1, 100);
+
             boolean hasBudget = budgetService.exists(currentMonth);
             log.info("Budget exists for {}: {}", currentMonth, hasBudget);
             if (!hasBudget) {
@@ -231,25 +246,33 @@ public class ScheduledTasks {
 
             try {
                 var progress = budgetService.getProgress(currentMonth);
-                if (progress.getProgressPct().compareTo(new BigDecimal("100")) >= 0) {
-                    String title = "📊 预算超支";
+                if (progress.getProgressPct().compareTo(BigDecimal.valueOf(threshold)) >= 0) {
+                    boolean exceeded = progress.getProgressPct().compareTo(new BigDecimal("100")) >= 0;
+                    String title = exceeded ? "📊 预算超支" : "📊 预算预警";
                     String content = String.format("""
-                            📊 预算超支警告
+                            📊 %s
 
                             • 月份: %s
                             • 总预算: ¥%s
                             • 已消费: ¥%s
-                            • 超支: ¥%s
+                            • 进度: %s%%（预警阈值 %d%%）
+                            • %s: ¥%s
 
                             ━━━━━━━━━━━━━━
                             _%s_
                             """,
+                            exceeded ? "预算超支警告" : "预算进度预警",
                             currentMonth,
                             progress.getTotalBudget().toPlainString(),
                             progress.getTotalSpent().toPlainString(),
-                            progress.getTotalSpent().subtract(progress.getTotalBudget()).toPlainString(),
+                            progress.getProgressPct().toPlainString(),
+                            threshold,
+                            exceeded ? "超支" : "剩余",
+                            exceeded
+                                    ? progress.getTotalSpent().subtract(progress.getTotalBudget()).toPlainString()
+                                    : progress.getRemaining().toPlainString(),
                             LocalDate.now());
-                    alertLogService.logAndNotify(1L, 1, title, content, defaultChannel());
+                    alertLogService.logAndNotify(rule.getId(), 1, title, content, ruleChannel(rule));
                 }
             } catch (Exception e) {
                 log.warn("Budget progress check failed", e);
@@ -264,6 +287,12 @@ public class ScheduledTasks {
     public void checkWeeklyAnomaly() {
         log.info("Scheduled: checking weekly spending anomaly");
         forEachActiveUser(userId -> {
+            AlertRule rule = findActiveRule(4);
+            if (rule == null) {
+                return;
+            }
+            int threshold = clamp(configInt(rule, "deviation_pct", 50), 1, 1000);
+
             LocalDate today = LocalDate.now();
             LocalDate weekStart = today.with(java.time.DayOfWeek.MONDAY);
             LocalDate weekEnd = today.with(java.time.DayOfWeek.SUNDAY);
@@ -285,7 +314,6 @@ public class ScheduledTasks {
                     .multiply(BigDecimal.valueOf(100))
                     .setScale(1, RoundingMode.HALF_UP);
 
-            int threshold = 50;
             if (deviation.compareTo(BigDecimal.valueOf(threshold)) > 0) {
                 String title = "🔍 周消费异常";
                 String content = String.format("""
@@ -301,7 +329,7 @@ public class ScheduledTasks {
                         """,
                         thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(), threshold,
                         LocalDate.now());
-                alertLogService.logAndNotify(4L, 4, title, content, defaultChannel());
+                alertLogService.logAndNotify(rule.getId(), 4, title, content, ruleChannel(rule));
             } else if (deviation.abs().compareTo(BigDecimal.valueOf(threshold)) > 0 && deviation.compareTo(BigDecimal.ZERO) < 0) {
                 String title = "📉 周消费偏低";
                 String content = String.format("""
@@ -316,7 +344,7 @@ public class ScheduledTasks {
                         """,
                         thisWeek.toPlainString(), avgExpense.toPlainString(), deviation.toPlainString(),
                         LocalDate.now());
-                alertLogService.logAndNotify(4L, 4, title, content, defaultChannel());
+                alertLogService.logAndNotify(rule.getId(), 4, title, content, ruleChannel(rule));
             }
         });
     }
@@ -352,7 +380,8 @@ public class ScheduledTasks {
                         progress.getRemaining().toPlainString(),
                         progress.getProgressPct().toPlainString(),
                         LocalDate.now());
-                alertLogService.logAndNotify(7L, 7, title, content, defaultChannel());
+                // 月度总结是系统报告，不对应可配置的预警规则；rule_id=0 表示系统消息
+                alertLogService.logAndNotify(0L, 9, title, content, defaultChannel());
             } catch (Exception e) {
                 log.error("Failed to generate monthly summary", e);
             }
@@ -360,12 +389,21 @@ public class ScheduledTasks {
     }
 
     /**
-     * 每月 25 日 09:00 - 月度预算未设定提醒
+     * 每日 09:00 - 月度预算未设定提醒（规则 7，按规则里的 check_day 判断当天是否提醒）
      */
-    @Scheduled(cron = "0 0 9 25 * ?")
+    @Scheduled(cron = "0 0 9 * * ?")
     public void checkBudgetNotSet() {
         log.info("Scheduled: checking if next month budget is set");
         forEachActiveUser(userId -> {
+            AlertRule rule = findActiveRule(7);
+            if (rule == null) {
+                return;
+            }
+            int checkDay = clamp(configInt(rule, "check_day", 25), 1, 28);
+            if (LocalDate.now().getDayOfMonth() != checkDay) {
+                return;
+            }
+
             String nextMonth = YearMonth.now().plusMonths(1).toString();
             if (!budgetService.exists(nextMonth)) {
                 String title = "⚠️ 预算未设定";
@@ -380,7 +418,7 @@ public class ScheduledTasks {
                         """,
                         nextMonth,
                         LocalDate.now());
-                alertLogService.logAndNotify(7L, 7, title, content, defaultChannel());
+                alertLogService.logAndNotify(rule.getId(), 7, title, content, ruleChannel(rule));
             }
         });
     }
@@ -451,7 +489,7 @@ public class ScheduledTasks {
                                 details.toString(),
                                 LocalDate.now());
 
-                        alertLogService.logAndNotify(rule.getId(), 8, title, content, rule.getNotifyChannel());
+                        alertLogService.logAndNotify(rule.getId(), 8, title, content, ruleChannel(rule));
                         log.info("Unconfirmed transaction alert sent: {} transactions", unconfirmed.size());
                     }
                 } catch (Exception e) {
@@ -496,8 +534,48 @@ public class ScheduledTasks {
     }
 
     /**
-     * 定时提醒使用全局默认渠道（t_config.notify_channel），未配置时为 TELEGRAM。
-     * 单条预警规则仍可在规则中单独指定渠道。
+     * 取当前租户下某类型的启用规则。
+     *
+     * <p>系统定时提醒（1/4/5/6/7）以前只认硬编码的规则 ID 和阈值，
+     * 导致用户在页面上停用或改配置后完全不生效，日志还会挂到其他租户的规则 ID 上。
+     * 这里按类型取当前用户第一条启用规则，规则不存在或已停用就跳过。</p>
+     */
+    private AlertRule findActiveRule(int type) {
+        List<AlertRule> rules = alertRuleService.list(
+                new LambdaQueryWrapper<AlertRule>()
+                        .eq(AlertRule::getIsActive, true)
+                        .eq(AlertRule::getType, type)
+                        .orderByAsc(AlertRule::getId));
+        return rules.isEmpty() ? null : rules.get(0);
+    }
+
+    private int configInt(AlertRule rule, String key, int fallback) {
+        if (rule.getConfig() == null || rule.getConfig().isBlank()) {
+            return fallback;
+        }
+        try {
+            return objectMapper.readTree(rule.getConfig()).path(key).asInt(fallback);
+        } catch (Exception e) {
+            log.warn("Invalid config for alert rule {}: {}", rule.getId(), rule.getConfig());
+            return fallback;
+        }
+    }
+
+    private int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /**
+     * 规则未指定渠道时回落到全局默认渠道（t_config.notify_channel）。
+     */
+    private String ruleChannel(AlertRule rule) {
+        String channel = rule.getNotifyChannel();
+        return (channel == null || channel.isBlank()) ? defaultChannel() : channel;
+    }
+
+    /**
+     * 全局默认渠道（t_config.notify_channel），未配置时为 TELEGRAM。
+     * 用于没有对应规则的月度总结，以及规则未配置渠道时的回落。
      */
     private String defaultChannel() {
         String channel = configService.get("notify_channel");

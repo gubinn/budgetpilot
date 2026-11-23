@@ -42,6 +42,9 @@
         <n-form-item v-if="formData.type === 3" label="日消费上限" path="dailyLimit">
           <n-input-number v-model:value="formData.dailyLimit" :min="1" placeholder="每日消费超过此金额预警" />
         </n-form-item>
+        <n-form-item v-if="formData.type === 4" label="偏离阈值" path="deviationPct">
+          <n-input-number v-model:value="formData.deviationPct" :min="1" :max="500" placeholder="如 50 表示偏离 50%" />
+        </n-form-item>
         <n-form-item v-if="formData.type === 5" label="提前天数" path="advanceDays">
           <n-input-number v-model:value="formData.advanceDays" :min="1" :max="30" placeholder="还款日前几天提醒" />
         </n-form-item>
@@ -82,10 +85,11 @@ const formRef = ref(null)
 const formData = ref({
   name: '',
   type: null,
-  notifyChannel: 'TELEGRAM',
+  notifyChannel: '',
   threshold: 80,
   maxAmount: 1000,
   dailyLimit: 500,
+  deviationPct: 50,
   advanceDays: 3,
   checkDay: 25,
   minCount: 1
@@ -109,6 +113,7 @@ const typeOptions = [
 ]
 
 const channelOptions = [
+  { label: '跟随系统默认', value: '' },
   { label: 'Telegram', value: 'TELEGRAM' },
   { label: 'WhatsApp', value: 'WHATSAPP' },
   { label: '两者都发', value: 'BOTH' },
@@ -212,6 +217,8 @@ const handleCreate = async () => {
       config = { max_amount: String(formData.value.maxAmount) }
     } else if (formData.value.type === 3) {
       config = { daily_limit: String(formData.value.dailyLimit) }
+    } else if (formData.value.type === 4) {
+      config = { deviation_pct: formData.value.deviationPct }
     } else if (formData.value.type === 5) {
       config = { advance_days: formData.value.advanceDays }
     } else if (formData.value.type === 6) {
@@ -239,10 +246,11 @@ const handleCreate = async () => {
     formData.value = {
       name: '',
       type: null,
-      notifyChannel: 'TELEGRAM',
+      notifyChannel: '',
       threshold: 80,
       maxAmount: 1000,
       dailyLimit: 500,
+      deviationPct: 50,
       advanceDays: 3,
       checkDay: 25,
       minCount: 1

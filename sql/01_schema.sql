@@ -214,7 +214,7 @@ CREATE TABLE t_alert_rule (
     id              BIGINT          PRIMARY KEY AUTO_INCREMENT,
     user_id         BIGINT          NOT NULL COMMENT '所属用户ID',
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
-    type            TINYINT         NOT NULL COMMENT '类型：1-预算阈值 2-单笔大额 3-日消费上限 4-周异常 5-信用卡还款 6-周期账单 7-预算未设定',
+    type            TINYINT         NOT NULL COMMENT '类型：1-预算阈值 2-单笔大额 3-日消费上限 4-周异常 5-信用卡还款 6-周期账单 7-预算未设定 8-待确认交易',
     config          JSON            NOT NULL COMMENT '规则配置',
     notify_channel  VARCHAR(50)     DEFAULT 'TELEGRAM' COMMENT 'TELEGRAM/WHATSAPP/BOTH/APP',
     is_active       TINYINT(1)      DEFAULT 1,

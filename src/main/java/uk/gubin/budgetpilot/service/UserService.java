@@ -54,6 +54,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
     private final uk.gubin.budgetpilot.mapper.MerchantMapper merchantMapper;
     private final uk.gubin.budgetpilot.mapper.RecurringRuleMapper recurringRuleMapper;
     private final uk.gubin.budgetpilot.mapper.AlertLogMapper alertLogMapper;
+    private final ConfigService configService;
     private final StringRedisTemplate redisTemplate;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -314,8 +315,15 @@ public class UserService extends ServiceImpl<UserMapper, User> {
                 {"周消费异常检测", 4, "{\"deviation_pct\": 50}"},
                 {"信用卡还款提醒", 5, "{\"advance_days\": 3}"},
                 {"周期账单提醒", 6, "{\"advance_days\": 1}"},
-                {"月度预算未设定", 7, "{\"check_day\": 25}"}
+                {"月度预算未设定", 7, "{\"check_day\": 25}"},
+                {"待确认交易提醒", 8, "{\"min_count\": 1}"}
         };
+
+        // 预置规则跟随全局定时提醒渠道，避免全局已切到 WhatsApp、规则却还写死 Telegram
+        String channel = configService.get("notify_channel");
+        if (channel == null || channel.isBlank()) {
+            channel = "TELEGRAM";
+        }
 
         for (Object[] rule : defaultRules) {
             AlertRule newRule = new AlertRule();
@@ -323,7 +331,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             newRule.setName((String) rule[0]);
             newRule.setType((Integer) rule[1]);
             newRule.setConfig((String) rule[2]);
-            newRule.setNotifyChannel("TELEGRAM");
+            newRule.setNotifyChannel(channel);
             newRule.setIsActive(true);
             alertRuleMapper.insert(newRule);
         }

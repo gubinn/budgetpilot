@@ -9,7 +9,7 @@
         </n-form-item>
         <n-button type="primary" size="small" @click="saveNotifyChannel">保存</n-button>
       </n-form>
-      <div class="config-hint">信用卡还款、周期账单、预算超支等系统定时提醒统一使用该渠道；单条预警规则在「预警规则」页单独设置。</div>
+      <div class="config-hint">系统定时提醒默认使用该渠道；单条预警规则可在「预警规则」页覆盖。月度总结固定使用该渠道。</div>
     </div>
 
     <!-- 我的默认通知渠道 -->

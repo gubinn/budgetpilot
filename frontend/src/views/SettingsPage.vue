@@ -7,7 +7,7 @@
           <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" class="channel-select" />
           <n-button type="primary" @click="saveNotifyChannel">保存</n-button>
         </div>
-        <div class="config-hint">信用卡还款、周期账单、预算超支、周消费异常、月度总结、预算未设定等系统定时提醒统一使用该渠道；单条预警规则的渠道在「预警规则」页单独设置。</div>
+        <div class="config-hint">系统定时提醒默认使用该渠道；单条预警规则可在「预警规则」页覆盖自己的渠道。月度总结没有对应规则，固定使用该渠道。</div>
       </n-card>
     </n-gi>
 

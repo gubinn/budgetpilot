@@ -17,7 +17,7 @@ public class AlertRuleCreateDTO {
     @NotBlank(message = "规则配置不能为空")
     private String config;
 
-    private String notifyChannel = "TELEGRAM";
+    private String notifyChannel;
 
     private Boolean isActive = true;
 }

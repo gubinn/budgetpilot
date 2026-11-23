@@ -72,12 +72,10 @@ public class TransactionEventListener {
         }
 
         // 2. 检查预警规则（使用显式 userId 避免异步线程租户上下文丢失）
-        // 退款只冲减预算，不触发消费预警；固定/专项/非预算也不走月度预算预警
-        if (tx.getType() == 1 && tx.getCategoryId() != null) {
-            Category category = categoryMapper.selectById(tx.getCategoryId());
-            if (category != null && "DAILY".equals(category.getBudgetType())) {
-                checkAlerts(event.getUserId(), tx, yearMonth);
-            }
+        // 退款只冲减预算，不触发消费预警。单笔大额/日消费上限对所有支出都生效；
+        // 预算阈值只对「日常」分类生效，由 checkBudgetThreshold 内部判断。
+        if (tx.getType() == 1) {
+            checkAlerts(event.getUserId(), tx, yearMonth);
         }
     }
 
@@ -125,6 +123,10 @@ public class TransactionEventListener {
             int threshold = config.path("threshold_pct").asInt(80);
 
             if (tx.getCategoryId() == null) return false;
+
+            // 固定/专项支出不参与日常预算阈值预警
+            Category category = categoryMapper.selectById(tx.getCategoryId());
+            if (category == null || !"DAILY".equals(category.getBudgetType())) return false;
 
             var item = budgetService.getItem(tx.getCategoryId(), yearMonth);
             if (item == null || item.getAmount().compareTo(BigDecimal.ZERO) == 0) return false;

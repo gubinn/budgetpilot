@@ -930,7 +930,7 @@ CREATE TABLE t_alert_rule (
     name            VARCHAR(50)     NOT NULL COMMENT '规则名称',
     type            TINYINT         NOT NULL COMMENT '类型：1-预算阈值 2-单笔大额 3-日消费上限 4-周异常 5-信用卡还款 6-周期账单 7-预算未设定 8-待确认交易',
     config          JSON            NOT NULL COMMENT '规则配置',
-    notify_channel  VARCHAR(50)     DEFAULT 'TELEGRAM' COMMENT 'TELEGRAM/APP',
+    notify_channel  VARCHAR(50)     DEFAULT 'TELEGRAM' COMMENT 'TELEGRAM/WHATSAPP/BOTH/APP',
     is_active       TINYINT(1)      DEFAULT 1,
     created_at      DATETIME        DEFAULT CURRENT_TIMESTAMP,
     updated_at      DATETIME        DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -941,14 +941,16 @@ CREATE TABLE t_alert_rule (
 
 | type | 名称 | config 示例 | 触发时机 |
 |------|------|-------------|----------|
-| 1 | 预算阈值预警 | `{"threshold_pct": 80}` | 每笔支出后 |
+| 1 | 预算阈值预警 | `{"threshold_pct": 80}` | 每笔支出后 + 每日 20:00 汇总 |
 | 2 | 单笔大额预警 | `{"max_amount": 1000}` | 每笔支出后 |
 | 3 | 日消费上限 | `{"daily_limit": 500}` | 每笔支出后 |
 | 4 | 周消费异常 | `{"deviation_pct": 50}` | 每周日 22:00 |
 | 5 | 信用卡还款提醒 | `{"advance_days": 3}` | 每日 09:00 |
 | 6 | 周期账单提醒 | `{"advance_days": 1}` | 每日 09:00 |
-| 7 | 月度预算未设定 | `{"check_day": 25}` | 每月 25 日 |
+| 7 | 月度预算未设定 | `{"check_day": 25}` | 每日 09:00，按 `check_day` |
 | 8 | 待确认交易提醒 | `{"min_count": 1}` | 每日 10:00 |
+
+> 实现口径以 [ALERT_RULES.md](ALERT_RULES.md) 为准。定时任务只执行当前用户对应类型中**启用**的规则，并读取规则 config；规则停用或删除后对应提醒跳过。
 
 **预警规则详细说明**：
 
@@ -1022,8 +1024,8 @@ _2026-04-18_
 1. 计算本周消费总额
 2. 计算过去4周的平均消费
 3. 计算偏离百分比: (本周-平均)/平均 × 100%
-4. 偏离 > 50% → "异常"预警
-5. 偏离 < -50% → "偏低"预警
+4. 偏离 > deviation_pct（默认 50%）→ "异常"预警
+5. 偏离 < -deviation_pct → "偏低"预警
 ```
 
 **推送内容示例**:
@@ -1043,7 +1045,7 @@ _2026-04-18_
 
 **触发条件**: 每日 09:00 定时检查
 
-**工作原理**: 检查所有信用卡账户，距离还款日 ≤ 提前天数则提醒
+**工作原理**: 检查所有启用的信用卡账户，距离还款日 `0 ~ advance_days` 天（默认 3）时提醒；本月还款日已过则顺延到下月
 
 **推送内容示例**:
 ```
@@ -1063,7 +1065,7 @@ _2026-04-18_
 
 **触发条件**: 每日 09:00 定时检查
 
-**工作原理**: 检查周期规则的 next_execute 是否等于明天，提前提醒
+**工作原理**: 检查周期规则的 `next_execute` 是否等于「今天 + advance_days」（默认 1 天），提前提醒
 
 **推送内容示例**:
 ```
@@ -1079,9 +1081,9 @@ _2026-04-18_
 
 #### 7️⃣ 预算未设定提醒 (type=7)
 
-**触发条件**: 每月 25 日 09:00 定时检查
+**触发条件**: 每日 09:00 定时检查，只在规则 `check_day`（默认 25 日）当天发送
 
-**工作原理**: 检查下个月预算是否存在，不存在则提醒
+**工作原理**: 当天是 `check_day` 时，检查下个月预算是否存在，不存在则提醒
 
 **推送内容示例**:
 ```
@@ -1486,18 +1488,17 @@ ExchangeRate-API 是外部服务，请求必须经过海外网络。这不违反
 #### 4.3.1 预算生命周期
 
 ```
-每月 1 日（月度起始日，已确认）
-  → 系统检查当月预算是否已创建
-  → 未创建 → 触发「预算未设定」预警（Telegram 推送）
-  → 已创建 → 激活当月预算
+每月 check_day（默认 25 日）09:00
+  → 若下月预算未创建，触发「预算未设定」提醒
+  → 渠道：规则 notify_channel，未配置时用全局 notify_channel
 
 月中
   → 每笔支出实时更新 budget_item.spent（异步，使用 amount_base）
-  → 触发阈值检查（80% / 100%）
+  → 触发阈值检查（默认 80% / 100%）
 
 月末（下月 1 日 03:00）
   → 锁定上月预算（is_locked=1）
-  → 生成月度总结并 Telegram 推送
+  → 生成月度总结（系统消息，固定用全局渠道推送）
 ```
 
 #### 4.3.2 API 设计
@@ -1667,13 +1668,15 @@ public CategoryVO update(Long id, CategoryCreateDTO dto) {
 #### 4.5.1 预警引擎架构
 
 ```
-触发源                     预警引擎                    通知渠道
-─────────              ─────────────              ──────────
-交易写入  ──→ ┐                                    ┌→ Telegram Bot（主）
-              ├──→  规则匹配器  ──→  去重过滤  ──→ ┤
-定时任务  ──→ ┘     (责任链模式)     (Redis)       └→ App 内通知（备）
-                                                     (alert_log 表)
+触发源                       预警引擎                       通知渠道
+─────────                ─────────────                 ──────────
+交易写入  ──→ ┐                                          ┌→ Telegram
+              ├──→ 按用户/type 取启用规则 ──→ 渠道解析 ──┤
+定时任务  ──→ ┘     并读取规则 config                    └→ WhatsApp
+                                                          （APP 只写 t_alert_log）
 ```
+
+> 当前没有 Redis 去重层；规则持续超限时会重复提醒，见 4.5.3。
 
 #### 4.5.2 预警规则详细设计
 
@@ -1684,9 +1687,13 @@ public class BudgetThresholdChecker implements AlertChecker {
     @Override
     public boolean check(Transaction tx, AlertRule rule) {
         BigDecimal threshold = rule.getConfig().getThresholdPct();
+        Category category = categoryMapper.selectById(tx.getCategoryId());
+        if (category == null || !"DAILY".equals(category.getBudgetType())) return false;
         BudgetItem item = budgetService.getItem(tx.getCategoryId(), currentMonth());
         if (item == null) return false;
-        BigDecimal pct = item.getSpent()
+        // 实时汇总该分类及日常子分类的净支出，不依赖 denormalized spent
+        BigDecimal spent = budgetService.getCategorySpent(tx.getCategoryId(), currentMonth());
+        BigDecimal pct = spent
             .divide(item.getAmount(), 4, HALF_UP)
             .multiply(BigDecimal.valueOf(100));
         return pct.compareTo(threshold) >= 0;
@@ -1722,30 +1729,42 @@ config: {"deviation_pct": 50}
 
 ```
 config: {"advance_days": 3}
-逻辑: 遍历所有信用卡账户，当前日期 >= payment_day - advance_days 时触发
+逻辑: 遍历所有启用信用卡账户，距还款日 0~advance_days 天时触发；
+     本月还款日已过则顺延到下月；payment_day 超过当月天数时取月底
 ```
 
 **规则 6：周期账单提醒**（定时任务，每日 09:00）
 
 ```
 config: {"advance_days": 1}
-逻辑: SELECT * FROM t_recurring_rule WHERE next_execute <= CURDATE() + advance_days
+逻辑: SELECT * FROM t_recurring_rule
+      WHERE is_active = 1 AND next_execute = CURDATE() + advance_days
 ```
 
-**规则 7：月度预算未设定**（定时任务，每月 25 日）
+**规则 7：月度预算未设定**（定时任务，每日 09:00 按 check_day）
 
 ```
 config: {"check_day": 25}
-逻辑: 检查下月预算是否已创建，未创建则提醒
+逻辑: 当天 day_of_month == check_day 时，检查下月预算是否已创建，未创建则提醒
 ```
 
-#### 4.5.3 通知去重
+**规则 8：待确认交易提醒**（定时任务，每日 10:00）
 
 ```
-Redis Key: alert:dedup:{rule_id}:{date}:{context_hash}
-TTL: 24h
-同一规则、同一天、同一上下文只触发一次
+config: {"min_count": 1}
+逻辑: 统计 is_confirmed = 0 的交易，数量 >= min_count 时提醒；
+     消息列出最多 5 条明细和总金额
 ```
+
+#### 4.5.3 通知去重（当前未实现）
+
+早期设计准备用 Redis 做 `alert:dedup:{rule_id}:{date}:{context_hash}` 去重，但**当前代码没有启用**。现状：
+
+- 预算进度每日 20:00 检查，超过阈值后每天提醒一次；
+- 单笔大额、日消费上限在超限后，后续每笔支出都会再次提醒；
+- 周异常每周最多一次，信用卡提醒在提前窗口内每天一次，待确认提醒每天一次。
+
+如果后续要做去重，建议按「规则 + 周期 + 上下文」写入 Redis，并保留站内日志用于追溯。
 
 #### 4.5.4 Telegram Bot 集成
 
@@ -1835,7 +1854,7 @@ public class TelegramNotifyService {
         }
     }
 
-    // Redis 去重（每个规则每天仅推送一次）
+    // 预留：按天去重（当前预警发送链路未调用）
     public boolean sendWithDedup(String ruleId, String title, String content) {
         String dedupKey = "telegram:dedup:" + ruleId + ":" + LocalDate.now();
         if (Boolean.TRUE.equals(redisTemplate.hasKey(dedupKey))) return false;
@@ -1870,12 +1889,15 @@ public class TelegramNotifyService {
 |------|------|------|
 | 汇率更新 | `0 0 8 * * ?` | 每日 08:00 拉取所有币种汇率，写入 MySQL + Redis |
 | 周期交易生成 | `0 0 8 * * ?` | 每日 08:00 检查到期规则，生成交易（待确认/自动确认） |
-| 信用卡还款提醒 | `0 0 9 * * ?` | 每日 09:00 检查还款日，Telegram 推送 |
+| 信用卡还款提醒 | `0 0 9 * * ?` | 每日 09:00 检查还款日，按规则/全局渠道推送 |
+| 周期账单提醒 | `0 0 9 * * ?` | 每日 09:00 检查 `next_execute = 今天 + advance_days` |
+| 预算未设定提醒 | `0 0 9 * * ?` | 每日 09:00，按规则 `check_day`（默认 25）判断是否发送 |
+| 待确认交易提醒 | `0 0 10 * * ?` | 每日 10:00，按 `min_count` 汇总未确认交易 |
 | 账户余额校准 | `0 30 2 * * ?` | 每日 02:30 重算所有账户余额 |
+| 账户余额月快照 | `0 50 2 * * ?` | 每日 02:50 重刷最近 12 个已结束月份的快照 |
 | 预算进度检查 | `0 0 20 * * ?` | 每日 20:00 检查预算执行状态 |
 | 周消费异常检测 | `0 0 22 ? * SUN` | 每周日 22:00 |
-| 月度预算提醒 | `0 0 9 25 * ?` | 每月 25 日提醒设定下月预算 |
-| 月度报表 + 锁定 | `0 0 3 1 * ?` | 每月 1 日 03:00 锁定上月预算、生成总结、Telegram 推送 |
+| 月度报表 + 锁定 | `0 0 3 1 * ?` | 每月 1 日 03:00 锁定上月预算、生成总结，按全局渠道推送 |
 | 数据库备份 | `0 0 3 * * ?` | 每日 03:00 mysqldump 到 NAS |
 | 汇率数据清理 | `0 0 4 1 * ?` | 每月 1 日 04:00 清理 6 个月前的汇率记录 |
 

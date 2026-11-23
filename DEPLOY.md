@@ -1711,6 +1711,20 @@ curl -X POST http://127.0.0.1:6060/api/v1/merchants/consolidate \
 
 合并会把历史原始名称收进别名表，并删除重复商户；交易、周期规则会重新指向主商户。
 
+### 内置预警规则修正（2026-11-23）
+
+回填历史预置规则的 `notify_channel`（此前写死 `TELEGRAM`，全局切到 WhatsApp 后交易触发的提醒会静默失败），并为现有普通用户补齐缺失的「待确认交易提醒」(type 8)。可重复执行。
+
+```bash
+# 裸机
+mysql -ubudgetpilot -pyour_db_password budgetpilot < sql/migrations/20261123_alert_rule_builtin_fix.sql
+
+# Docker
+cat sql/migrations/20261123_alert_rule_builtin_fix.sql | docker compose exec -T mysql mysql -ubudgetpilot -p${DB_PASS} budgetpilot
+```
+
+部署新代码后，定时提醒会按规则配置和启停状态执行；规则的 `notify_channel` 优先，未配置时回落到全局 `notify_channel`。
+
 ### MySQL 异常
 
 **Docker 方式：**
