@@ -108,6 +108,7 @@ CREATE TABLE t_transaction (
     INDEX idx_date (transaction_date),
     INDEX idx_account (account_id),
     INDEX idx_category (category_id),
+    INDEX idx_user_category_date (user_id, category_id, transaction_date),
     INDEX idx_merchant (merchant_id),
     INDEX idx_type_date (type, transaction_date),
     INDEX idx_confirmed (is_confirmed),

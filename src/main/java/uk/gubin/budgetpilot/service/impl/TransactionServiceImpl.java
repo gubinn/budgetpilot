@@ -1029,6 +1029,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         try {
             if (userId != null) {
                 scanAndDelete("report:monthly-summary:" + userId + ":" + month + "*");
+                // 往来款汇总依赖交易流水，交易变更后立即失效
+                scanAndDelete("receivable:overview:" + userId + ":*");
             }
             scanAndDelete("report:category-detail:" + month + ":*");
             redisTemplate.delete("report:account-summary");

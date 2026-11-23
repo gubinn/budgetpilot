@@ -10,6 +10,13 @@ export const accountApi = {
   totalAssets: () => api.get('/accounts/total-assets')
 }
 
+export const receivableApi = {
+  overview: (includeUnconfirmed = false) => api.get('/receivables/overview', {
+    params: { includeUnconfirmed }
+  }),
+  summary: () => api.get('/receivables/summary')
+}
+
 export const transactionApi = {
   create: (data) => api.post('/transactions', data),
   list: (params) => api.get('/transactions', { params }),

@@ -40,6 +40,8 @@
       </div>
     </div>
 
+    <ReceivableEntry />
+
     <!-- 新增/编辑弹窗 -->
     <n-drawer v-model:show="showCreate" :height="'75vh'" placement="bottom">
       <n-drawer-content :title="editingId ? '编辑账户' : '新增账户'" closable>
@@ -134,6 +136,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { accountApi } from '@/api'
 import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
+import ReceivableEntry from '@/components/receivable/ReceivableEntry.vue'
 import { AddOutline, EllipsisHorizontal, TrendingUpOutline, WalletOutline } from '@vicons/ionicons5'
 import { formatNum } from '@/utils/display'
 

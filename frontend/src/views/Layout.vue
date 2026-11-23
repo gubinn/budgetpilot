@@ -74,7 +74,7 @@ import { systemApi } from '@/api'
 import {
   HomeOutline, ReceiptOutline, WalletOutline, FolderOutline,
   BarChartOutline, SettingsOutline, AddOutline, NotificationsOutline, MenuOutline, RepeatOutline, AlertOutline, BusinessOutline,
-  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline
+  PersonOutline, LogOutOutline, PeopleOutline, GitCompareOutline, SwapHorizontalOutline
 } from '@vicons/ionicons5'
 import { NIcon, useDialog } from 'naive-ui'
 
@@ -141,6 +141,7 @@ const menuOptions = computed(() => {
     { label: '交易', key: 'Transactions', icon: renderIcon(ReceiptOutline) },
     { label: '对账', key: 'Reconciliation', icon: renderIcon(GitCompareOutline) },
     { label: '账户', key: 'Accounts', icon: renderIcon(WalletOutline) },
+    { label: '往来款', key: 'Receivables', icon: renderIcon(SwapHorizontalOutline) },
     { label: '分类', key: 'Categories', icon: renderIcon(FolderOutline) },
     { label: '商户', key: 'Merchants', icon: renderIcon(BusinessOutline) },
     { label: '预算', key: 'Budget', icon: renderIcon(BarChartOutline) },
@@ -166,6 +167,7 @@ const pageTitle = computed(() => {
     AddTransaction: '新增交易',
     EditTransaction: '编辑交易',
     Accounts: '账户管理',
+    Receivables: '往来款',
     Categories: '分类管理',
     Merchants: '商户管理',
     Budget: '预算管理',
