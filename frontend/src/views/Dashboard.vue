@@ -14,19 +14,16 @@
       </div>
     </n-card>
 
-    <n-grid :cols="4" :x-gap="16" :y-gap="16">
-      <n-gi v-for="card in summaryCards" :key="card.label">
-        <n-card class="stat-card-box" :title="card.label" hoverable>
-          <div class="stat-card">
-            <div class="stat-value" :class="card.color">{{ card.value }}</div>
-            <div class="stat-sub">{{ card.sub }}</div>
-          </div>
-        </n-card>
-      </n-gi>
-    </n-grid>
+    <div class="stat-grid">
+      <n-card v-for="card in summaryCards" :key="card.label" class="stat-card-box" :title="card.label" hoverable>
+        <div class="stat-card">
+          <div class="stat-value" :class="card.color">{{ card.value }}</div>
+          <div class="stat-sub">{{ card.sub }}</div>
+        </div>
+      </n-card>
+    </div>
 
-    <n-grid :cols="3" :x-gap="16" :y-gap="16" style="margin-top: 16px">
-      <n-gi>
+    <div class="panel-grid">
         <n-card class="home-panel" title="预算进度" hoverable>
           <n-tabs v-model:value="budgetTab" type="segment" size="small">
             <n-tab-pane name="monthly" :tab="monthlyTabLabel">
@@ -121,8 +118,6 @@
             </n-tab-pane>
           </n-tabs>
         </n-card>
-      </n-gi>
-      <n-gi>
         <n-card class="home-panel" title="分类占比" hoverable>
           <template #header-extra>
             <n-radio-group v-model:value="pieMode" size="small">
@@ -133,8 +128,6 @@
           <div v-if="pieChartData.length" ref="pieChartRef" style="width: 100%; height: 300px"></div>
           <n-empty v-else description="本月无支出数据" style="height: 300px; justify-content: center" />
         </n-card>
-      </n-gi>
-      <n-gi>
         <n-card class="home-panel" title="商户消费" hoverable>
           <template #header-extra>
             <n-radio-group v-model:value="merchantPieMode" size="small">
@@ -145,8 +138,7 @@
           <div v-if="merchantPieData.length" ref="merchantPieRef" style="width: 100%; height: 300px"></div>
           <n-empty v-else description="本月无商户消费数据" style="height: 300px; justify-content: center" />
         </n-card>
-      </n-gi>
-    </n-grid>
+    </div>
 
     <n-card title="最近交易" hoverable style="margin-top: 16px">
       <n-data-table
@@ -238,6 +230,7 @@ const columns = [
 
 onMounted(async () => {
   echarts = await import('echarts')
+  window.addEventListener('resize', handleChartResize)
   const now = dayjs()
   const month = now.format('YYYY-MM')
 
@@ -307,7 +300,18 @@ onMounted(async () => {
   }
 })
 
+let chartResizeTimer = null
+function handleChartResize() {
+  clearTimeout(chartResizeTimer)
+  chartResizeTimer = setTimeout(() => {
+    renderPieChart()
+    renderMerchantPieChart()
+  }, 150)
+}
+
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleChartResize)
+  clearTimeout(chartResizeTimer)
   pieChart.value?.dispose()
   merchantPieChart.value?.dispose()
 })
@@ -321,15 +325,18 @@ function renderPieChart() {
   if (!pieChart.value) {
     pieChart.value = echarts.init(pieChartRef.value)
   }
+  const hideLabels = window.innerWidth <= 1024
   pieChart.value.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { bottom: 0, type: 'scroll' },
+    legend: { bottom: 0, type: 'scroll', itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 11 } },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      center: ['50%', '44%'],
+      center: ['50%', '46%'],
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
+      label: { show: !hideLabels },
+      labelLine: { show: !hideLabels },
       data: pieChartData.value.map(c => ({
         name: c.categoryName,
         value: Number(c.amount),
@@ -349,16 +356,18 @@ function renderMerchantPieChart() {
   if (!merchantPieChart.value) {
     merchantPieChart.value = echarts.init(merchantPieRef.value)
   }
+  const hideLabels = window.innerWidth <= 1024
   merchantPieChart.value.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { bottom: 0, type: 'scroll' },
+    legend: { bottom: 0, type: 'scroll', itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 11 } },
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      center: ['50%', '44%'],
+      center: ['50%', '46%'],
       avoidLabelOverlap: false,
       itemStyle: { borderRadius: 6, borderColor: '#fff', borderWidth: 2 },
-      label: { show: true, formatter: '{b}\n{d}%' },
+      label: { show: !hideLabels, formatter: '{b}\n{d}%' },
+      labelLine: { show: !hideLabels },
       data: merchantPieData.value.map(m => ({
         name: m.merchantName,
         value: Number(m.amount),
@@ -437,6 +446,17 @@ function renderMerchantPieChart() {
 .stat-card-box {
   height: 100%;
 }
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.panel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
 .stat-value {
   font-size: 27px;
   font-weight: 750;
@@ -470,8 +490,16 @@ function renderMerchantPieChart() {
 .badge.normal { background: #10b981; }
 .budget-amounts { display: flex; justify-content: space-between; font-size: 11px; color: var(--bp-muted); margin-top: 6px; }
 
+@media (max-width: 1280px) {
+  .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1024px) {
+  .panel-grid { grid-template-columns: minmax(0, 1fr); }
+}
 @media (max-width: 640px) {
   .assets-value { font-size: 30px; }
   .hero-mark img { width: 54px; height: 54px; border-radius: 14px; }
+  .stat-grid { grid-template-columns: minmax(0, 1fr); }
 }
 </style>

@@ -81,23 +81,25 @@ onMounted(loadAlerts)
 .mobile-alerts { padding-bottom: 12px; }
 
 .alert-actions { margin-bottom: 12px; }
+.alert-actions :deep(.n-button) { height: 40px; }
 
 .alert-list { display: flex; flex-direction: column; gap: 8px; }
 
 .alert-card {
   background: #fff;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: var(--m-radius);
+  padding: 14px 16px;
   border-left: 3px solid #f0a020;
+  box-shadow: var(--bp-shadow);
 }
-.alert-card.read { border-left-color: #ddd; }
+.alert-card.read { border-left-color: #e2e8f0; opacity: 0.75; }
 
-.alert-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.alert-left { display: flex; align-items: center; gap: 8px; }
-.alert-dot { width: 8px; height: 8px; border-radius: 50%; }
+.alert-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.alert-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.alert-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; }
 .alert-title { font-size: 14px; font-weight: 600; }
 
-.alert-content { font-size: 13px; color: #555; margin-bottom: 8px; line-height: 1.5; }
+.alert-content { font-size: 13px; color: #555; margin-bottom: 10px; line-height: 1.55; }
 
 .alert-footer { display: flex; justify-content: space-between; align-items: center; }
 .alert-time { font-size: 11px; color: #999; }

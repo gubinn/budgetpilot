@@ -25,7 +25,14 @@
           <n-radio-button value="all">全部支出</n-radio-button>
         </n-radio-group>
       </div>
-      <div v-show="pieChartData.length" ref="pieChartRef" style="width: 100%; height: 260px"></div>
+      <div v-show="pieChartData.length" ref="pieChartRef" style="width: 100%; height: 200px"></div>
+      <div v-if="pieChartData.length" class="pie-legend">
+        <div v-for="item in pieLegend" :key="item.name" class="legend-item">
+          <span class="legend-dot" :style="{ background: item.color }"></span>
+          <span class="legend-name m-ellipsis">{{ item.name }}</span>
+          <span class="legend-pct">{{ item.pct }}%</span>
+        </div>
+      </div>
       <n-empty v-if="!pieChartData.length" description="本月无支出数据" style="padding: 40px 0" />
     </div>
 
@@ -38,7 +45,14 @@
           <n-radio-button value="all">全部支出</n-radio-button>
         </n-radio-group>
       </div>
-      <div v-show="merchantPieData.length" ref="merchantPieRef" style="width: 100%; height: 260px"></div>
+      <div v-show="merchantPieData.length" ref="merchantPieRef" style="width: 100%; height: 200px"></div>
+      <div v-if="merchantPieData.length" class="pie-legend">
+        <div v-for="item in merchantLegend" :key="item.name" class="legend-item">
+          <span class="legend-dot" :style="{ background: item.color }"></span>
+          <span class="legend-name m-ellipsis">{{ item.name }}</span>
+          <span class="legend-pct">{{ item.pct }}%</span>
+        </div>
+      </div>
       <n-empty v-if="!merchantPieData.length" description="本月无商户消费数据" style="padding: 40px 0" />
     </div>
 
@@ -80,7 +94,10 @@
       </template>
       <template v-else>
         <div class="budget-group-title">月度 · {{ currentMonth }}</div>
-        <n-empty description="本月未设置预算" size="small" style="padding: 12px 0" />
+        <div class="budget-empty">
+          <span>本月未设置预算</span>
+          <n-button text type="primary" size="small" @click="router.push('/budget')">去设置 →</n-button>
+        </div>
       </template>
 
       <template v-if="annualBudget">
@@ -173,6 +190,28 @@ const pieChartData = computed(() =>
 const hasCategoryData = computed(() =>
   categorySharesAll.value.length > 0 || categorySharesExcludingFixed.value.length > 0
 )
+
+function buildLegend(items, nameKey) {
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+  if (!total) return []
+  const top = items.slice(0, 6).map(item => ({
+    name: item[nameKey] || '未命名',
+    color: item.categoryColor || item.merchantColor || '#94a3b8',
+    pct: Math.round(Number(item.amount || 0) / total * 1000) / 10
+  }))
+  if (items.length > 6) {
+    const rest = items.slice(6).reduce((sum, item) => sum + Number(item.amount || 0), 0)
+    top.push({
+      name: `其他 ${items.length - 6} 项`,
+      color: '#cbd5e1',
+      pct: Math.round(rest / total * 1000) / 10
+    })
+  }
+  return top
+}
+
+const pieLegend = computed(() => buildLegend(pieChartData.value, 'categoryName'))
+const merchantLegend = computed(() => buildLegend(merchantPieData.value, 'merchantName'))
 
 watch(pieMode, async () => {
   await nextTick()
@@ -283,11 +322,12 @@ function renderPieChart() {
   }
   pieChart.value.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { bottom: 0, type: 'scroll' },
     series: [{
       type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['50%', '44%'],
+      radius: ['46%', '72%'],
+      center: ['50%', '50%'],
+      label: { show: false },
+      labelLine: { show: false },
       data: pieChartData.value.map(c => ({
         name: c.categoryName,
         value: Number(c.amount),
@@ -309,11 +349,12 @@ function renderMerchantPieChart() {
   }
   merchantPieChart.value.setOption({
     tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
-    legend: { bottom: 0, type: 'scroll' },
     series: [{
       type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['50%', '44%'],
+      radius: ['46%', '72%'],
+      center: ['50%', '50%'],
+      label: { show: false },
+      labelLine: { show: false },
       data: merchantPieData.value.map(m => ({
         name: m.merchantName,
         value: Number(m.amount),
@@ -411,6 +452,41 @@ function renderMerchantPieChart() {
 }
 .chart-header .chart-title { margin-bottom: 0; }
 
+/* 饼图下方自绘图例：两列，避免画布标签互相重叠 */
+.pie-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid var(--bp-line);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+.legend-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+}
+.legend-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #475569;
+}
+.legend-pct {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -439,7 +515,18 @@ function renderMerchantPieChart() {
 }
 .budget-item { margin-bottom: 14px; }
 .budget-header { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
-.budget-pct { font-size: 11px; padding: 2px 6px; border-radius: 8px; color: #fff; }
+.budget-pct { flex-shrink: 0; font-size: 11px; padding: 2px 7px; border-radius: 999px; color: #fff; font-variant-numeric: tabular-nums; }
+.budget-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  font-size: 13px;
+  color: var(--bp-muted);
+}
 .budget-pct.exceeded { background: #ef4444; }
 .budget-pct.warning { background: #f59e0b; }
 .budget-pct.caution { background: #f97316; }

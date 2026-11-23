@@ -3,17 +3,17 @@
     <n-layout-sider
       :collapsed="collapsed"
       :width="232"
-      :collapsed-width="0"
+      :collapsed-width="isCompact ? 72 : 0"
       show-trigger="bar"
-      collapse-mode="transform"
+      :collapse-mode="isCompact ? 'width' : 'transform'"
       @collapse="collapsed = true"
       @expand="collapsed = false"
       :native-scrollbar="false"
-      class="sider-wrapper"
+      :class="['sider-wrapper', { 'is-collapsed': collapsed, 'is-overlay-open': isCompact && !collapsed }]"
       style="background: #0b1220"
     >
-      <div class="logo">
-        <img src="/logo-mark.svg" alt="BudgetPilot" class="logo-mark" v-if="!collapsed" />
+      <div class="logo" :class="{ compact: collapsed }">
+        <img src="/logo-mark.svg" alt="BudgetPilot" class="logo-mark" />
         <div class="logo-text" v-if="!collapsed">
           <span class="logo-name">BudgetPilot</span>
           <span class="logo-sub">PERSONAL FINANCE</span>
@@ -23,17 +23,18 @@
         inverted
         class="side-menu"
         :collapsed="collapsed"
-        :collapsed-width="0"
+        :collapsed-width="isCompact ? 72 : 0"
         :collapsed-icon-size="22"
         :options="menuOptions"
         :value="currentRoute"
         @update:value="navigate"
       />
     </n-layout-sider>
+    <div v-if="isCompact && !collapsed" class="sider-scrim" @click="collapsed = true"></div>
     <n-layout style="height: 100vh" :native-scrollbar="false">
       <n-layout-header class="topbar">
         <div class="topbar-left">
-          <n-button quaternary circle size="small" @click="collapsed = !collapsed" class="menu-toggle">
+          <n-button quaternary circle size="small" @click="collapsed = !collapsed" class="menu-toggle" aria-label="切换菜单">
             <template #icon><n-icon><menu-outline /></n-icon></template>
           </n-button>
           <div class="page-heading">
@@ -81,7 +82,9 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const dialog = useDialog()
-const collapsed = ref(false)
+const COMPACT_BREAKPOINT = 1024
+const isCompact = ref(window.innerWidth <= COMPACT_BREAKPOINT)
+const collapsed = ref(isCompact.value)
 
 const alertCount = ref(0)
 const alertRefreshTimer = ref(null)
@@ -99,16 +102,25 @@ async function refreshAlertCount() {
   }
 }
 
-// 移动端默认收起侧边栏
+// 平板（含 11 寸 iPad 竖屏）默认收成图标栏，避免侧边栏占掉太多横向空间
+function syncCompact() {
+  const next = window.innerWidth <= COMPACT_BREAKPOINT
+  if (next === isCompact.value) return
+  isCompact.value = next
+  collapsed.value = next
+}
+
 onMounted(() => {
-  if (window.innerWidth < 768) {
+  if (isCompact.value) {
     collapsed.value = true
   }
+  window.addEventListener('resize', syncCompact)
   refreshAlertCount()
   alertRefreshTimer.value = setInterval(refreshAlertCount, 60000)
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', syncCompact)
   if (alertRefreshTimer.value) {
     clearInterval(alertRefreshTimer.value)
   }
@@ -175,8 +187,8 @@ const userDropdownOptions = computed(() => [
 
 const navigate = (key) => {
   router.push({ name: key })
-  // 移动端导航后自动收起侧边栏
-  if (window.innerWidth < 768) {
+  // 平板导航后自动收起浮层菜单
+  if (isCompact.value) {
     collapsed.value = true
   }
 }
@@ -305,6 +317,36 @@ async function handleUserSelect(key) {
 .content {
   padding: 24px;
 }
+
+.sider-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(15, 23, 42, 0.36);
+  backdrop-filter: blur(1px);
+}
+
+/* 平板（iPad 竖屏等）：图标栏 + 浮层展开，不再挤压内容 */
+@media (max-width: 1024px) {
+  .sider-wrapper.is-overlay-open {
+    position: fixed !important;
+    left: 0;
+    top: 0;
+    height: 100vh;
+    z-index: 200;
+    box-shadow: 24px 0 60px -30px rgba(15, 23, 42, 0.55);
+  }
+  .topbar {
+    padding: 0 18px;
+  }
+  .page-heading span {
+    display: none;
+  }
+  .content {
+    padding: 18px;
+  }
+}
+
 @media (max-width: 768px) {
   .sider-wrapper {
     position: fixed !important;

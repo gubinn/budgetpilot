@@ -1,38 +1,49 @@
 <template>
-  <div class="mobile-accounts">
+  <div class="mobile-accounts m-page">
     <div class="snapshot-bar">
-      <n-button size="small" secondary block @click="showSnapshots = true">查看净资产月度快照</n-button>
+      <n-button secondary block class="snapshot-btn" @click="showSnapshots = true">
+        <template #icon><n-icon><TrendingUpOutline /></n-icon></template>
+        查看净资产月度快照
+      </n-button>
     </div>
 
-    <!-- 账户卡片列表 -->
+    <!-- 账户列表 -->
     <div v-if="accounts.length" class="account-list">
-      <div v-for="acc in accounts" :key="acc.id" class="account-card">
-        <div class="account-info">
-          <div class="account-name">{{ acc.name }}</div>
-          <div class="account-type">
-            <span>{{ typeOptions.find(t => t.value === acc.type)?.label }}</span>
-            <n-tag v-if="!acc.isActive" size="tiny" type="default" :bordered="false" style="margin-left: 6px">已停用</n-tag>
+      <div v-for="acc in accounts" :key="acc.id" class="account-row" :class="{ inactive: !acc.isActive }">
+        <div class="acc-mark" :class="'type-' + acc.type">{{ typeShort(acc.type) }}</div>
+        <div class="m-grow">
+          <div class="acc-name m-ellipsis">{{ acc.name }}</div>
+          <div class="acc-meta m-ellipsis">
+            {{ typeLabel(acc.type) }}
+            <span v-if="acc.type === 3 && acc.creditLimit"> · 额度 {{ formatNum(acc.creditLimit) }}</span>
+            <span v-if="!acc.isActive"> · 已停用</span>
           </div>
         </div>
-        <div class="account-balance">
-          <div class="balance-amount">{{ acc.currency }} {{ formatNum(acc.currentBalance) }}</div>
-          <div v-if="acc.type === 3 && acc.creditLimit" class="credit-info">
-            额度: {{ formatNum(acc.creditLimit) }}
+        <div class="acc-balance">
+          <div class="balance-amount m-amount" :class="{ negative: Number(acc.currentBalance) < 0 }">
+            {{ formatNum(acc.currentBalance) }}
           </div>
+          <div class="acc-currency">{{ acc.currency }}</div>
         </div>
-        <div class="account-actions">
-          <n-button size="small" type="primary" secondary @click="handleEdit(acc)">编辑</n-button>
-          <n-button v-if="acc.isActive" size="small" type="error" secondary @click="handleDelete(acc.id)">停用</n-button>
-          <n-button v-else size="small" type="success" secondary @click="handleActivate(acc.id)">启用</n-button>
-        </div>
+        <n-dropdown trigger="click" placement="bottom-end" :options="actionOptions(acc)" @select="key => handleAction(key, acc)">
+          <button class="m-more" aria-label="账户操作">
+            <n-icon :size="18"><EllipsisHorizontal /></n-icon>
+          </button>
+        </n-dropdown>
       </div>
     </div>
-    <n-empty v-else description="暂无账户" />
+    <div v-else-if="!loading" class="m-card">
+      <div class="m-empty-cta">
+        <div class="cta-icon"><n-icon :size="26"><WalletOutline /></n-icon></div>
+        <div class="cta-text">还没有账户<br />添加银行卡、信用卡或钱包后开始记账</div>
+        <n-button type="primary" round @click="openCreate">新增账户</n-button>
+      </div>
+    </div>
 
     <!-- 新增/编辑弹窗 -->
     <n-drawer v-model:show="showCreate" :height="'75vh'" placement="bottom">
       <n-drawer-content :title="editingId ? '编辑账户' : '新增账户'" closable>
-        <n-form ref="formRef" :model="form" label-placement="top" label-width="auto">
+        <n-form ref="formRef" :model="form" label-placement="top" label-width="auto" class="m-form">
           <n-form-item label="名称" required>
             <n-input v-model:value="form.name" placeholder="如：招商银行储蓄卡" />
           </n-form-item>
@@ -43,12 +54,12 @@
             <n-select v-model:value="form.currency" :options="currencyOptions" />
           </n-form-item>
           <n-form-item v-if="editingId" label="当前余额">
-            <n-input-number v-model:value="form.currentBalance" :precision="2" style="width: 100%">
+            <n-input-number v-model:value="form.currentBalance" :precision="2" :show-button="false" style="width: 100%">
               <template #prefix>¥</template>
             </n-input-number>
           </n-form-item>
           <n-form-item v-if="form.type === 3" label="信用额度">
-            <n-input-number v-model:value="form.creditLimit" :min="0" :precision="2" style="width: 100%">
+            <n-input-number v-model:value="form.creditLimit" :min="0" :precision="2" :show-button="false" style="width: 100%">
               <template #prefix>¥</template>
             </n-input-number>
           </n-form-item>
@@ -73,10 +84,10 @@
           </n-form-item>
         </n-form>
         <template #footer>
-          <n-space>
+          <div class="m-sheet-actions">
             <n-button type="primary" :loading="submitting" @click="handleSubmit">保存</n-button>
-            <n-button @click="showCreate = false">取消</n-button>
-          </n-space>
+            <n-button quaternary @click="showCreate = false">取消</n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
@@ -108,10 +119,9 @@
     </n-modal>
 
     <!-- 底部新增按钮 -->
-    <div class="fab">
-      <n-button type="primary" round size="large" @click="openCreate">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增账户
+    <div v-if="accounts.length" class="fab">
+      <n-button type="primary" circle size="large" aria-label="新增账户" @click="openCreate">
+        <template #icon><n-icon :size="24"><AddOutline /></n-icon></template>
       </n-button>
     </div>
 
@@ -124,7 +134,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { accountApi } from '@/api'
 import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
-import { AddOutline } from '@vicons/ionicons5'
+import { AddOutline, EllipsisHorizontal, TrendingUpOutline, WalletOutline } from '@vicons/ionicons5'
 import { formatNum } from '@/utils/display'
 
 const dialog = useDialog()
@@ -177,6 +187,24 @@ const currencyOptions = [
   { label: 'THB', value: 'THB' },
   { label: 'KRW', value: 'KRW' }
 ]
+
+function typeLabel(type) {
+  return typeOptions.find(t => t.value === type)?.label || '未知'
+}
+function typeShort(type) {
+  return { 1: '现', 2: '储', 3: '信', 4: '钱', 5: '投' }[type] || '账'
+}
+function actionOptions(acc) {
+  return [
+    { label: '编辑账户', key: 'edit' },
+    { label: acc.isActive ? '停用账户' : '启用账户', key: 'toggle' }
+  ]
+}
+function handleAction(key, acc) {
+  if (key === 'edit') handleEdit(acc)
+  else if (acc.isActive) handleDelete(acc.id)
+  else handleActivate(acc.id)
+}
 
 async function loadData() {
   loading.value = true
@@ -312,30 +340,78 @@ onMounted(loadData)
 
 <style scoped>
 .mobile-accounts {
-  padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
 
-.account-list { display: flex; flex-direction: column; gap: 10px; }
-.snapshot-bar { margin-bottom: 10px; }
+.snapshot-bar .snapshot-btn {
+  height: 42px;
+  border-radius: 12px;
+}
 
-.account-card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 14px;
+.account-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.account-info { display: flex; justify-content: space-between; align-items: flex-start; }
-.account-name { font-size: 15px; font-weight: 600; }
-.account-type { font-size: 12px; color: #888; margin-top: 3px; display: flex; align-items: center; }
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: var(--m-radius);
+  padding: 14px 12px 14px 14px;
+  box-shadow: var(--bp-shadow);
+}
+.account-row.inactive {
+  opacity: 0.62;
+}
 
-.account-balance { text-align: right; }
-.balance-amount { font-size: 18px; font-weight: 700; color: #2c3e50; }
-.credit-info { font-size: 12px; color: #999; margin-top: 2px; }
+.acc-mark {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+}
+.acc-mark.type-1 { background: linear-gradient(135deg, #f59e0b, #f97316); }
+.acc-mark.type-2 { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+.acc-mark.type-3 { background: linear-gradient(135deg, #ef4444, #f97316); }
+.acc-mark.type-4 { background: linear-gradient(135deg, #10b981, #0ea5a4); }
+.acc-mark.type-5 { background: linear-gradient(135deg, #8b5cf6, #6366f1); }
 
-.account-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.acc-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--bp-ink);
+}
+.acc-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.acc-balance {
+  flex-shrink: 0;
+  text-align: right;
+}
+.balance-amount {
+  font-size: 16px;
+  color: var(--bp-ink);
+}
+.balance-amount.negative {
+  color: #ef4444;
+}
+.acc-currency {
+  margin-top: 1px;
+  font-size: 11px;
+  color: #b0b8c4;
+}
 
 .inline-row { display: flex; gap: 12px; }
 .inline-item { flex: 1; }

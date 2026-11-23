@@ -10,12 +10,12 @@
         <p v-else>加载中…</p>
       </div>
       <div class="rp-filters">
-        <n-select v-model:value="month" :options="monthOptions" size="small" style="width: 132px" @update:value="reload" />
-        <n-select v-model:value="compare" :options="compareOptions" size="small" style="width: 116px" @update:value="reload" />
-        <n-radio-group v-model:value="scope" size="small" @update:value="reload">
+        <n-select v-model:value="month" :options="monthOptions" :size="mobile ? 'large' : 'small'" class="rp-filter-month" style="width: 132px" @update:value="reload" />
+        <n-select v-model:value="compare" :options="compareOptions" :size="mobile ? 'large' : 'small'" class="rp-filter-compare" style="width: 116px" @update:value="reload" />
+        <n-radio-group v-model:value="scope" :size="mobile ? 'medium' : 'small'" class="rp-filter-scope" @update:value="reload">
           <n-radio-button v-for="s in scopeOptions" :key="s.value" :value="s.value">{{ s.label }}</n-radio-button>
         </n-radio-group>
-        <n-radio-group v-model:value="level" size="small" @update:value="reload">
+        <n-radio-group v-model:value="level" :size="mobile ? 'medium' : 'small'" class="rp-filter-level" @update:value="reload">
           <n-radio-button :value="1">一级</n-radio-button>
           <n-radio-button :value="2">二级</n-radio-button>
         </n-radio-group>
@@ -168,7 +168,7 @@
               </button>
             </div>
             <div class="rp-rank-head">
-              <span>#</span><span></span><span>分类</span><span>金额分布</span>
+              <span>#</span><span></span><span>分类</span><span>分布</span>
               <span class="n">金额</span><span class="n">占比</span><span class="n">环比</span>
             </div>
             <button
@@ -1139,16 +1139,43 @@ onBeforeUnmount(() => {
 .mobile .rp-acct-body,
 .mobile .rp-insights { grid-template-columns: 1fr; }
 .mobile .rp-head { align-items: flex-start; }
-.mobile .rp-filters { width: 100%; }
+.mobile .rp-filters {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.mobile .rp-filter-month,
+.mobile .rp-filter-compare {
+  flex: 1 1 calc(50% - 4px);
+  width: auto !important;
+}
+.mobile .rp-filter-scope {
+  flex: 1 1 auto;
+  display: flex;
+  min-width: 0;
+}
+.mobile .rp-filter-scope :deep(.n-radio-button) {
+  flex: 1;
+  text-align: center;
+}
+.mobile .rp-filter-level {
+  flex: 0 0 auto;
+  display: flex;
+}
+.mobile .rp-filter-level :deep(.n-radio-button) {
+  text-align: center;
+}
 .report-page.mobile { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 .mobile .rp-title h2 { display: none; }
+.mobile .rp-title p { display: none; }
 .mobile .rp-figure { font-size: 34px; }
 .mobile .rp-hero-top { flex-direction: column; gap: 6px; }
 .mobile .rp-hero-total { text-align: left; }
 .mobile .rp-seglegend { gap: 8px; }
 .mobile .rp-seg-total { margin-left: 0; }
 .mobile .rp-rank-head,
-.mobile .rp-rank-row { grid-template-columns: 18px 8px minmax(80px, 1.2fr) minmax(50px, 1fr) 80px 50px; }
+.mobile .rp-rank-row { grid-template-columns: 16px 6px minmax(64px, 1.3fr) minmax(36px, 0.9fr) 74px 48px; }
 .mobile .rp-rank-head > :nth-child(6),
 .mobile .rp-rank-share { display: none; }
 .mobile .rp-rank-name .meta { white-space: normal; flex-wrap: wrap; row-gap: 2px; }
@@ -1171,7 +1198,7 @@ onBeforeUnmount(() => {
   .rp-hero-total { text-align: left; }
   .rp-stats { grid-template-columns: 1fr 1fr; }
   .rp-stat-value { font-size: 19px; }
-  .rp-rank-head, .rp-rank-row { grid-template-columns: 18px 8px minmax(80px, 1.2fr) minmax(50px, 1fr) 80px 50px; }
+  .rp-rank-head, .rp-rank-row { grid-template-columns: 16px 6px minmax(64px, 1.3fr) minmax(36px, 0.9fr) 74px 48px; }
   .rp-rank-head > :nth-child(6), .rp-rank-share { display: none; }
   .rp-rank-name .meta { white-space: normal; flex-wrap: wrap; row-gap: 2px; }
   .rp-cal-cell { height: 48px; padding: 4px; }

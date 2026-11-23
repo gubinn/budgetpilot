@@ -1,117 +1,204 @@
 <template>
-  <div class="mobile-transactions">
-    <!-- 筛选栏 -->
-    <div class="filter-bar">
-      <div class="filter-row">
-        <n-select v-model:value="filters.type" :options="typeOptions" placeholder="类型" size="small" style="flex: 1" clearable />
-        <n-select v-model:value="filters.accountId" :options="accountOptions" placeholder="账户" size="small" style="flex: 1" clearable />
-        <n-tree-select v-model:value="filters.categoryId" :options="categoryOptions" placeholder="分类" size="small" style="flex: 1" clearable key-field="value" label-field="label" children-field="children" />
-      </div>
-      <div class="filter-row">
-        <n-date-picker v-model:value="filters.dateRange" type="daterange" value-format="yyyy-MM-dd" size="small" style="flex: 1" clearable />
-        <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="入账状态" size="small" style="flex: 1" clearable />
-        <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" placeholder="复核状态" size="small" style="flex: 1" clearable />
-      </div>
-      <div class="filter-row">
-        <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="标签" size="small" style="flex: 1" />
-        <n-select v-model:value="filters.reconciled" :options="reconcileOptions" placeholder="对账状态" size="small" style="flex: 1" clearable />
-      </div>
-      <div class="filter-actions">
-        <n-button type="primary" size="small" @click="applyFilters">查询</n-button>
-        <n-button size="small" @click="resetFilters" style="margin-left: 8px">重置</n-button>
-      </div>
-    </div>
-
-    <!-- 交易列表 -->
-    <div v-if="transactions.length" class="tx-list">
-      <div v-for="tx in transactions" :key="tx.id" class="tx-item" @click="router.push(`/transactions/edit/${tx.id}`)">
-        <div class="tx-left">
-          <div class="tx-category" :style="{ color: tx.parentCategoryColor || tx.categoryColor }">
-            {{ tx.parentCategoryName || tx.categoryName || '-' }}
-            <span v-if="tx.parentCategoryId" class="tx-subcategory">/ {{ tx.categoryName }}</span>
-          </div>
-          <div class="tx-meta">
-            <n-tag size="tiny" :type="typeTagType(tx.type)" :bordered="false">{{ typeLabel(tx.type) }}</n-tag>
-            <span>{{ tx.transactionDate }}{{ tx.transactionTime ? ' ' + String(tx.transactionTime).slice(0, 5) : '' }}</span>
-            <span v-if="tx.accountName">{{ tx.accountName }}</span>
-            <span v-if="tx.type === 3 && tx.targetAccountName">对手方：{{ tx.targetAccountId === tx.accountId ? '自己' : tx.targetAccountName }}</span>
-            <span v-if="tx.merchantName">{{ tx.merchantName }}</span>
-          </div>
-          <div class="tx-tags">
-            <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待入账</n-tag>
-            <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
-            <n-tag v-if="tx.reconciled" size="tiny" type="info" :bordered="false">已对账</n-tag>
-            <n-button v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" secondary style="margin-left: 4px" @click.stop="openReview(tx)">复核</n-button>
-            <n-tag v-for="tag in (tx.tags || [])" :key="tag" size="tiny" type="info" :bordered="false" style="margin-left: 4px">{{ tag }}</n-tag>
-          </div>
+  <div class="mobile-transactions m-page">
+    <!-- 筛选区：常用条件直接露出，其余收进底部面板 -->
+    <section class="m-card filter-card">
+      <div class="filter-top">
+        <div class="m-chip-scroll date-chips">
+          <button
+            v-for="p in datePresets"
+            :key="p.value"
+            class="m-chip"
+            :class="{ active: datePreset === p.value }"
+            @click="chooseDatePreset(p.value)"
+          >{{ p.label }}</button>
+          <button v-if="datePreset === 'custom'" class="m-chip active" @click="showFilter = true">自定义</button>
         </div>
-        <div class="tx-right">
-          <div class="tx-amount" :class="tx.type === 1 ? 'expense' : (tx.type === 2 || tx.type === 4) ? 'income' : ''">
-            {{ tx.type === 1 ? '-' : (tx.type === 2 || tx.type === 4) ? '+' : '' }}¥{{ formatNum(tx.amount) }}
+        <button class="m-chip filter-trigger" :class="{ active: activeFilterCount > 0 }" @click="showFilter = true">
+          <n-icon :size="15"><OptionsOutline /></n-icon>
+          筛选
+          <span v-if="activeFilterCount" class="filter-count">{{ activeFilterCount }}</span>
+        </button>
+      </div>
+
+      <div class="m-chip-scroll type-chips">
+        <button
+          v-for="opt in typeOptions"
+          :key="String(opt.value)"
+          class="m-chip"
+          :class="{ active: filters.type === opt.value }"
+          @click="setType(opt.value)"
+        >{{ opt.label }}</button>
+      </div>
+
+      <div v-if="filterChips.length" class="m-chip-scroll applied-chips">
+        <button v-for="chip in filterChips" :key="chip.key" class="m-chip ghost" @click="clearChip(chip.key)">
+          {{ chip.label }}
+          <span class="chip-x">×</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 汇总：查询条件对应的全量结果 -->
+    <section v-if="summary" class="m-card summary-card">
+      <div class="sum-top">
+        <span class="sum-count">共 <b>{{ summary.count }}</b> 笔</span>
+        <span class="sum-net">净支出 <b>¥{{ formatNum(summary.netExpense) }}</b></span>
+      </div>
+      <div class="sum-detail">
+        <span class="expense">支出 ¥{{ formatNum(summary.expense) }}</span>
+        <span v-if="Number(summary.refund) > 0" class="refund">退款 ¥{{ formatNum(summary.refund) }}</span>
+        <span v-if="Number(summary.income) > 0" class="income">收入 ¥{{ formatNum(summary.income) }}</span>
+        <span v-if="Number(summary.transfer) > 0">转账 ¥{{ formatNum(summary.transfer) }}</span>
+      </div>
+    </section>
+
+    <!-- 按日期分组的交易列表 -->
+    <n-spin :show="loading && !transactions.length">
+      <div v-if="groups.length" class="tx-groups">
+        <section v-for="group in groups" :key="group.date" class="tx-group">
+          <div class="group-head">
+            <span class="group-date">{{ group.label }}</span>
+            <span class="group-sum">
+              <template v-if="group.expense">支出 ¥{{ formatNum(group.expense) }}</template>
+              <template v-if="group.expense && group.income"> · </template>
+              <template v-if="group.income">收入 ¥{{ formatNum(group.income) }}</template>
+            </span>
           </div>
-          <div v-if="tx.currency !== 'CNY'" class="tx-currency">{{ tx.currency }}</div>
+          <div class="tx-card">
+            <div v-for="tx in group.items" :key="tx.id" class="tx-row" @click="router.push(`/transactions/edit/${tx.id}`)">
+              <div class="tx-main">
+                <div class="tx-title m-ellipsis">
+                  <span class="tx-cat" :style="{ color: tx.parentCategoryColor || tx.categoryColor }">
+                    {{ tx.parentCategoryName || tx.categoryName || '未分类' }}
+                  </span>
+                  <span v-if="tx.parentCategoryId" class="tx-sub">/ {{ tx.categoryName }}</span>
+                </div>
+                <div class="tx-meta m-ellipsis">
+                  <span v-if="tx.transactionTime">{{ String(tx.transactionTime).slice(0, 5) }} · </span>
+                  <span>{{ tx.accountName || '-' }}</span>
+                  <template v-if="tx.merchantName"> · {{ tx.merchantName }}</template>
+                  <template v-if="tx.type === 3 && tx.targetAccountName">
+                    → {{ tx.targetAccountId === tx.accountId ? '自己' : tx.targetAccountName }}
+                  </template>
+                </div>
+                <div v-if="hasBadges(tx)" class="tx-badges">
+                  <n-tag v-if="!tx.isConfirmed" size="tiny" type="warning" :bordered="false">待入账</n-tag>
+                  <n-tag v-if="tx.reviewStatus === 'PENDING'" size="tiny" type="warning" :bordered="false">待复核</n-tag>
+                  <n-tag v-if="tx.reconciled" size="tiny" type="info" :bordered="false">已对账</n-tag>
+                  <n-tag v-for="tag in (tx.tags || []).slice(0, 2)" :key="tag" size="tiny" :bordered="false">{{ tag }}</n-tag>
+                  <button v-if="tx.reviewStatus === 'PENDING'" class="review-link" @click.stop="openReview(tx)">去复核</button>
+                </div>
+              </div>
+              <div class="tx-side">
+                <div class="tx-amount m-amount" :class="amountClass(tx.type)">
+                  {{ amountSign(tx.type) }}¥{{ formatNum(tx.amount) }}
+                </div>
+                <div v-if="tx.currency !== 'CNY'" class="tx-currency">{{ tx.currency }}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div v-if="hasMore" class="m-load-more">
+          <n-button secondary :loading="loading" @click="loadMore">
+            加载更多（还有 {{ pagination.itemCount - transactions.length }} 笔）
+          </n-button>
+        </div>
+        <div v-else-if="transactions.length > 4" class="list-end">已显示全部 {{ pagination.itemCount }} 笔</div>
+      </div>
+
+      <div v-else-if="!loading" class="m-card">
+        <div class="m-empty-cta">
+          <div class="cta-icon"><n-icon :size="26"><ReceiptOutline /></n-icon></div>
+          <div class="cta-text">当前条件下没有交易<br />换个日期或清空筛选试试</div>
+          <n-button secondary round @click="resetFilters">清空筛选</n-button>
         </div>
       </div>
-    </div>
-    <n-empty v-else description="暂无交易" />
+    </n-spin>
 
-    <!-- 汇总栏：按当前查询条件统计全部结果，不受分页影响 -->
-    <div v-if="summary" class="summary-bar">
-      <div class="summary-row">
-        <span>共 <b>{{ summary.count }}</b> 笔</span>
-        <span class="expense">支出 <b>¥{{ formatNum(summary.expense) }}</b></span>
-        <span v-if="Number(summary.refund) > 0" class="refund">退款 <b>¥{{ formatNum(summary.refund) }}</b></span>
-        <span class="net">净支出 <b>¥{{ formatNum(summary.netExpense) }}</b></span>
-      </div>
-      <div v-if="Number(summary.income) > 0 || Number(summary.transfer) > 0" class="summary-row">
-        <span v-if="Number(summary.income) > 0" class="income">收入 <b>¥{{ formatNum(summary.income) }}</b></span>
-        <span v-if="Number(summary.transfer) > 0" class="transfer">转账 <b>¥{{ formatNum(summary.transfer) }}</b></span>
-        <span v-if="Number(summary.income) > 0" class="net">结余 <b>¥{{ formatNum(summary.net) }}</b></span>
-      </div>
-    </div>
+    <!-- 筛选面板 -->
+    <n-drawer v-model:show="showFilter" placement="bottom" :height="'86vh'">
+      <n-drawer-content title="筛选交易" closable>
+        <div class="m-form sheet-form">
+          <n-form-item label="日期范围">
+            <n-date-picker
+              v-model:value="sheetRange"
+              type="daterange"
+              value-format="yyyy-MM-dd"
+              size="large"
+              clearable
+              style="width: 100%"
+            />
+          </n-form-item>
+          <n-form-item label="账户">
+            <n-select v-model:value="filters.accountId" :options="accountOptions" placeholder="全部账户" size="large" clearable />
+          </n-form-item>
+          <n-form-item label="分类">
+            <n-tree-select
+              v-model:value="filters.categoryId"
+              :options="categoryOptions"
+              placeholder="全部分类"
+              size="large"
+              clearable
+              key-field="value"
+              label-field="label"
+              children-field="children"
+            />
+          </n-form-item>
+          <n-form-item label="标签">
+            <n-select v-model:value="filters.tags" :options="tagOptions" multiple filterable clearable placeholder="不限" size="large" />
+          </n-form-item>
+          <n-form-item label="入账状态">
+            <n-select v-model:value="filters.isConfirmed" :options="confirmOptions" placeholder="不限" size="large" clearable />
+          </n-form-item>
+          <n-form-item label="复核状态">
+            <n-select v-model:value="filters.reviewStatus" :options="reviewOptions" placeholder="不限" size="large" clearable />
+          </n-form-item>
+          <n-form-item label="对账状态">
+            <n-select v-model:value="filters.reconciled" :options="reconcileOptions" placeholder="不限" size="large" clearable />
+          </n-form-item>
+        </div>
+        <template #footer>
+          <div class="m-sheet-actions">
+            <n-button type="primary" @click="applySheet">查看结果</n-button>
+            <n-button quaternary @click="resetFilters">清空全部筛选</n-button>
+          </div>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
 
-    <n-modal v-model:show="showReview" preset="card" title="复核交易" style="width: 92vw; max-width: 520px">
-      <div v-if="reviewRow" class="review-summary">
-        <div>{{ reviewRow.transactionDate }} · {{ reviewRow.type === 1 ? '-' : '+' }}¥{{ formatNum(reviewRow.amount) }}</div>
-        <div class="review-note">{{ reviewRow.note || '-' }}</div>
-      </div>
-      <n-radio-group v-model:value="reviewAction" style="margin-top: 12px">
-        <n-space vertical>
-          <n-radio v-for="opt in reviewActions" :key="opt.value" :value="opt.value">{{ opt.label }}</n-radio>
-        </n-space>
-      </n-radio-group>
-      <n-tree-select
-        v-if="reviewAction === 'EXPENSE' || reviewAction === 'INCOME'"
-        v-model:value="reviewCategoryId"
-        :options="reviewCategoryOptions"
-        placeholder="选择分类"
-        filterable
-        clearable
-        style="margin-top: 12px"
-      />
-      <template #footer>
-        <n-space justify="end">
-          <n-button @click="showReview = false">取消</n-button>
-          <n-button type="primary" :loading="reviewSubmitting" @click="submitReview">保存复核</n-button>
-        </n-space>
-      </template>
-    </n-modal>
+    <!-- 复核弹窗 -->
+    <n-drawer v-model:show="showReview" placement="bottom" :height="'78vh'" class="review-drawer">
+      <n-drawer-content title="复核交易" closable>
+        <div v-if="reviewRow" class="review-summary">
+          <div class="review-amount">{{ reviewRow.transactionDate }} · {{ reviewRow.type === 1 ? '-' : '+' }}¥{{ formatNum(reviewRow.amount) }}</div>
+          <div class="review-note">{{ reviewRow.note || '无备注' }}</div>
+        </div>
+        <n-radio-group v-model:value="reviewAction" class="review-options">
+          <n-space vertical size="large">
+            <n-radio v-for="opt in reviewActions" :key="opt.value" :value="opt.value">{{ opt.label }}</n-radio>
+          </n-space>
+        </n-radio-group>
+        <n-tree-select
+          v-if="reviewAction === 'EXPENSE' || reviewAction === 'INCOME'"
+          v-model:value="reviewCategoryId"
+          :options="reviewCategoryOptions"
+          placeholder="选择分类"
+          filterable
+          clearable
+          size="large"
+          style="margin-top: 16px"
+        />
+        <template #footer>
+          <div class="m-sheet-actions">
+            <n-button type="primary" :loading="reviewSubmitting" @click="submitReview">保存复核</n-button>
+            <n-button quaternary @click="showReview = false">取消</n-button>
+          </div>
+        </template>
+      </n-drawer-content>
+    </n-drawer>
 
-    <!-- 分页 -->
-    <div v-if="pagination.itemCount > pagination.pageSize" class="pagination">
-      <n-button size="small" :disabled="pagination.page <= 1" @click="pageChange(pagination.page - 1)">上一页</n-button>
-      <span class="page-info">{{ pagination.page }} / {{ totalPages }}</span>
-      <n-button size="small" :disabled="pagination.page >= totalPages" @click="pageChange(pagination.page + 1)">下一页</n-button>
     </div>
-
-    <!-- 底部新增按钮 -->
-    <div class="fab">
-      <n-button type="primary" round size="large" @click="router.push('/transactions/add')">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        记一笔
-      </n-button>
-    </div>
-  </div>
 </template>
 
 <script setup>
@@ -119,7 +206,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi } from '@/api'
-import { AddOutline } from '@vicons/ionicons5'
+import { OptionsOutline, ReceiptOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
 
@@ -130,14 +217,18 @@ const transactions = ref([])
 const summary = ref(null)
 
 const typeLabels = { 1: '支出', 2: '收入', 3: '转账', 4: '退款' }
-const typeTagTypes = { 1: 'error', 2: 'success', 3: 'info', 4: 'warning' }
-const typeLabel = (type) => typeLabels[type] || '-'
-const typeTagType = (type) => typeTagTypes[type] || 'default'
+const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 
-// 默认只查最近一个月，避免一进页面就拉全量
-function defaultDateRange() {
-  return [dayjs().subtract(1, 'month').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')]
-}
+const defaultRange = () => [dayjs().subtract(29, 'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')]
+
+const datePresets = [
+  { label: '30天', value: '30d' },
+  { label: '本月', value: 'month' },
+  { label: '上月', value: 'lastMonth' },
+  { label: '全部', value: 'all' }
+]
+const datePreset = ref('30d')
+const customRange = ref(defaultRange())
 
 const filters = ref({
   type: null,
@@ -146,11 +237,11 @@ const filters = ref({
   tags: [],
   isConfirmed: null,
   reviewStatus: null,
-  reconciled: null,
-  dateRange: defaultDateRange()
+  reconciled: null
 })
 
 const typeOptions = [
+  { label: '全部', value: null },
   { label: '支出', value: 1 },
   { label: '收入', value: 2 },
   { label: '转账', value: 3 },
@@ -173,11 +264,124 @@ const categoryOptions = ref([])
 const categories = ref([])
 const tagOptions = ref([])
 
+const showFilter = ref(false)
+const sheetRange = computed({
+  get: () => customRange.value,
+  set: (val) => {
+    customRange.value = val && val.length === 2 ? val : null
+    if (customRange.value) datePreset.value = 'custom'
+  }
+})
+
 const showReview = ref(false)
 const reviewRow = ref(null)
 const reviewAction = ref(null)
 const reviewCategoryId = ref(null)
 const reviewSubmitting = ref(false)
+
+const effectiveRange = computed(() => {
+  const today = dayjs()
+  switch (datePreset.value) {
+    case 'month':
+      return [today.startOf('month').format('YYYY-MM-DD'), today.format('YYYY-MM-DD')]
+    case 'lastMonth': {
+      const prev = today.subtract(1, 'month')
+      return [prev.startOf('month').format('YYYY-MM-DD'), prev.endOf('month').format('YYYY-MM-DD')]
+    }
+    case '30d':
+      return defaultRange()
+    case 'all':
+      return null
+    case 'custom':
+      return customRange.value
+    default:
+      return null
+  }
+})
+
+const categoryNameMap = computed(() => {
+  const map = new Map()
+  const walk = (list) => {
+    for (const c of list || []) {
+      map.set(c.id, c.name)
+      if (c.children?.length) walk(c.children)
+    }
+  }
+  walk(categories.value)
+  return map
+})
+
+const filterChips = computed(() => {
+  const chips = []
+  if (filters.value.accountId) {
+    const acc = accountOptions.value.find(a => a.value === filters.value.accountId)
+    chips.push({ key: 'accountId', label: acc?.label || '账户' })
+  }
+  if (filters.value.categoryId) {
+    chips.push({ key: 'categoryId', label: categoryNameMap.value.get(filters.value.categoryId) || '分类' })
+  }
+  if (filters.value.tags?.length) {
+    chips.push({ key: 'tags', label: `标签：${filters.value.tags.join('、')}` })
+  }
+  if (filters.value.isConfirmed !== null) {
+    chips.push({ key: 'isConfirmed', label: filters.value.isConfirmed ? '已入账' : '待入账' })
+  }
+  if (filters.value.reviewStatus) {
+    chips.push({ key: 'reviewStatus', label: filters.value.reviewStatus === 'REVIEWED' ? '已复核' : '待复核' })
+  }
+  if (filters.value.reconciled !== null) {
+    chips.push({ key: 'reconciled', label: filters.value.reconciled ? '已对账' : '未对账' })
+  }
+  if (datePreset.value === 'custom' && customRange.value) {
+    chips.push({ key: 'date', label: `${customRange.value[0]} 至 ${customRange.value[1]}` })
+  }
+  return chips
+})
+const activeFilterCount = computed(() => filterChips.value.filter(c => c.key !== 'date').length)
+
+const groups = computed(() => {
+  const map = new Map()
+  for (const tx of transactions.value) {
+    const key = tx.transactionDate || '未知日期'
+    if (!map.has(key)) {
+      map.set(key, { date: key, label: dateLabel(key), items: [], expense: 0, income: 0 })
+    }
+    const group = map.get(key)
+    group.items.push(tx)
+    const amount = Number(tx.amount) || 0
+    if (tx.type === 1) group.expense += amount
+    else if (tx.type === 4) group.expense -= amount
+    else if (tx.type === 2) group.income += amount
+  }
+  for (const group of map.values()) {
+    group.expense = Math.max(0, Math.round(group.expense * 100) / 100)
+    group.income = Math.round(group.income * 100) / 100
+  }
+  return [...map.values()]
+})
+
+function dateLabel(date) {
+  const day = dayjs(date)
+  if (!day.isValid()) return date
+  const today = dayjs()
+  if (day.isSame(today, 'day')) return '今天'
+  if (day.isSame(today.subtract(1, 'day'), 'day')) return '昨天'
+  return day.format('M月D日') + ' ' + WEEKDAYS[day.day()]
+}
+
+function amountClass(type) {
+  if (type === 1) return 'expense'
+  if (type === 2 || type === 4) return 'income'
+  return ''
+}
+function amountSign(type) {
+  if (type === 1) return '-'
+  if (type === 2 || type === 4) return '+'
+  return ''
+}
+function hasBadges(tx) {
+  return !tx.isConfirmed || tx.reviewStatus === 'PENDING' || tx.reconciled || (tx.tags || []).length
+}
 
 const reviewActions = computed(() => {
   if (reviewRow.value?.type === 2) {
@@ -262,7 +466,7 @@ async function submitReview() {
     await transactionApi.update(reviewRow.value.id, { categoryId, reviewStatus: 'REVIEWED' })
     message.success('复核完成')
     showReview.value = false
-    loadData()
+    reload()
   } catch (e) {
     message.error('复核失败: ' + (e.response?.data?.message || e.message))
   } finally {
@@ -270,57 +474,92 @@ async function submitReview() {
   }
 }
 
-const pagination = ref({
-  page: 1,
-  pageSize: 20,
-  itemCount: 0
-})
+const pagination = ref({ page: 1, pageSize: 20, itemCount: 0 })
+const hasMore = computed(() => transactions.value.length < pagination.value.itemCount)
 
-const totalPages = computed(() => Math.ceil(pagination.value.itemCount / pagination.value.pageSize))
+function chooseDatePreset(value) {
+  if (value === 'custom') {
+    showFilter.value = true
+    return
+  }
+  datePreset.value = value
+  reload()
+}
 
-function applyFilters() {
-  pagination.value.page = 1
-  loadData()
+function setType(value) {
+  filters.value.type = value
+  reload()
+}
+
+function clearChip(key) {
+  if (key === 'date') {
+    datePreset.value = '30d'
+    customRange.value = defaultRange()
+  } else if (key === 'tags') {
+    filters.value.tags = []
+  } else {
+    filters.value[key] = null
+  }
+  reload()
+}
+
+function applySheet() {
+  showFilter.value = false
+  reload()
 }
 
 function resetFilters() {
-  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null, dateRange: defaultDateRange() }
+  filters.value = { type: null, accountId: null, categoryId: null, tags: [], isConfirmed: null, reviewStatus: null, reconciled: null }
+  datePreset.value = '30d'
+  customRange.value = defaultRange()
+  showFilter.value = false
+  reload()
+}
+
+function buildParams() {
+  const params = {
+    page: pagination.value.page,
+    size: pagination.value.pageSize,
+    type: filters.value.type,
+    accountId: filters.value.accountId,
+    categoryId: filters.value.categoryId,
+    confirmed: filters.value.isConfirmed,
+    reviewStatus: filters.value.reviewStatus,
+    reconciled: filters.value.reconciled
+  }
+  if (filters.value.tags?.length) params.tags = filters.value.tags.join(',')
+  const range = effectiveRange.value
+  if (range?.length === 2) {
+    params.startDate = range[0]
+    params.endDate = range[1]
+  }
+  return params
+}
+
+function reload() {
   pagination.value.page = 1
-  loadData()
+  loadData(true)
 }
 
-function pageChange(page) {
-  pagination.value.page = page
-  loadData()
+function loadMore() {
+  pagination.value.page += 1
+  loadData(false)
 }
 
-async function loadData() {
+async function loadData(reset) {
   loading.value = true
   try {
-    const params = {
-      page: pagination.value.page,
-      size: pagination.value.pageSize,
-      type: filters.value.type,
-      accountId: filters.value.accountId,
-      categoryId: filters.value.categoryId,
-      confirmed: filters.value.isConfirmed,
-      reviewStatus: filters.value.reviewStatus,
-      reconciled: filters.value.reconciled
-    }
-    if (filters.value.tags?.length) {
-      params.tags = filters.value.tags.join(',')
-    }
-    if (filters.value.dateRange?.length === 2) {
-      params.startDate = dayjs(filters.value.dateRange[0]).format('YYYY-MM-DD')
-      params.endDate = dayjs(filters.value.dateRange[1]).format('YYYY-MM-DD')
-    }
-    const [res, sumRes] = await Promise.all([
-      transactionApi.list(params),
-      transactionApi.summary(params)
-    ])
-    transactions.value = res.data.items
+    const params = buildParams()
+    const res = await transactionApi.list(params)
+    const items = res.data.items || []
+    transactions.value = reset ? items : transactions.value.concat(items)
     pagination.value.itemCount = res.data.total
-    summary.value = sumRes.data
+    if (reset) {
+      const sumRes = await transactionApi.summary(params)
+      summary.value = sumRes.data
+    } else if (!transactions.value.length) {
+      summary.value = null
+    }
   } catch (e) {
     message.error('加载失败')
   } finally {
@@ -348,104 +587,235 @@ onMounted(async () => {
   } catch (e) {
     message.error('初始化失败: ' + e.message)
   }
-  loadData()
+  reload()
 })
 </script>
 
 <style scoped>
 .mobile-transactions {
-  padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
 
-/* 筛选栏 */
-.filter-bar {
-  background: #fff;
-  border-radius: 10px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-}
-.filter-row {
+/* 筛选区 */
+.filter-card {
   display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.filter-top {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
 }
-.filter-row:last-of-type { margin-bottom: 6px; }
-.filter-actions { display: flex; justify-content: flex-end; }
+.date-chips {
+  flex: 1;
+  min-width: 0;
+}
+.filter-trigger {
+  gap: 5px;
+  padding: 0 12px;
+}
+.filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.24);
+  font-size: 11px;
+  line-height: 1;
+}
+.filter-trigger:not(.active) .filter-count {
+  background: var(--bp-primary);
+  color: #fff;
+}
+.type-chips {
+  padding-top: 2px;
+}
+.applied-chips .m-chip {
+  height: 30px;
+  font-size: 12px;
+  padding: 0 10px;
+  color: #475569;
+}
+.chip-x {
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.6;
+  margin-left: 2px;
+}
 
-/* 汇总栏 */
-.summary-bar {
-  margin-top: 12px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 1px solid var(--bp-line);
-  border-radius: 10px;
-  font-size: 13px;
-  color: #5b6472;
+/* 汇总 */
+.summary-card {
+  padding: 12px 16px;
 }
-.summary-row {
+.sum-top {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--bp-muted);
 }
-.summary-row + .summary-row {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--bp-line);
-}
-.summary-bar b {
-  font-weight: 700;
+.sum-top b {
+  font-size: 16px;
+  color: var(--bp-ink);
   font-variant-numeric: tabular-nums;
 }
-.summary-bar .expense b { color: #e74c3c; }
-.summary-bar .refund b { color: #2d98da; }
-.summary-bar .income b { color: #27ae60; }
-.summary-bar .transfer b { color: #8a94a6; }
-.summary-bar .net b { color: #1f2937; }
-
-/* 交易列表 */
-.tx-list { }
-.tx-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
-  -webkit-tap-highlight-color: transparent;
+.sum-net b {
+  color: var(--bp-ink);
 }
-.tx-item:active { background: #f5f5f5; }
-
-.tx-left { flex: 1; min-width: 0; }
-.tx-category { font-size: 14px; font-weight: 500; }
-.tx-subcategory { font-size: 12px; font-weight: 400; opacity: 0.7; margin-left: 2px; }
-.tx-meta { font-size: 12px; color: #999; margin-top: 3px; }
-.tx-meta span { margin-right: 6px; }
-.tx-tags { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px; }
-
-.tx-right { text-align: right; flex-shrink: 0; margin-left: 12px; }
-.tx-amount { font-size: 16px; font-weight: 600; }
-.tx-amount.expense { color: #e74c3c; }
-.tx-amount.income { color: #27ae60; }
-.tx-currency { font-size: 11px; color: #999; margin-top: 2px; }
-
-/* 分页 */
-.pagination {
+.sum-detail {
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+.sum-detail .expense { color: #ef4444; }
+.sum-detail .refund { color: #2563eb; }
+.sum-detail .income { color: #10b981; }
+
+/* 日期分组 */
+.tx-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.tx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+.group-date {
+  font-size: 13px;
+  font-weight: 650;
+  color: #475569;
+}
+.group-sum {
+  font-size: 11px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+.tx-card {
+  background: #fff;
+  border-radius: var(--m-radius);
+  box-shadow: var(--bp-shadow);
+  padding: 2px 16px;
+}
+.tx-row {
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 0;
+  padding: 13px 0;
+  border-bottom: 1px solid #f1f5f9;
+  -webkit-tap-highlight-color: transparent;
 }
-.page-info { font-size: 13px; color: #666; }
-
-/* 底部悬浮按钮 */
-.fab {
-  position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom));
-  right: 16px;
-  z-index: 50;
+.tx-row:last-child {
+  border-bottom: none;
+}
+.tx-row:active {
+  background: #f8fafc;
+}
+.tx-main {
+  flex: 1;
+  min-width: 0;
+}
+.tx-title {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 550;
+}
+.tx-cat {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tx-sub {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: #94a3b8;
+}
+.tx-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+.tx-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.review-link {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--bp-primary);
+  font-weight: 500;
+}
+.tx-side {
+  flex-shrink: 0;
+  text-align: right;
+  align-self: flex-start;
+  padding-top: 2px;
+}
+.tx-amount {
+  font-size: 16px;
+}
+.tx-amount.expense { color: #ef4444; }
+.tx-amount.income { color: #10b981; }
+.tx-currency {
+  margin-top: 2px;
+  font-size: 11px;
+  color: #94a3b8;
 }
 
-/* 复核弹窗 */
-.review-summary { font-size: 14px; color: #333; }
-.review-note { margin-top: 4px; font-size: 12px; color: #888; }
+.list-end {
+  padding: 4px 0 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #b0b8c4;
+}
+
+/* 筛选面板 */
+.sheet-form {
+  padding-bottom: 4px;
+}
+
+/* 复核 */
+.review-summary {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+.review-amount {
+  font-size: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.review-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--bp-muted);
+}
+.review-options {
+  margin-top: 18px;
+}
+
 </style>

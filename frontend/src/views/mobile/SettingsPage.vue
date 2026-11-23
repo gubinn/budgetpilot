@@ -3,7 +3,7 @@
     <!-- 定时提醒渠道（全局） -->
     <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">定时提醒渠道</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="渠道">
           <n-select v-model:value="config.notify_channel" :options="notifyChannelOptions" />
         </n-form-item>
@@ -15,7 +15,7 @@
     <!-- 我的默认通知渠道 -->
     <div class="section-card">
       <h3 class="section-title">默认通知渠道</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="渠道">
           <n-select v-model:value="myConfig.notify_channel" :options="myNotifyChannelOptions" placeholder="请选择默认渠道" />
         </n-form-item>
@@ -27,7 +27,7 @@
     <!-- 我的 Telegram -->
     <div class="section-card">
       <h3 class="section-title">我的 Telegram 通知</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="Bot Token">
           <n-input v-model:value="myConfig.telegram_bot_token" type="password" show-password-on="click" placeholder="你自己的 Bot Token" />
         </n-form-item>
@@ -42,7 +42,7 @@
     <!-- 我的 WhatsApp -->
     <div class="section-card">
       <h3 class="section-title">我的 WhatsApp 通知</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="API Key">
           <n-input v-model:value="myConfig.whatsapp_api_key" type="password" show-password-on="click" placeholder="你自己的 Agent API Key" />
         </n-form-item>
@@ -57,7 +57,7 @@
     <!-- 系统 Telegram（定时提醒，ADMIN） -->
     <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">系统 Telegram（定时提醒）</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="Bot Token">
           <n-input v-model:value="config.telegram_bot_token" type="password" show-password-on="click" placeholder="输入 Bot Token" />
         </n-form-item>
@@ -75,7 +75,7 @@
     <!-- 系统 WhatsApp（定时提醒，ADMIN） -->
     <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">系统 WhatsApp（定时提醒）</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="API Key">
           <n-input v-model:value="config.whatsapp_api_key" type="password" show-password-on="click" placeholder="Agent API Key（留空则使用环境变量）" />
         </n-form-item>
@@ -93,7 +93,7 @@
     <!-- 汇率 -->
     <div class="section-card" v-if="auth.isAdmin">
       <h3 class="section-title">汇率设置</h3>
-      <n-form label-placement="top" label-width="auto">
+      <n-form label-placement="top" label-width="auto" class="m-form">
         <n-form-item label="API Key">
           <n-input v-model:value="config.exchange_rate_api_key" type="password" show-password-on="click" placeholder="Key" />
         </n-form-item>
@@ -335,9 +335,28 @@ onMounted(() => {
 <style scoped>
 .mobile-settings { display: flex; flex-direction: column; gap: 12px; }
 
-.section-card { background: #fff; border-radius: 10px; padding: 14px; }
-.section-title { font-size: 14px; font-weight: 600; margin: 0 0 10px; color: #333; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.section-card {
+  background: #fff;
+  border-radius: var(--m-radius);
+  padding: 16px;
+  box-shadow: var(--bp-shadow);
+}
+.section-title { font-size: 15px; font-weight: 650; margin: 0 0 12px; color: var(--bp-ink); }
+.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+
+/* 移动端按钮统一触控高度 */
+.section-card :deep(.n-button:not(.n-button--text)) {
+  height: 40px;
+}
+.section-card > .n-button,
+.section-card .n-form > .n-button {
+  width: 100%;
+}
+.section-card :deep(.n-space) {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 .rate-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #f5f5f5; }
 .rate-row:last-child { border-bottom: none; }

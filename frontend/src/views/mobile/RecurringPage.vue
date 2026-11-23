@@ -1,44 +1,48 @@
 <template>
-  <div class="mobile-recurring">
+  <div class="mobile-recurring m-page">
     <!-- 规则列表 -->
     <div v-if="rules.length" class="rule-list">
       <div v-for="rule in rules" :key="rule.id" class="rule-card" :class="{ inactive: !rule.isActive }">
         <div class="rule-header">
-          <div class="rule-name">{{ rule.name }}</div>
-          <n-tag :type="rule.type === 1 ? 'warning' : 'success'" size="small">
-            {{ rule.type === 1 ? '支出' : '收入' }}
-          </n-tag>
+          <div class="rule-title">
+            <span class="rule-name">{{ rule.name }}</span>
+            <n-tag v-if="!rule.isActive" size="tiny" :bordered="false">已暂停</n-tag>
+            <n-tag v-else-if="!rule.autoConfirm" size="tiny" type="warning" :bordered="false">待确认</n-tag>
+          </div>
+          <n-dropdown trigger="click" placement="bottom-end" :options="ruleActions(rule)" @select="key => handleAction(key, rule)">
+            <button class="m-more" aria-label="规则操作">
+              <n-icon :size="18"><EllipsisHorizontal /></n-icon>
+            </button>
+          </n-dropdown>
         </div>
-        <div class="rule-tags">
-          <n-tag size="tiny">{{ frequencyLabel(rule.frequency) }}</n-tag>
-          <n-tag v-if="rule.autoConfirm" size="tiny" type="success">自动确认</n-tag>
-          <n-tag v-else size="tiny" type="warning">待确认</n-tag>
+        <div class="rule-main">
+          <div class="rule-amount m-amount" :class="rule.type === 1 ? 'expense' : 'income'">
+            {{ rule.type === 1 ? '-' : '+' }}{{ rule.currency }} {{ formatNum(rule.amount) }}
+          </div>
+          <div class="rule-freq">{{ frequencyLabel(rule.frequency) }}</div>
         </div>
         <div class="rule-detail-grid">
-          <div class="detail-item"><span class="label">金额</span><span class="value">{{ rule.currency }} {{ formatNum(rule.amount) }}</span></div>
-          <div class="detail-item"><span class="label">账户</span><span class="value">{{ rule.accountName || '-' }}</span></div>
-          <div class="detail-item"><span class="label">分类</span><span class="value">{{ rule.categoryName || '-' }}</span></div>
-          <div class="detail-item"><span class="label">下次执行</span><span class="value">{{ rule.nextExecute || '-' }}</span></div>
-        </div>
-        <div class="rule-footer-info" v-if="rule.endDate">
-          <span>截止: {{ rule.endDate }}</span>
-        </div>
-        <div class="rule-actions">
-          <n-button size="small" secondary @click="handleExecute(rule)" :disabled="!rule.isActive">执行</n-button>
-          <n-button size="small" secondary @click="handleToggle(rule)">{{ rule.isActive ? '暂停' : '启用' }}</n-button>
-          <n-button size="small" secondary type="primary" @click="openEdit(rule)">编辑</n-button>
-          <n-button size="small" secondary type="error" @click="handleDelete(rule)">删除</n-button>
+          <div class="detail-item"><span class="label">账户</span><span class="value m-ellipsis">{{ rule.accountName || '-' }}</span></div>
+          <div class="detail-item"><span class="label">分类</span><span class="value m-ellipsis">{{ rule.categoryName || '-' }}</span></div>
+          <div class="detail-item"><span class="label">下次</span><span class="value">{{ rule.nextExecute || '-' }}</span></div>
+          <div class="detail-item"><span class="label">截止</span><span class="value">{{ rule.endDate || '长期' }}</span></div>
         </div>
       </div>
     </div>
-    <n-empty v-else description="暂无周期交易规则" />
+    <div v-else class="m-card">
+      <div class="m-empty-cta">
+        <div class="cta-icon"><n-icon :size="26"><RepeatOutline /></n-icon></div>
+        <div class="cta-text">还没有周期交易规则<br />房租、工资、订阅可以自动记账</div>
+        <n-button type="primary" round @click="openCreate">新增规则</n-button>
+      </div>
+    </div>
 
     <!-- 创建/编辑弹窗 -->
     <n-drawer v-model:show="showCreate" :height="'85vh'" placement="bottom">
       <n-drawer-content :title="editingId ? '编辑规则' : '新增规则'" closable>
-        <n-form ref="formRef" :model="createForm" label-placement="top" label-width="auto">
+        <n-form ref="formRef" :model="createForm" label-placement="top" label-width="auto" class="m-form">
           <n-form-item label="名称" required>
-            <n-input v-model:value="createForm.name" placeholder="如：房租、工资" />
+            <n-input v-model:value="createForm.name" placeholder="如：房租、工资" size="large" />
           </n-form-item>
           <n-form-item label="类型" required>
             <n-radio-group v-model:value="createForm.type">
@@ -47,34 +51,34 @@
             </n-radio-group>
           </n-form-item>
           <n-form-item label="金额" required>
-            <n-input-number v-model:value="createForm.amount" :min="0" :precision="2" style="width: 100%">
+            <n-input-number v-model:value="createForm.amount" :min="0" :precision="2" size="large" :show-button="false" style="width: 100%">
               <template #prefix>{{ createForm.currency }}</template>
             </n-input-number>
           </n-form-item>
           <n-form-item label="币种">
-            <n-select v-model:value="createForm.currency" :options="currencyOptions" />
+            <n-select v-model:value="createForm.currency" :options="currencyOptions" size="large" />
           </n-form-item>
           <n-form-item label="账户" required>
-            <n-select v-model:value="createForm.accountId" :options="accountOptions" placeholder="选择" filterable />
+            <n-select v-model:value="createForm.accountId" :options="accountOptions" placeholder="选择" filterable size="large" />
           </n-form-item>
           <n-form-item label="分类" required>
-            <n-select v-model:value="createForm.categoryId" :options="categoryFlatOptions" placeholder="选择" filterable />
+            <n-select v-model:value="createForm.categoryId" :options="categoryFlatOptions" placeholder="选择" filterable size="large" />
           </n-form-item>
           <n-form-item v-if="createForm.type === 1" label="商户">
-            <n-select v-model:value="createForm.merchantId" :options="merchantOptions" placeholder="可选" filterable clearable />
+            <n-select v-model:value="createForm.merchantId" :options="merchantOptions" placeholder="可选" filterable clearable size="large" />
           </n-form-item>
           <n-form-item label="频率" required>
-            <n-select v-model:value="createForm.frequency" :options="frequencyOptions" />
+            <n-select v-model:value="createForm.frequency" :options="frequencyOptions" size="large" />
           </n-form-item>
           <n-form-item v-if="needExecuteDay" label="执行日">
             <n-input-number v-model:value="createForm.executeDay" :min="1" :max="maxExecuteDay" />
             <span class="hint">{{ executeDayHint }}</span>
           </n-form-item>
           <n-form-item label="开始日期" required>
-            <n-date-picker v-model:value="createForm.startDate" type="date" style="width: 100%" />
+            <n-date-picker v-model:value="createForm.startDate" type="date" size="large" style="width: 100%" />
           </n-form-item>
           <n-form-item label="截止日期">
-            <n-date-picker v-model:value="createForm.endDate" type="date" style="width: 100%" clearable />
+            <n-date-picker v-model:value="createForm.endDate" type="date" size="large" style="width: 100%" clearable />
           </n-form-item>
           <n-form-item label="自动确认">
             <n-switch v-model:value="createForm.autoConfirm">
@@ -87,18 +91,17 @@
           </n-form-item>
         </n-form>
         <template #footer>
-          <n-space>
+          <div class="m-sheet-actions">
             <n-button type="primary" :loading="submitting" @click="handleSave">保存</n-button>
-            <n-button @click="showCreate = false">取消</n-button>
-          </n-space>
+            <n-button quaternary @click="showCreate = false">取消</n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
 
-    <div class="fab">
-      <n-button type="primary" round size="large" @click="openCreate">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增规则
+    <div v-if="rules.length" class="fab">
+      <n-button type="primary" circle size="large" aria-label="新增规则" @click="openCreate">
+        <template #icon><n-icon :size="24"><AddOutline /></n-icon></template>
       </n-button>
     </div>
   </div>
@@ -108,7 +111,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useMessage, useDialog } from 'naive-ui'
 import { recurringApi, accountApi, categoryApi, systemApi, merchantApi } from '@/api'
-import { AddOutline } from '@vicons/ionicons5'
+import { AddOutline, EllipsisHorizontal, RepeatOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum } from '@/utils/display'
 
@@ -148,6 +151,21 @@ const maxExecuteDay = computed(() => createForm.value.frequency === 'WEEKLY' ? 7
 const executeDayHint = computed(() => createForm.value.frequency === 'WEEKLY' ? '周一=1, 周日=7' : '1-28日')
 
 function frequencyLabel(f) { return { DAILY: '每天', WEEKLY: '每周', MONTHLY: '每月', YEARLY: '每年' }[f] || f }
+
+function ruleActions(rule) {
+  return [
+    { label: '立即执行一次', key: 'execute', disabled: !rule.isActive },
+    { label: rule.isActive ? '暂停规则' : '启用规则', key: 'toggle' },
+    { label: '编辑规则', key: 'edit' },
+    { label: '删除规则', key: 'delete' }
+  ]
+}
+function handleAction(key, rule) {
+  if (key === 'execute') handleExecute(rule)
+  else if (key === 'toggle') handleToggle(rule)
+  else if (key === 'edit') openEdit(rule)
+  else if (key === 'delete') handleDelete(rule)
+}
 async function loadRules() {
   try {
     const res = await recurringApi.list()
@@ -248,37 +266,51 @@ onMounted(() => { loadRules(); loadOptions() })
 </script>
 
 <style scoped>
-.mobile-recurring { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+.mobile-recurring { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
 
 .rule-list { display: flex; flex-direction: column; gap: 10px; }
 
 .rule-card {
   background: #fff;
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: var(--m-radius);
+  padding: 14px 16px;
+  box-shadow: var(--bp-shadow);
 }
-.rule-card.inactive { opacity: 0.6; background: #f5f5f5; }
+.rule-card.inactive { opacity: 0.62; }
 
-.rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.rule-name { font-size: 15px; font-weight: 600; }
+.rule-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rule-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rule-name { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.rule-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 10px; }
+.rule-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.rule-amount { font-size: 20px; }
+.rule-amount.expense { color: #ef4444; }
+.rule-amount.income { color: #10b981; }
+.rule-freq { font-size: 12px; color: #94a3b8; }
 
-.rule-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 12px; margin-bottom: 8px; }
-.detail-item { display: flex; gap: 4px; }
-.detail-item .label { color: #888; }
-.detail-item .value { color: #333; }
-
-.rule-footer-info { font-size: 12px; color: #999; margin-bottom: 8px; }
-
-.rule-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.rule-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--bp-line);
+  font-size: 12px;
+}
+.detail-item { display: flex; gap: 6px; min-width: 0; }
+.detail-item .label { flex-shrink: 0; color: #94a3b8; }
+.detail-item .value { color: #475569; min-width: 0; }
 
 .hint { font-size: 12px; color: #999; margin-left: 8px; }
 
 .fab {
   position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom));
+  bottom: calc(76px + env(safe-area-inset-bottom));
   right: 16px;
-  z-index: 50;
+  z-index: 80;
 }
 </style>

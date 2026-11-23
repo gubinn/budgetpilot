@@ -1,37 +1,44 @@
 <template>
-  <div class="mobile-form">
-    <n-card :title="isEdit ? '编辑交易' : '新增交易'" size="small">
-      <n-form ref="formRef" :model="form" label-placement="top" label-width="auto">
+  <div class="mobile-form m-page">
+    <n-form ref="formRef" :model="form" label-placement="top" label-width="auto" class="m-form">
+      <section class="m-card form-card">
         <!-- 类型选择 -->
-        <n-form-item label="类型">
-          <n-radio-group v-model:value="form.type" class="type-group">
-            <n-radio-button :value="1" class="type-btn">支出</n-radio-button>
-            <n-radio-button :value="2" class="type-btn">收入</n-radio-button>
-            <n-radio-button :value="3" class="type-btn">转账</n-radio-button>
-            <n-radio-button :value="4" class="type-btn">退款</n-radio-button>
-          </n-radio-group>
-        </n-form-item>
+        <n-radio-group v-model:value="form.type" class="type-group" size="large">
+          <n-radio-button :value="1" class="type-btn">支出</n-radio-button>
+          <n-radio-button :value="2" class="type-btn">收入</n-radio-button>
+          <n-radio-button :value="3" class="type-btn">转账</n-radio-button>
+          <n-radio-button :value="4" class="type-btn">退款</n-radio-button>
+        </n-radio-group>
 
         <!-- 金额 -->
-        <n-form-item label="金额">
-          <n-input-number v-model:value="form.amount" :min="0.01" :precision="2" placeholder="0.00" size="large" style="width: 100%">
+        <n-form-item label="金额" class="amount-item">
+          <n-input-number
+            v-model:value="form.amount"
+            :min="0.01"
+            :precision="2"
+            placeholder="0.00"
+            size="large"
+            :show-button="false"
+            class="amount-input"
+            style="width: 100%"
+          >
             <template #prefix>¥</template>
           </n-input-number>
         </n-form-item>
 
-        <!-- 币种 + 账户 -->
-        <div class="inline-row">
-          <n-form-item label="币种" class="inline-item">
-            <n-select v-model:value="form.currency" :options="currencyOptions" />
-          </n-form-item>
-          <n-form-item label="账户" class="inline-item">
-            <n-select v-model:value="form.accountId" :options="accountOptions" placeholder="选择" filterable />
-          </n-form-item>
-        </div>
+        <!-- 币种 -->
+        <n-form-item label="币种">
+          <n-select v-model:value="form.currency" :options="currencyOptions" size="large" />
+        </n-form-item>
+
+        <!-- 账户 -->
+        <n-form-item label="账户">
+          <n-select v-model:value="form.accountId" :options="accountOptions" placeholder="选择账户" filterable size="large" />
+        </n-form-item>
 
         <!-- 目标账户（转账时显示） -->
         <n-form-item v-if="form.type === 3" label="目标账户">
-          <n-select v-model:value="form.targetAccountId" :options="accountOptions" placeholder="选择目标账户" filterable />
+          <n-select v-model:value="form.targetAccountId" :options="accountOptions" placeholder="选择目标账户" filterable size="large" />
         </n-form-item>
 
         <!-- 分类 -->
@@ -44,6 +51,7 @@
             cascade="false"
             show-path
             filterable
+            size="large"
             style="width: 100%"
           />
         </n-form-item>
@@ -57,6 +65,7 @@
             filterable
             clearable
             remote
+            size="large"
             :loading="merchantLoading"
             @search="handleMerchantSearch"
             @clear="form.merchantName = ''"
@@ -65,20 +74,23 @@
 
         <!-- 日期时间 -->
         <n-form-item label="日期时间">
-          <n-date-picker v-model:formatted-value="form.transactionDate" type="datetime" format="yyyy-MM-dd HH:mm:ss" style="width: 100%" />
+          <n-date-picker
+            v-model:formatted-value="form.transactionDate"
+            type="datetime"
+            format="yyyy-MM-dd HH:mm:ss"
+            size="large"
+            style="width: 100%"
+          />
         </n-form-item>
+      </section>
 
-        <!-- 备注 -->
+      <section class="m-card form-card">
         <n-form-item label="备注">
           <n-input v-model:value="form.note" placeholder="可选" type="textarea" :autosize="{ minRows: 2 }" />
         </n-form-item>
-
-        <!-- 标签 -->
         <n-form-item label="标签">
           <n-dynamic-tags v-model:value="form.tags" />
         </n-form-item>
-
-        <!-- 扩展字段 -->
         <n-form-item label="扩展字段">
           <n-dynamic-input v-model:value="extFieldsList" :on-create="() => ({ key: '', value: '' })">
             <template #default="{ index }">
@@ -87,18 +99,16 @@
             </template>
           </n-dynamic-input>
         </n-form-item>
+      </section>
+    </n-form>
 
-        <!-- 按钮 -->
-        <n-form-item>
-          <n-space>
-            <n-button type="primary" :loading="submitting" @click="handleSubmit" block>
-              {{ isEdit ? '保存' : '提交' }}
-            </n-button>
-            <n-button @click="router.back()" block>取消</n-button>
-          </n-space>
-        </n-form-item>
-      </n-form>
-    </n-card>
+    <!-- 操作 -->
+    <div class="form-actions">
+      <n-button type="primary" size="large" block :loading="submitting" @click="handleSubmit">
+        {{ isEdit ? '保存修改' : '提交交易' }}
+      </n-button>
+      <n-button size="large" block quaternary @click="router.back()">取消</n-button>
+    </div>
   </div>
 </template>
 
@@ -284,31 +294,52 @@ onMounted(async () => {
 
 <style scoped>
 .mobile-form {
-  padding: 0;
+  padding-bottom: 8px;
+}
+
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.form-card + .form-card {
+  margin-top: 0;
 }
 
 .type-group {
   display: flex;
   width: 100%;
+  margin-bottom: 14px;
 }
-.type-btn {
+.type-group :deep(.n-radio-button) {
   flex: 1;
   text-align: center;
 }
+.type-btn {
+  text-align: center;
+}
 
-.inline-row {
+.amount-item :deep(.n-form-item-label) {
+  font-size: 13px;
+}
+.amount-input :deep(.n-input__input-el) {
+  font-size: 26px;
+  font-weight: 700;
+  height: 40px;
+}
+.amount-input :deep(.n-input__prefix) {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--bp-muted);
+}
+
+.form-actions {
   display: flex;
-  gap: 12px;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
 }
-.inline-item {
-  flex: 1;
-  margin-bottom: 16px;
-}
-
-:deep(.n-card__header) {
-  padding-bottom: 8px;
-}
-:deep(.n-card__content) {
-  padding: 12px;
+.form-actions .n-button {
+  height: 46px;
 }
 </style>

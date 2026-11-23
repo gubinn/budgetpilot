@@ -1,52 +1,60 @@
 <template>
-  <div class="mobile-merchants">
-    <!-- 搜索栏 -->
-    <div class="search-bar">
-      <n-input v-model:value="searchKeyword" placeholder="搜索商户名称或原始名称" clearable />
-    </div>
+  <div class="mobile-merchants m-page">
+    <!-- 搜索 -->
+    <n-input v-model:value="searchKeyword" placeholder="搜索商户名称或原始名称" clearable size="large" class="search-input">
+      <template #prefix><n-icon :size="16"><SearchOutline /></n-icon></template>
+    </n-input>
 
-    <!-- 商户卡片列表 -->
-    <div v-if="merchants.length" class="merchant-list">
-      <div v-for="m in merchants" :key="m.id" class="merchant-card">
-        <div class="merchant-header">
-          <div class="merchant-left">
-            <span class="color-dot" :style="{ background: m.color || '#ccc' }"></span>
-            <span class="merchant-name">{{ m.name }}</span>
-            <n-tag v-if="m.isSystem" size="tiny" type="info" :bordered="false">系统</n-tag>
+    <!-- 商户列表 -->
+    <n-spin :show="loading && !merchants.length">
+      <div v-if="merchants.length" class="merchant-list">
+        <div v-for="m in merchants" :key="m.id" class="merchant-row">
+          <span class="color-dot" :style="{ background: m.color || '#cbd5e1' }"></span>
+          <div class="m-grow">
+            <div class="merchant-name m-ellipsis">
+              {{ m.name }}
+              <n-tag v-if="m.isSystem" size="tiny" type="info" :bordered="false">系统</n-tag>
+            </div>
+            <div class="merchant-meta m-ellipsis">
+              <span v-if="m.categoryName">{{ m.categoryName }} · </span>
+              <span v-if="m.aliasCount">{{ m.aliasCount }} 个原始名</span>
+              <span v-if="m.description"> · {{ m.description }}</span>
+              <span v-if="!m.categoryName && !m.aliasCount && !m.description">暂无关联信息</span>
+            </div>
           </div>
           <span class="usage-count">{{ m.transactionCount ?? m.usageCount ?? 0 }} 笔</span>
+          <n-dropdown trigger="click" placement="bottom-end" :options="merchantActions(m)" @select="key => handleAction(key, m)">
+            <button class="m-more" aria-label="商户操作">
+              <n-icon :size="18"><EllipsisHorizontal /></n-icon>
+            </button>
+          </n-dropdown>
         </div>
-        <div v-if="m.aliasCount" class="merchant-alias">原始名称 {{ m.aliasCount }} 个</div>
-        <div v-if="m.categoryName" class="merchant-category">关联: {{ m.categoryName }}</div>
-        <div v-if="m.description" class="merchant-desc">{{ m.description }}</div>
-        <div class="merchant-actions">
-          <n-button size="small" type="primary" secondary @click="handleEdit(m)">编辑</n-button>
-          <n-button v-if="!m.isSystem" size="small" type="error" secondary @click="handleDelete(m.id)">删除</n-button>
+
+        <div v-if="total > merchants.length" class="m-load-more">
+          <n-button secondary :loading="loading" @click="loadMore">
+            加载更多（还有 {{ total - merchants.length }} 个）
+          </n-button>
         </div>
       </div>
-    </div>
-    <n-empty v-else-if="!loading" description="暂无商户" />
-    <n-spin :show="loading" />
 
-    <div v-if="total > pageSize" class="pager">
-      <n-pagination
-        v-model:page="page"
-        :page-size="pageSize"
-        :item-count="total"
-        :page-slot="5"
-        @update:page="loadData"
-      />
-    </div>
+      <div v-else-if="!loading" class="m-card">
+        <div class="m-empty-cta">
+          <div class="cta-icon"><n-icon :size="26"><StorefrontOutline /></n-icon></div>
+          <div class="cta-text">{{ searchKeyword ? '没有匹配的商户' : '还没有商户' }}</div>
+          <n-button v-if="!searchKeyword" type="primary" round @click="openCreateModal">新增商户</n-button>
+        </div>
+      </div>
+    </n-spin>
 
     <!-- 新增/编辑弹窗 -->
-    <n-drawer v-model:show="showModal" :height="'75vh'" placement="bottom">
+    <n-drawer v-model:show="showModal" :height="'85vh'" placement="bottom">
       <n-drawer-content :title="editingId ? '编辑商户' : '新增商户'" closable>
-        <n-form ref="formRef" :model="form" label-placement="top" label-width="auto">
+        <n-form ref="formRef" :model="form" label-placement="top" label-width="auto" class="m-form">
           <n-form-item label="名称" required>
-            <n-input v-model:value="form.name" placeholder="如：麦当劳" />
+            <n-input v-model:value="form.name" placeholder="如：麦当劳" size="large" />
           </n-form-item>
           <n-form-item label="别名">
-            <n-input v-model:value="form.alias" placeholder="用于模糊匹配" />
+            <n-input v-model:value="form.alias" placeholder="用于模糊匹配" size="large" />
           </n-form-item>
           <n-form-item label="关联分类">
             <n-cascader
@@ -56,6 +64,7 @@
               check-strategy="child"
               clearable
               filterable
+              size="large"
               style="width: 100%"
             />
           </n-form-item>
@@ -63,7 +72,7 @@
             <n-color-picker v-model:value="form.color" :show-alpha="false" />
           </n-form-item>
           <n-form-item label="图标">
-            <n-input v-model:value="form.icon" placeholder="图标标识" />
+            <n-input v-model:value="form.icon" placeholder="图标标识" size="large" />
           </n-form-item>
           <n-form-item label="描述">
             <n-input v-model:value="form.description" type="textarea" :autosize="{ minRows: 2 }" placeholder="可选" />
@@ -75,19 +84,16 @@
             <n-switch v-model:value="form.isActive" />
           </n-form-item>
         </n-form>
-        <template #footer>
-          <n-space>
-            <n-button type="primary" :loading="submitting" @click="handleSubmit">保存</n-button>
-            <n-button @click="showModal = false">取消</n-button>
-          </n-space>
-        </template>
+        <div class="m-sheet-actions">
+          <n-button type="primary" :loading="submitting" @click="handleSubmit">保存</n-button>
+          <n-button quaternary @click="showModal = false">取消</n-button>
+        </div>
       </n-drawer-content>
     </n-drawer>
 
-    <div class="fab">
-      <n-button type="primary" round size="large" @click="openCreateModal">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增商户
+    <div v-if="merchants.length" class="fab">
+      <n-button type="primary" circle size="large" aria-label="新增商户" @click="openCreateModal">
+        <template #icon><n-icon :size="24"><AddOutline /></n-icon></template>
       </n-button>
     </div>
   </div>
@@ -97,7 +103,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { merchantApi, categoryApi } from '@/api'
-import { AddOutline } from '@vicons/ionicons5'
+import { AddOutline, SearchOutline, EllipsisHorizontal, StorefrontOutline } from '@vicons/ionicons5'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -142,7 +148,18 @@ async function loadCategories() {
   }
 }
 
-async function loadData() {
+function merchantActions(m) {
+  const actions = [{ label: '编辑商户', key: 'edit' }]
+  if (!m.isSystem) actions.push({ label: '删除商户', key: 'delete' })
+  return actions
+}
+
+function handleAction(key, m) {
+  if (key === 'edit') handleEdit(m)
+  else if (key === 'delete') handleDelete(m.id)
+}
+
+async function loadData(reset = true) {
   loading.value = true
   try {
     const res = await merchantApi.page({
@@ -151,23 +168,30 @@ async function loadData() {
       keyword: searchKeyword.value?.trim() || undefined
     })
     const data = res.data || {}
-    merchants.value = data.items || []
+    const items = data.items || []
+    merchants.value = reset ? items : merchants.value.concat(items)
     total.value = data.total || 0
   } catch (e) {
     message.error('加载失败')
-    merchants.value = []
-    total.value = 0
+    if (reset) { merchants.value = []; total.value = 0 }
   } finally {
     loading.value = false
   }
 }
 
+function reload() {
+  page.value = 1
+  loadData(true)
+}
+
+function loadMore() {
+  page.value += 1
+  loadData(false)
+}
+
 watch(searchKeyword, () => {
   clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => {
-    page.value = 1
-    loadData()
-  }, 300)
+  searchTimer = setTimeout(reload, 300)
 })
 
 function openCreateModal() {
@@ -203,7 +227,7 @@ async function handleSubmit() {
     }
     showModal.value = false
     editingId.value = null
-    loadData()
+    reload()
   } catch (e) {
     message.error(e.response?.data?.message || '操作失败')
   } finally {
@@ -216,7 +240,7 @@ function handleDelete(id) {
     title: '确认删除', content: '删除后不可恢复，是否继续？',
     positiveText: '删除', negativeText: '取消',
     onPositiveClick: async () => {
-      try { await merchantApi.remove(id); message.success('已删除'); loadData() }
+      try { await merchantApi.remove(id); message.success('已删除'); reload() }
       catch (e) { message.error(e.response?.data?.message || '删除失败') }
     }
   })
@@ -224,40 +248,67 @@ function handleDelete(id) {
 
 onMounted(async () => {
   await loadCategories()
-  await loadData()
+  await loadData(true)
 })
 </script>
 
 <style scoped>
-.mobile-merchants { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
-
-.search-bar { margin-bottom: 12px; }
-
-.merchant-list { display: flex; flex-direction: column; gap: 10px; }
-
-.merchant-card {
-  background: #fff;
-  border-radius: 10px;
-  padding: 14px;
+.mobile-merchants {
+  padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
 }
 
-.merchant-header { display: flex; justify-content: space-between; align-items: center; }
-.merchant-left { display: flex; align-items: center; gap: 8px; }
-.color-dot { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
-.merchant-name { font-size: 15px; font-weight: 600; }
-.usage-count { font-size: 12px; color: #999; }
+.search-input :deep(.n-input__input-el) {
+  height: 42px;
+}
 
-.merchant-alias, .merchant-category { font-size: 12px; color: #666; margin-top: 4px; }
-.merchant-desc { font-size: 12px; color: #999; margin-top: 4px; }
+.merchant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
-.merchant-actions { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+.merchant-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: var(--m-radius);
+  padding: 12px 12px 12px 16px;
+  box-shadow: var(--bp-shadow);
+}
 
-.pager { display: flex; justify-content: center; padding: 16px 0 8px; }
+.color-dot {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+}
+
+.merchant-name {
+  font-size: 15px;
+  font-weight: 550;
+  color: var(--bp-ink);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.merchant-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.usage-count {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: #b0b8c4;
+  font-variant-numeric: tabular-nums;
+}
 
 .fab {
   position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom));
+  bottom: calc(76px + env(safe-area-inset-bottom));
   right: 16px;
-  z-index: 50;
+  z-index: 80;
 }
 </style>

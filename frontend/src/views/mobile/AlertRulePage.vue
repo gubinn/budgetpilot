@@ -1,38 +1,49 @@
 <template>
-  <div class="mobile-alert-rules">
+  <div class="mobile-alert-rules m-page">
     <div v-if="rules.length" class="rule-list">
       <div v-for="rule in rules" :key="rule.id" class="rule-card">
         <div class="rule-header">
-          <span class="rule-name">{{ rule.name }}</span>
-          <n-tag :type="rule.isActive ? 'success' : 'default'" size="tiny" :bordered="false">
-            {{ rule.isActive ? '启用' : '停用' }}
-          </n-tag>
+          <span class="rule-name m-ellipsis">{{ rule.name }}</span>
+          <div class="rule-header-right">
+            <n-tag :type="rule.isActive ? 'success' : 'default'" size="tiny" :bordered="false">
+              {{ rule.isActive ? '启用' : '停用' }}
+            </n-tag>
+            <n-dropdown trigger="click" placement="bottom-end" :options="ruleActions(rule)" @select="key => handleAction(key, rule)">
+              <button class="m-more" aria-label="规则操作">
+                <n-icon :size="18"><EllipsisHorizontal /></n-icon>
+              </button>
+            </n-dropdown>
+          </div>
         </div>
-        <div class="rule-type">{{ rule.typeName }}</div>
-        <div class="rule-config">{{ rule.config }}</div>
-        <div class="rule-channel">通知: {{ channelLabel(rule.notifyChannel) }}</div>
-        <div class="rule-actions">
-          <n-button size="small" secondary :type="rule.isActive ? 'warning' : 'success'" @click="handleToggle(rule)">
-            {{ rule.isActive ? '停用' : '启用' }}
-          </n-button>
-          <n-button size="small" secondary type="error" @click="handleDelete(rule)">删除</n-button>
+        <div class="rule-body">
+          <div class="rule-desc">
+            <template v-if="rule.typeName !== rule.name">{{ rule.typeName }}<template v-if="formatConfig(rule)"> · </template></template>
+            {{ formatConfig(rule) }}
+          </div>
+          <div class="rule-channel">通知 · {{ channelLabel(rule.notifyChannel) }}</div>
         </div>
       </div>
     </div>
-    <n-empty v-else description="暂无预警规则" />
+    <div v-else class="m-card">
+      <div class="m-empty-cta">
+        <div class="cta-icon"><n-icon :size="26"><NotificationsOutline /></n-icon></div>
+        <div class="cta-text">还没有预警规则<br />预算超支、大额支出都可以自动提醒</div>
+        <n-button type="primary" round @click="showCreateModal = true">新增规则</n-button>
+      </div>
+    </div>
 
     <!-- 创建弹窗 -->
     <n-drawer v-model:show="showCreateModal" :height="'85vh'" placement="bottom">
       <n-drawer-content title="新增预警规则" closable>
-        <n-form ref="formRef" :model="formData" label-placement="top" label-width="auto">
+        <n-form ref="formRef" :model="formData" label-placement="top" label-width="auto" class="m-form">
           <n-form-item label="规则名称">
-            <n-input v-model:value="formData.name" placeholder="请输入规则名称" />
+            <n-input v-model:value="formData.name" placeholder="请输入规则名称" size="large" />
           </n-form-item>
           <n-form-item label="规则类型">
-            <n-select v-model:value="formData.type" :options="typeOptions" />
+            <n-select v-model:value="formData.type" :options="typeOptions" size="large" />
           </n-form-item>
           <n-form-item label="通知渠道">
-            <n-select v-model:value="formData.notifyChannel" :options="channelOptions" />
+            <n-select v-model:value="formData.notifyChannel" :options="channelOptions" size="large" />
           </n-form-item>
 
           <n-form-item v-if="formData.type === 1" label="阈值百分比">
@@ -55,18 +66,17 @@
           </n-form-item>
         </n-form>
         <template #footer>
-          <n-space>
+          <div class="m-sheet-actions">
             <n-button type="primary" :loading="submitting" @click="handleCreate">保存</n-button>
-            <n-button @click="showCreateModal = false">取消</n-button>
-          </n-space>
+            <n-button quaternary @click="showCreateModal = false">取消</n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
 
-    <div class="fab">
-      <n-button type="primary" round size="large" @click="showCreateModal = true">
-        <template #icon><n-icon><AddOutline /></n-icon></template>
-        新增规则
+    <div v-if="rules.length" class="fab">
+      <n-button type="primary" circle size="large" aria-label="新增规则" @click="showCreateModal = true">
+        <template #icon><n-icon :size="24"><AddOutline /></n-icon></template>
       </n-button>
     </div>
   </div>
@@ -76,7 +86,7 @@
 import { ref, onMounted } from 'vue'
 import { useMessage } from 'naive-ui'
 import { PlusOutlined } from '@vicons/antd'
-import { AddOutline } from '@vicons/ionicons5'
+import { AddOutline, EllipsisHorizontal, NotificationsOutline } from '@vicons/ionicons5'
 import request from '@/api/request'
 
 const message = useMessage()
@@ -115,6 +125,34 @@ const channelLabel = (value) => ({
   BOTH: '两者都发',
   APP: '应用内'
 }[value] || value || '-')
+
+function formatConfig(rule) {
+  let config = rule.config
+  if (typeof config === 'string') {
+    try { config = JSON.parse(config) } catch { return '' }
+  }
+  if (!config || typeof config !== 'object') return ''
+  switch (rule.type) {
+    case 1: return `预算使用达到 ${config.threshold_pct}%`
+    case 2: return `单笔超过 ¥${config.max_amount}`
+    case 3: return `日消费超过 ¥${config.daily_limit}`
+    case 4: return `周消费偏离 ${config.deviation_pct}%`
+    case 5:
+    case 6: return `提前 ${config.advance_days} 天提醒`
+    case 7: return `每月 ${config.check_day} 日检查`
+    case 8: return `待确认超过 ${config.min_count} 笔`
+    default: return ''
+  }
+}
+
+const ruleActions = (rule) => [
+  { label: rule.isActive ? '停用规则' : '启用规则', key: 'toggle' },
+  { label: '删除规则', key: 'delete' }
+]
+const handleAction = (key, rule) => {
+  if (key === 'toggle') handleToggle(rule)
+  else if (key === 'delete') handleDelete(rule)
+}
 
 const loadRules = async () => {
   loading.value = true
@@ -169,22 +207,27 @@ onMounted(() => { loadRules() })
 </script>
 
 <style scoped>
-.mobile-alert-rules { padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+.mobile-alert-rules { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
 
 .rule-list { display: flex; flex-direction: column; gap: 10px; }
 
-.rule-card { background: #fff; border-radius: 10px; padding: 14px; }
-.rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.rule-card {
+  background: #fff;
+  border-radius: var(--m-radius);
+  padding: 14px 12px 14px 16px;
+  box-shadow: var(--bp-shadow);
+}
+.rule-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rule-header-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .rule-name { font-size: 15px; font-weight: 600; }
-.rule-type { font-size: 13px; color: #666; }
-.rule-config { font-size: 13px; color: #555; margin: 4px 0; }
-.rule-channel { font-size: 12px; color: #999; }
-.rule-actions { display: flex; gap: 8px; margin-top: 10px; }
+.rule-body { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.rule-desc { font-size: 13px; color: #64748b; }
+.rule-channel { font-size: 12px; color: #b0b8c4; }
 
 .fab {
   position: fixed;
-  bottom: calc(70px + env(safe-area-inset-bottom));
+  bottom: calc(76px + env(safe-area-inset-bottom));
   right: 16px;
-  z-index: 50;
+  z-index: 80;
 }
 </style>

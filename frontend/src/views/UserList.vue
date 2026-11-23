@@ -5,7 +5,7 @@
       <n-button type="primary" @click="openCreate">新增用户</n-button>
     </n-space>
 
-    <n-data-table :columns="columns" :data="users" :loading="loading" :bordered="false" />
+    <n-data-table :columns="columns" :data="users" :loading="loading" :bordered="false" :scroll-x="isCompact ? 660 : 900" />
 
     <n-modal v-model:show="showModal" preset="card" :title="editId ? '编辑用户' : '新增用户'" style="width: 480px">
       <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="80">
@@ -53,6 +53,7 @@
 import { ref, reactive, h, onMounted, computed } from 'vue'
 import { NTag, useMessage, useDialog } from 'naive-ui'
 import { userApi } from '@/api'
+import { useCompactViewport } from '@/composables/useCompactViewport'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -79,10 +80,13 @@ const rules = {
   role: { required: true, message: '请选择角色', trigger: 'change' }
 }
 
-const columns = computed(() => [
+const isCompact = useCompactViewport()
+
+const columns = computed(() => {
+  const cols = [
   { title: 'ID', key: 'id', width: 60 },
-  { title: '用户名', key: 'username' },
-  { title: '昵称', key: 'nickname' },
+  { title: '用户名', key: 'username', minWidth: 130, ellipsis: { tooltip: true } },
+  { title: '昵称', key: 'nickname', minWidth: 130, ellipsis: { tooltip: true } },
   {
     title: '角色',
     key: 'role',
@@ -112,7 +116,10 @@ const columns = computed(() => [
       ])
     }
   }
-])
+  ]
+  // iPad 竖屏：隐藏 ID 和最后登录，保留账号信息和操作
+  return isCompact.value ? cols.filter(c => c.key !== 'id' && c.key !== 'lastLogin') : cols
+})
 
 async function loadUsers() {
   loading.value = true

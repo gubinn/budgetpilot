@@ -1,20 +1,20 @@
 <template>
-  <div class="mobile-budget">
+  <div class="mobile-budget m-page">
     <!-- 月份选择 -->
-    <div class="month-selector">
-      <n-radio-group v-model:value="budgetMode" size="small" style="flex: 1">
+    <section class="m-card selector-card">
+      <n-radio-group v-model:value="budgetMode" size="large" class="mode-group">
         <n-radio-button value="monthly">月度</n-radio-button>
         <n-radio-button value="annual">年度预算</n-radio-button>
       </n-radio-group>
-    </div>
-    <div class="month-selector">
-      <n-select v-if="budgetMode === 'monthly'" v-model:value="selectedMonth" :options="monthOptions" size="small" style="flex: 1" />
-      <n-select v-else v-model:value="selectedYear" :options="yearOptions" size="small" style="flex: 1" />
-      <n-button type="primary" size="small" @click="openCreate" style="margin-left: 8px">
-        {{ budget ? '编辑' : '创建' }}
-      </n-button>
-      <n-button v-if="budgetMode === 'monthly' && budget" size="small" @click="handleCopy" style="margin-left: 8px">复制</n-button>
-    </div>
+      <div class="month-row">
+        <n-select v-if="budgetMode === 'monthly'" v-model:value="selectedMonth" :options="monthOptions" size="large" class="month-select" />
+        <n-select v-else v-model:value="selectedYear" :options="yearOptions" size="large" class="month-select" />
+        <n-button type="primary" class="action-btn" @click="openCreate">
+          {{ budget ? '编辑' : '创建' }}
+        </n-button>
+        <n-button v-if="budgetMode === 'monthly' && budget" class="action-btn" @click="handleCopy">复制</n-button>
+      </div>
+    </section>
 
     <!-- 总览 -->
     <div v-if="budget" class="overview-grid">
@@ -34,6 +34,10 @@
         <div class="label">日均剩余</div>
         <div class="value">¥{{ formatNum(budget.dailyAvgRemaining) }}</div>
       </div>
+      <div v-else class="overview-item">
+        <div class="label">时间进度</div>
+        <div class="value">{{ yearProgress }}%</div>
+      </div>
     </div>
 
     <!-- 分类预算卡片 -->
@@ -44,7 +48,7 @@
             <span class="dot" :style="{ background: item.categoryColor }"></span>
             <span>{{ item.categoryName }}</span>
           </div>
-          <n-tag :type="getStatusType(item.status)" size="small" bordered>{{ item.status }}</n-tag>
+          <n-tag :type="getStatusType(item.status)" size="small" bordered>{{ statusLabel(item.status) }}</n-tag>
         </div>
         <n-progress
           type="line"
@@ -63,14 +67,25 @@
       </div>
     </div>
 
-    <n-empty v-if="!budget" :description="budgetMode === 'annual' ? '该年度未设置专项预算' : '该月未设置预算'" style="margin-top: 40px" />
+    <div v-if="!budget" class="m-card">
+      <div class="m-empty-cta">
+        <div class="cta-icon"><n-icon :size="26"><WalletOutline /></n-icon></div>
+        <div class="cta-text">
+          {{ budgetMode === 'annual' ? '该年度还没有专项预算' : '该月还没有设置预算' }}<br />
+          设置后可以查看分类执行进度
+        </div>
+        <n-button type="primary" round @click="openCreate">
+          {{ budgetMode === 'annual' ? '设置年度预算' : '创建本月预算' }}
+        </n-button>
+      </div>
+    </div>
 
     <!-- 创建/编辑弹窗 -->
     <n-drawer v-model:show="showCreate" :height="'85vh'" placement="bottom">
       <n-drawer-content :title="budgetMode === 'annual' ? '设定年度预算' : '设定月度预算'" closable>
-        <n-form label-placement="top" label-width="auto">
+        <n-form label-placement="top" label-width="auto" class="m-form">
           <n-form-item label="总预算（按明细自动合计）" required>
-            <n-input-number v-model:value="createForm.totalAmount" :min="0" :precision="2" disabled style="width: 100%">
+            <n-input-number v-model:value="createForm.totalAmount" :min="0" :precision="2" disabled :show-button="false" style="width: 100%">
               <template #prefix>¥</template>
             </n-input-number>
           </n-form-item>
@@ -78,7 +93,7 @@
             <div class="budget-items-list">
               <div v-for="item in createForm.items" :key="item.categoryId" class="budget-row">
                 <span class="row-name">{{ item.categoryName }}</span>
-                <n-input-number v-model:value="item.amount" :min="0" :precision="2" placeholder="0.00" style="width: 100px">
+                <n-input-number v-model:value="item.amount" :min="0" :precision="2" placeholder="0.00" size="large" :show-button="false" style="width: 108px">
                   <template #prefix>¥</template>
                 </n-input-number>
               </div>
@@ -94,10 +109,10 @@
           </n-form-item>
         </n-form>
         <template #footer>
-          <n-space>
+          <div class="m-sheet-actions">
             <n-button type="primary" :loading="submitting" @click="handleSave">保存</n-button>
-            <n-button @click="showCreate = false">取消</n-button>
-          </n-space>
+            <n-button quaternary @click="showCreate = false">取消</n-button>
+          </div>
         </template>
       </n-drawer-content>
     </n-drawer>
@@ -108,6 +123,7 @@
 import { ref, watch, onMounted, computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import { budgetApi, annualBudgetApi, categoryApi } from '@/api'
+import { WalletOutline } from '@vicons/ionicons5'
 import dayjs from 'dayjs'
 import { formatNum, getProgressStatus } from '@/utils/display'
 
@@ -261,6 +277,16 @@ async function handleCopy() {
 function getStatusType(status) {
   return { EXCEEDED: 'error', WARNING: 'warning', CAUTION: 'warning', NORMAL: 'success' }[status] || 'default'
 }
+function statusLabel(status) {
+  return { EXCEEDED: '超支', WARNING: '预警', CAUTION: '关注', NORMAL: '正常' }[status] || status
+}
+const yearProgress = computed(() => {
+  const now = dayjs()
+  const elapsed = now.diff(now.startOf('year'), 'day') + 1
+  const year = now.year()
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0
+  return Math.round(elapsed / (leap ? 366 : 365) * 100)
+})
 const pctClass = computed(() => {
   if (!budget.value) return ''
   if (budget.value.progressPct > 100) return 'red'
@@ -304,39 +330,84 @@ onMounted(async () => {
 <style scoped>
 .mobile-budget { padding-bottom: 12px; }
 
-.month-selector { display: flex; align-items: center; margin-bottom: 12px; }
+.selector-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mode-group {
+  display: flex;
+  width: 100%;
+}
+.mode-group :deep(.n-radio-button) {
+  flex: 1;
+  text-align: center;
+}
+.month-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.month-select { flex: 1; min-width: 0; }
+.action-btn { height: 40px; flex-shrink: 0; }
 
 .overview-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-  margin-bottom: 12px;
 }
 .overview-item {
   background: #fff;
-  border-radius: 10px;
-  padding: 12px;
+  border-radius: var(--m-radius);
+  padding: 14px 16px;
+  box-shadow: var(--bp-shadow);
 }
-.overview-item .label { font-size: 12px; color: #888; margin-bottom: 4px; }
-.overview-item .value { font-size: 16px; font-weight: 700; }
-.overview-item .value.red { color: #e74c3c; }
-.overview-item .value.green { color: #27ae60; }
-.pct-tag { font-size: 11px; padding: 2px 6px; border-radius: 8px; color: #fff; }
-.pct-tag.red { background: #e74c3c; }
-.pct-tag.orange { background: #f39c12; }
-.pct-tag.green { background: #27ae60; }
+.overview-item .label { font-size: 12px; color: #94a3b8; margin-bottom: 5px; }
+.overview-item .value {
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.overview-item .value.red { color: #ef4444; }
+.overview-item .value.green { color: #10b981; }
+.pct-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #fff;
+}
+.pct-tag.red { background: #ef4444; }
+.pct-tag.orange { background: #f59e0b; }
+.pct-tag.green { background: #10b981; }
 
 .budget-list { display: flex; flex-direction: column; gap: 10px; }
-.budget-card { background: #fff; border-radius: 10px; padding: 14px; }
-.budget-header { display: flex; justify-content: space-between; align-items: center; }
-.budget-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
-.dot { width: 12px; height: 12px; border-radius: 50%; }
-.budget-footer { display: flex; justify-content: space-between; font-size: 12px; color: #888; }
-.budget-footer .red { color: #e74c3c; font-weight: 600; }
+.budget-card {
+  background: #fff;
+  border-radius: var(--m-radius);
+  padding: 16px;
+  box-shadow: var(--bp-shadow);
+}
+.budget-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.budget-title { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; min-width: 0; }
+.dot { flex-shrink: 0; width: 12px; height: 12px; border-radius: 50%; }
+.budget-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+}
+.budget-footer .red { color: #ef4444; font-weight: 600; }
 
-.budget-items-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
-.budget-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f5f5f5; }
-.row-name { font-size: 14px; }
+.budget-items-list { display: flex; flex-direction: column; gap: 8px; max-height: 52vh; overflow-y: auto; }
+.budget-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; }
+.row-name { font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .items-total { display: flex; justify-content: space-between; padding: 10px 0 4px; font-size: 14px; }
 .items-tip { color: #999; font-size: 11px; padding-bottom: 4px; }
 </style>

@@ -7,7 +7,7 @@
       </n-space>
     </template>
 
-    <n-data-table :columns="columns" :data="accounts" :loading="loading" />
+    <n-data-table :columns="columns" :data="accounts" :loading="loading" :scroll-x="isCompact ? 680 : 980" />
 
     <!-- 新增/编辑弹窗 -->
     <n-modal v-model:show="showCreate" preset="card" :title="editingId ? '编辑账户' : '新增账户'" style="width: 500px">
@@ -95,6 +95,7 @@ import { useDialog, useMessage, NButton, NSpace, NTag } from 'naive-ui'
 import { accountApi } from '@/api'
 import NetWorthSnapshot from '@/components/account/NetWorthSnapshot.vue'
 import { formatNum } from '@/utils/display'
+import { useCompactViewport } from '@/composables/useCompactViewport'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -147,8 +148,16 @@ const currencyOptions = [
   { label: 'KRW', value: 'KRW' }
 ]
 
-const columns = [
-  { title: '名称', key: 'name' },
+const isCompact = useCompactViewport()
+
+const columns = computed(() => {
+  if (!isCompact.value) return allColumns
+  // iPad 竖屏：隐藏信用额度和扩展字段，保证名称和操作列可见
+  return allColumns.filter(c => c.key !== 'creditLimit' && c.key !== 'extFields')
+})
+
+const allColumns = [
+  { title: '名称', key: 'name', width: 220, ellipsis: { tooltip: true } },
   {
     title: '类型', key: 'type', width: 90,
     render: (row) => typeOptions.find(t => t.value === row.type)?.label || '-'

@@ -17,6 +17,7 @@
       :loading="loading"
       :pagination="pagination"
       remote
+      :scroll-x="isCompact ? 620 : 900"
       :row-key="row => row.id"
     />
 
@@ -70,6 +71,7 @@ import { ref, h, computed, onMounted, watch } from 'vue'
 import { NButton, NTag, NSpace, NIcon, useDialog, useMessage } from 'naive-ui'
 import { AddOutline } from '@vicons/ionicons5'
 import { merchantApi, categoryApi } from '@/api'
+import { useCompactViewport } from '@/composables/useCompactViewport'
 
 const dialog = useDialog()
 const message = useMessage()
@@ -130,10 +132,20 @@ function buildCascaderOption(c) {
   return opt
 }
 
-const columns = [
+const isCompact = useCompactViewport()
+
+const columns = computed(() => {
+  if (!isCompact.value) return allColumns
+  // iPad 竖屏：隐藏原始名称和最近使用，让操作列留在首屏
+  return allColumns.filter(c => c.key !== 'aliasCount' && c.key !== 'lastUsedAt')
+})
+
+const allColumns = [
   {
     title: '商户',
     key: 'name',
+    minWidth: 220,
+    ellipsis: { tooltip: true },
     render: (row) => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } }, [
       h('span', {
         style: {

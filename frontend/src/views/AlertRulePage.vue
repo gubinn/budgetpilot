@@ -14,6 +14,7 @@
         :columns="columns"
         :data="rules"
         :loading="loading"
+        :scroll-x="isCompact ? 640 : 880"
         :row-key="row => row.id"
       />
     </n-card>
@@ -65,10 +66,11 @@
 </template>
 
 <script setup>
-import { ref, h, onMounted } from 'vue'
+import { ref, h, computed, onMounted } from 'vue'
 import { NButton, NTag, NSpace, NIcon, useMessage } from 'naive-ui'
 import { PlusOutlined } from '@vicons/antd'
 import request from '../api/request'
+import { useCompactViewport } from '@/composables/useCompactViewport'
 
 const message = useMessage()
 const loading = ref(false)
@@ -119,10 +121,18 @@ const channelLabel = (value) => ({
   APP: '应用内'
 }[value] || value || '-')
 
-const columns = [
+const isCompact = useCompactViewport()
+
+const columns = computed(() => {
+  if (!isCompact.value) return allColumns
+  // iPad 竖屏：ID 和类型名称对操作没有帮助，隐藏后操作列可见
+  return allColumns.filter(c => c.key !== 'id' && c.key !== 'typeName')
+})
+
+const allColumns = [
   { title: 'ID', key: 'id', width: 60 },
-  { title: '规则名称', key: 'name' },
-  { title: '类型', key: 'typeName' },
+  { title: '规则名称', key: 'name', minWidth: 170, ellipsis: { tooltip: true } },
+  { title: '类型', key: 'typeName', width: 140, ellipsis: { tooltip: true } },
   {
     title: '配置',
     key: 'config',
@@ -133,6 +143,7 @@ const columns = [
         if (row.type === 1) return `阈值: ${config.threshold_pct}%`
         if (row.type === 2) return `大额: ¥${config.max_amount}`
         if (row.type === 3) return `日限: ¥${config.daily_limit}`
+        if (row.type === 4) return `偏离 ${config.deviation_pct}%`
         if (row.type === 5) return `提前 ${config.advance_days} 天`
         if (row.type === 6) return `提前 ${config.advance_days} 天`
         if (row.type === 7) return `${config.check_day} 号检查`

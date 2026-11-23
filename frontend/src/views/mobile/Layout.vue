@@ -3,6 +3,9 @@
     <!-- 顶部 Header -->
     <header class="mobile-header">
       <div class="header-left">
+        <n-button v-if="!isTabPage" quaternary circle size="small" class="back-btn" @click="goBack">
+          <template #icon><n-icon><ChevronBackOutline /></n-icon></template>
+        </n-button>
         <img src="/logo-mark.svg" alt="BudgetPilot" class="logo" />
         <span class="logo-word">BudgetPilot</span>
       </div>
@@ -59,7 +62,8 @@ import { NIcon, useDialog } from 'naive-ui'
 import {
   HomeOutline, ReceiptOutline, WalletOutline,
   BarChartOutline, FolderOutline, AddOutline,
-  NotificationsOutline, PersonOutline, LogOutOutline
+  NotificationsOutline, PersonOutline, LogOutOutline,
+  ChevronBackOutline
 } from '@vicons/ionicons5'
 
 const router = useRouter()
@@ -76,7 +80,13 @@ const tabs = [
 ]
 
 const currentRoute = computed(() => route.name || 'Dashboard')
+const isTabPage = computed(() => tabs.some(t => t.key === route.name))
 const alertCount = ref(0)
+
+function goBack() {
+  if (window.history.length > 1) router.back()
+  else router.push('/dashboard')
+}
 
 const pageTitle = computed(() => {
   const map = {
@@ -157,6 +167,24 @@ async function handleUserSelect(key) {
   font-weight: 700;
   color: var(--bp-ink);
   letter-spacing: -0.01em;
+}
+
+.back-btn {
+  margin-left: -6px;
+  margin-right: -2px;
+}
+
+@media (max-width: 767px) {
+  .page-title-bar {
+    padding: 12px 16px 0;
+  }
+  .page-title-bar h3 {
+    font-size: 22px;
+    line-height: 1.25;
+  }
+  .mobile-content {
+    padding: 10px 16px 24px;
+  }
 }
 
 .header-right {
