@@ -140,7 +140,7 @@ CREATE TABLE t_recurring_rule (
     category_id     BIGINT          NOT NULL,
     merchant_id     BIGINT          DEFAULT NULL COMMENT '商户ID',
     frequency       VARCHAR(20)     NOT NULL COMMENT 'DAILY/WEEKLY/MONTHLY/YEARLY',
-    execute_day     TINYINT         DEFAULT NULL COMMENT '执行日（月=1-28，周=1-7）',
+    execute_day     TINYINT         DEFAULT NULL COMMENT '执行日（月=1-31，小月按月底；周=1-7）',
     start_date      DATE            NOT NULL,
     end_date        DATE            DEFAULT NULL COMMENT 'NULL=永久',
     last_executed   DATE            DEFAULT NULL,

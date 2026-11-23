@@ -29,6 +29,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ScheduledTasks {
 
+    /** 单条周期规则一次最多补发多少次，防止误设很早的开始日期时生成海量历史交易。 */
+    private static final int MAX_CATCH_UP_PER_RULE = 366;
+
     private final CurrencyRateService currencyRateService;
     private final BudgetService budgetService;
     private final RecurringRuleService recurringRuleService;
@@ -53,27 +56,47 @@ public class ScheduledTasks {
     }
 
     /**
-     * 每日 08:00 - 周期交易生成
+     * 每日 08:00 - 周期交易生成。
+     *
+     * <p>如果进程停过几天，会把漏掉的每一次都补出来（单条规则单次最多 366 次），
+     * 交易日期使用各自的计划执行日，而不是统一记到今天。
+     * 每条规则独立事务，生成失败不会影响其他规则，也不会推进 nextExecute。</p>
      */
     @Scheduled(cron = "0 0 8 * * ?")
-    @Transactional
     public void processRecurringRules() {
         log.info("Scheduled: processing recurring rules");
+        LocalDate today = LocalDate.now();
         forEachActiveUser(userId -> {
             List<RecurringRule> rules = recurringRuleService.getRulesDueToday();
             log.info("Found {} recurring rules to process", rules.size());
 
             for (RecurringRule rule : rules) {
+                int generated = 0;
                 try {
-                    recurringRuleService.generateTransaction(rule);
-                    // 重新读取最新数据，避免使用过期对象更新
-                    RecurringRule latestRule = recurringRuleService.getById(rule.getId());
-                    if (latestRule != null) {
-                        recurringRuleService.updateNextExecute(latestRule);
+                    RecurringRule current = rule;
+                    while (current != null
+                            && Boolean.TRUE.equals(current.getIsActive())
+                            && current.getNextExecute() != null
+                            && !current.getNextExecute().isAfter(today)
+                            && (current.getEndDate() == null
+                                || !current.getNextExecute().isAfter(current.getEndDate()))
+                            && generated < MAX_CATCH_UP_PER_RULE) {
+                        recurringRuleService.generateTransaction(current);
+                        recurringRuleService.updateNextExecute(current);
+                        generated++;
+                        // 重新读取，拿到推进后的 nextExecute / 新的启用状态
+                        current = recurringRuleService.getById(current.getId());
                     }
-                    log.info("Generated transaction from recurring rule: {}", rule.getName());
+                    if (generated >= MAX_CATCH_UP_PER_RULE && current != null
+                            && current.getNextExecute() != null
+                            && !current.getNextExecute().isAfter(today)) {
+                        log.warn("Recurring rule {} reached catch-up cap ({})", rule.getId(), MAX_CATCH_UP_PER_RULE);
+                    } else if (generated > 0) {
+                        log.info("Generated {} transaction(s) from recurring rule: {}", generated, rule.getName());
+                    }
                 } catch (Exception e) {
-                    log.error("Failed to process recurring rule {}", rule.getId(), e);
+                    log.error("Failed to process recurring rule {} after {} transaction(s)",
+                            rule.getId(), generated, e);
                 }
             }
         });

@@ -632,7 +632,7 @@ CREATE TABLE t_recurring_rule (
     category_id     BIGINT          NOT NULL,
     merchant_id     BIGINT          DEFAULT NULL COMMENT '商户ID',
     frequency       VARCHAR(20)     NOT NULL COMMENT 'DAILY/WEEKLY/MONTHLY/YEARLY',
-    execute_day     TINYINT         DEFAULT NULL COMMENT '执行日（月=1-28，周=1-7）',
+    execute_day     TINYINT         DEFAULT NULL COMMENT '执行日（月=1-31，小月按月底；周=1-7）',
     start_date      DATE            NOT NULL,
     end_date        DATE            DEFAULT NULL COMMENT 'NULL=永久',
     last_executed   DATE            DEFAULT NULL,
@@ -651,7 +651,7 @@ CREATE TABLE t_recurring_rule (
 
 **关键逻辑**：
 
-- `execute_day` 限制为 1-28，规避月末日期不一致问题。
+- `execute_day` 每月支持 1-31，29-31 在小月按月底执行，之后恢复原日期；每周 1-7（周一=1）。实际口径见 [RECURRING_RULES.md](RECURRING_RULES.md)。
 - `auto_confirm=0` 时生成「待确认」交易（`is_confirmed=0`），打开 App 时提示确认。
 - `ext_fields` 会被复制到自动生成的交易记录中，如房贷交易自动带上 `{"project":"房贷"}`。
 - `merchant_id` 仅支持已有商户（不自动创建），周期交易自动生成时会将商户信息传递给交易记录。
@@ -664,8 +664,8 @@ CREATE TABLE t_recurring_rule (
 |-----------|------|----------------|-----------------|
 | DAILY | 每天 | 无效(不需要) | nextExecute + 1天 |
 | WEEKLY | 每周 | 1-7表示周一到周日 | nextExecute + 7天 |
-| MONTHLY | 每月 | 1-28表示几号 | nextExecute + 1月 |
-| YEARLY | 每年 | 无效(按startDate日期) | nextExecute + 1年 |
+| MONTHLY | 每月 | 1-31 表示几号，小月按月底 | 下月同一执行日（按 executeDay 重算，不漂移） |
+| YEARLY | 每年 | 无效(按startDate日期) | 当前执行日 + 1年 |
 
 #### 自动执行流程
 
@@ -675,23 +675,32 @@ CREATE TABLE t_recurring_rule (
 1. 查询满足条件的规则:
    - is_active = true
    - next_execute <= 今天
-   - end_date 为空 或 >= 今天
+   - end_date 为空 或 next_execute <= end_date
 
-2. 对每个规则执行:
+2. 对每条规则从 next_execute 开始循环补发，直到超过今天或截止日期:
    a. 创建交易记录
       - type/amount/accountId/categoryId/merchantId 从规则复制
+      - transaction_date = 本次计划执行日（不是任务运行当天）
+      - external_id = recurring:{ruleId}:{执行日期}（唯一索引幂等）
       - is_confirmed = autoConfirm
       - is_recurring = true
       - recurring_id = rule.id
-      - metadata = {"source":"recurring", "rule_id": xxx}
+      - metadata = {"source":"recurring", "rule_id": xxx, "occurrence_date": xxx}
 
    b. 更新账户余额（如果autoConfirm=true）
 
-   c. 计算下次执行日期
-      - last_executed = 今天
-      - next_execute = 根据frequency计算
+   c. 推进计划
+      - last_executed = 本次计划执行日
+      - next_execute = 按 executeDay 计算下一次；超过 end_date 时自动停用
+
+   d. 单条规则单次最多补 366 次
 
 3. 触发预算更新 + 预警检查
+
+4. 手动「立即执行」：
+   - 生成一笔日期为今天的交易
+   - 不改变 next_execute
+   - external_id = recurring:{ruleId}:manual:{今天}，同一天重复点击不会重复入账
 ```
 
 #### autoConfirm 设置说明

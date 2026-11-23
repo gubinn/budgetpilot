@@ -147,8 +147,8 @@ const frequencyOptions = [
 ]
 
 const needExecuteDay = computed(() => ['WEEKLY', 'MONTHLY'].includes(createForm.value.frequency))
-const maxExecuteDay = computed(() => createForm.value.frequency === 'WEEKLY' ? 7 : 28)
-const executeDayHint = computed(() => createForm.value.frequency === 'WEEKLY' ? '周一=1, 周日=7' : '1-28日')
+const maxExecuteDay = computed(() => createForm.value.frequency === 'WEEKLY' ? 7 : 31)
+const executeDayHint = computed(() => createForm.value.frequency === 'WEEKLY' ? '周一=1, 周日=7' : '1-31日，小月按月底')
 
 function frequencyLabel(f) { return { DAILY: '每天', WEEKLY: '每周', MONTHLY: '每月', YEARLY: '每年' }[f] || f }
 
@@ -189,8 +189,9 @@ async function loadOptions() {
 }
 
 async function handleSave() {
-  if (!createForm.value.name || !createForm.value.amount || !createForm.value.accountId || !createForm.value.categoryId) {
-    message.error('请填写必填项'); return
+  if (!createForm.value.name || !createForm.value.amount || !createForm.value.accountId
+      || !createForm.value.categoryId || !createForm.value.startDate) {
+    message.error('请填写名称、金额、账户、分类和开始日期'); return
   }
   submitting.value = true
   try {
@@ -199,9 +200,6 @@ async function handleSave() {
       startDate: dayjs(createForm.value.startDate).format('YYYY-MM-DD'),
       endDate: createForm.value.endDate ? dayjs(createForm.value.endDate).format('YYYY-MM-DD') : null
     }
-    if (!editingId.value) {
-      data.nextExecute = dayjs(createForm.value.startDate).format('YYYY-MM-DD')
-    }
     if (editingId.value) { await recurringApi.update(editingId.value, data) }
     else { await recurringApi.create(data) }
     message.success('保存成功')
@@ -209,7 +207,7 @@ async function handleSave() {
     editingId.value = null
     resetForm()
     loadRules()
-  } catch (e) { message.error('保存失败') } finally { submitting.value = false }
+  } catch (e) { message.error(e.message || '保存失败') } finally { submitting.value = false }
 }
 
 function openCreate() {
@@ -246,9 +244,9 @@ async function handleToggle(rule) {
 async function handleExecute(rule) {
   try {
     await recurringApi.execute(rule.id)
-    message.success('已执行')
+    message.success('已生成一笔今天的交易，下次执行日期不变')
     loadRules()
-  } catch (e) { message.error('执行失败') }
+  } catch (e) { message.error(e.message || '执行失败') }
 }
 
 function handleDelete(rule) {

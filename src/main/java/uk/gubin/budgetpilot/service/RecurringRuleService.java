@@ -19,9 +19,14 @@ public interface RecurringRuleService extends IService<RecurringRule> {
     void updateNextExecute(RecurringRule rule);
 
     /**
-     * 根据规则生成交易（通过 TransactionService 确保余额、预算、预警全部正确）
+     * 按规则的 nextExecute 生成一笔交易（通过 TransactionService 确保余额、预算、预警全部正确）
      */
     void generateTransaction(RecurringRule rule);
+
+    /**
+     * 立即生成一笔今天的交易，不改变下次执行日期。
+     */
+    void executeNow(Long id);
 
     /**
      * 创建周期规则

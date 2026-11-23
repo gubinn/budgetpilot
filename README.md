@@ -10,6 +10,7 @@
 | [API.md](API.md) | 内部 API 文档 |
 | [REPORTING.md](REPORTING.md) | 报表口径、聚合接口与净资产月快照 |
 | [ALERT_RULES.md](ALERT_RULES.md) | 预警规则类型、触发时机、配置口径与通知渠道 |
+| [RECURRING_RULES.md](RECURRING_RULES.md) | 周期交易的日期计算、自动执行、幂等与首次使用建议 |
 | [API_EXTERNAL.md](API_EXTERNAL.md) | 面向外部系统的 API 文档（API Key 鉴权、幂等） |
 | [DEPLOY.md](DEPLOY.md) | Docker / 裸机部署、数据库迁移 |
 | [budgetpilot-design-v2-final.md](budgetpilot-design-v2-final.md) | 系统设计文档 |

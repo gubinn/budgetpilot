@@ -199,8 +199,8 @@ const frequencyOptions = [
 ]
 
 const needExecuteDay = computed(() => ['WEEKLY', 'MONTHLY'].includes(createForm.value.frequency))
-const maxExecuteDay = computed(() => createForm.value.frequency === 'WEEKLY' ? 7 : 28)
-const executeDayHint = computed(() => createForm.value.frequency === 'WEEKLY' ? '周一=1, 周日=7' : '1-28日')
+const maxExecuteDay = computed(() => createForm.value.frequency === 'WEEKLY' ? 7 : 31)
+const executeDayHint = computed(() => createForm.value.frequency === 'WEEKLY' ? '周一=1, 周日=7' : '1-31日，小月按月底')
 
 function frequencyLabel(f) {
   return { DAILY: '每天', WEEKLY: '每周', MONTHLY: '每月', YEARLY: '每年' }[f] || f
@@ -251,8 +251,9 @@ async function loadOptions() {
 }
 
 async function handleSave() {
-  if (!createForm.value.name || !createForm.value.amount || !createForm.value.accountId || !createForm.value.categoryId) {
-    message.error('请填写必填项')
+  if (!createForm.value.name || !createForm.value.amount || !createForm.value.accountId
+      || !createForm.value.categoryId || !createForm.value.startDate) {
+    message.error('请填写名称、金额、账户、分类和开始日期')
     return
   }
   submitting.value = true
@@ -262,10 +263,7 @@ async function handleSave() {
       startDate: dayjs(createForm.value.startDate).format('YYYY-MM-DD'),
       endDate: createForm.value.endDate ? dayjs(createForm.value.endDate).format('YYYY-MM-DD') : null
     }
-    // 仅新建时设置首次执行日；编辑时保留后端现有的 nextExecute，避免重复执行
-    if (!editingId.value) {
-      data.nextExecute = dayjs(createForm.value.startDate).format('YYYY-MM-DD')
-    }
+    // 首次执行日交给后端按频率/执行日计算；编辑时也不改 nextExecute，避免重复执行
     if (editingId.value) {
       await recurringApi.update(editingId.value, data)
     } else {
@@ -277,7 +275,7 @@ async function handleSave() {
     resetForm()
     loadRules()
   } catch (e) {
-    message.error('保存失败')
+    message.error(e.message || '保存失败')
   } finally {
     submitting.value = false
   }
@@ -340,10 +338,10 @@ async function handleToggle(rule) {
 async function handleExecute(rule) {
   try {
     await recurringApi.execute(rule.id)
-    message.success('已执行，请查看交易记录')
+    message.success('已生成一笔今天的交易，下次执行日期不变')
     loadRules()
   } catch (e) {
-    message.error('执行失败')
+    message.error(e.message || '执行失败')
   }
 }
 

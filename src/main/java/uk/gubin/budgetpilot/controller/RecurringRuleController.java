@@ -3,11 +3,17 @@ package uk.gubin.budgetpilot.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import uk.gubin.budgetpilot.common.BizException;
+import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.dto.RecurringRuleCreateDTO;
 import uk.gubin.budgetpilot.dto.RecurringRuleUpdateDTO;
+import uk.gubin.budgetpilot.entity.Account;
+import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.Merchant;
 import uk.gubin.budgetpilot.entity.RecurringRule;
+import uk.gubin.budgetpilot.mapper.AccountMapper;
+import uk.gubin.budgetpilot.mapper.CategoryMapper;
 import uk.gubin.budgetpilot.mapper.MerchantMapper;
 import uk.gubin.budgetpilot.service.RecurringRuleService;
 import uk.gubin.budgetpilot.vo.RecurringRuleVO;
@@ -21,6 +27,8 @@ public class RecurringRuleController {
 
     private final RecurringRuleService recurringRuleService;
     private final MerchantMapper merchantMapper;
+    private final AccountMapper accountMapper;
+    private final CategoryMapper categoryMapper;
 
     @GetMapping
     public Result<List<RecurringRuleVO>> list() {
@@ -31,15 +39,35 @@ public class RecurringRuleController {
 
     @GetMapping("/{id}")
     public Result<RecurringRuleVO> get(@PathVariable Long id) {
-        return Result.ok(toVO(recurringRuleService.getById(id)));
+        RecurringRule rule = recurringRuleService.getById(id);
+        if (rule == null) {
+            throw new BizException(ErrorCode.RESOURCE_NOT_FOUND, "周期规则不存在");
+        }
+        return Result.ok(toVO(rule));
     }
 
     private RecurringRuleVO toVO(RecurringRule entity) {
         RecurringRuleVO vo = RecurringRuleVO.fromEntity(entity);
+        if (vo == null) {
+            return null;
+        }
+        if (entity.getAccountId() != null) {
+            Account account = accountMapper.selectById(entity.getAccountId());
+            if (account != null) {
+                vo.setAccountName(account.getName());
+            }
+        }
+        if (entity.getCategoryId() != null) {
+            Category category = categoryMapper.selectById(entity.getCategoryId());
+            if (category != null) {
+                vo.setCategoryName(category.getName());
+                vo.setCategoryColor(category.getColor());
+            }
+        }
         if (entity.getMerchantId() != null) {
-            Merchant m = merchantMapper.selectById(entity.getMerchantId());
-            if (m != null) {
-                vo.setMerchantName(m.getName());
+            Merchant merchant = merchantMapper.selectById(entity.getMerchantId());
+            if (merchant != null) {
+                vo.setMerchantName(merchant.getName());
             }
         }
         return vo;
@@ -68,8 +96,7 @@ public class RecurringRuleController {
 
     @PostMapping("/{id}/execute")
     public Result<Void> executeNow(@PathVariable Long id) {
-        recurringRuleService.generateTransaction(recurringRuleService.getById(id));
-        recurringRuleService.updateNextExecute(recurringRuleService.getById(id));
+        recurringRuleService.executeNow(id);
         return Result.ok();
     }
 }

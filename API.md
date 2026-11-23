@@ -644,6 +644,8 @@ PUT /api/v1/system/config/notify_channel
 
 **基础路径**: `/api/v1/recurring-rules`
 
+> 日期计算、补发、幂等和「立即执行」的完整说明见 [RECURRING_RULES.md](RECURRING_RULES.md)。
+
 | 方法 | 路径 | 功能 | 请求体 |
 |------|------|------|--------|
 | GET | `/api/v1/recurring-rules` | 获取规则列表 | - |
@@ -652,7 +654,7 @@ PUT /api/v1/system/config/notify_channel
 | PUT | `/api/v1/recurring-rules/{id}` | 更新规则 | `RecurringRuleUpdateDTO` |
 | DELETE | `/api/v1/recurring-rules/{id}` | 删除规则 | - |
 | POST | `/api/v1/recurring-rules/{id}/toggle` | 启用/停用规则 | - |
-| POST | `/api/v1/recurring-rules/{id}/execute` | 手动执行规则 | - |
+| POST | `/api/v1/recurring-rules/{id}/execute` | 立即生成一笔今天的交易，不改变下次执行日期 | - |
 
 #### RecurringRuleCreateDTO
 
@@ -666,10 +668,10 @@ PUT /api/v1/system/config/notify_channel
   "categoryId": "分类ID (必填)",
   "merchantId": "商户ID (可选，仅支持已有商户)",
   "frequency": "频率 (必填, DAILY/WEEKLY/MONTHLY/YEARLY)",
-  "executeDay": "执行日 (1-28 或 1-7)",
+  "executeDay": "执行日 (每月 1-31，小月按月底；每周 1-7，周一=1)",
   "startDate": "开始日期 (必填)",
   "endDate": "结束日期 (可选, null=永久)",
-  "nextExecute": "下次执行日期",
+  "nextExecute": "首次执行日期 (可选；不传则按频率/执行日从 startDate 计算)",
   "autoConfirm": "是否自动确认 (默认 false)",
   "note": "备注",
   "extFields": "扩展字段"
