@@ -53,6 +53,7 @@ public class ApiKeyFilter implements Filter {
             // 公网来源禁止使用长期 API Key，必须走登录 + 验证码
             IngressInfo ingress = IngressContext.get(httpReq);
             if (ingress.type() == IngressType.CLOUDFLARE) {
+                log.warn("Public API key rejected: {} {}", httpReq.getMethod(), path);
                 httpResp.setStatus(HttpServletResponse.SC_FORBIDDEN);
                 httpResp.setCharacterEncoding(StandardCharsets.UTF_8.name());
                 httpResp.setContentType("application/json;charset=UTF-8");
@@ -68,6 +69,9 @@ public class ApiKeyFilter implements Filter {
             );
             if (user != null) {
                 StpUtil.login(user.getId());
+                log.debug("API key authenticated: userId={} {} {}", user.getId(), httpReq.getMethod(), path);
+            } else {
+                log.warn("Invalid API key rejected: {} {}", httpReq.getMethod(), path);
             }
         }
 

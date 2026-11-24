@@ -88,6 +88,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         try {
             if (Boolean.TRUE.equals(redisTemplate.hasKey(lockKey))
                     || (ipLockKey != null && Boolean.TRUE.equals(redisTemplate.hasKey(ipLockKey)))) {
+                log.warn("Login blocked: username={} clientIp={} reason=locked", username, clientIp);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS, "登录失败次数过多，请 15 分钟后再试");
             }
 
@@ -96,20 +97,27 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             if (user == null) {
                 recordLoginFail(failKey, lockKey, 10);
                 recordLoginFail(ipFailKey, ipLockKey, 20);
+                log.warn("Login failed: username={} clientIp={} reason=user_not_found", username, clientIp);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
 
             if (!Boolean.TRUE.equals(user.getIsActive())) {
+                log.warn("Login failed: userId={} username={} clientIp={} reason=user_disabled",
+                        user.getId(), username, clientIp);
                 throw new BizException(ErrorCode.AUTH_USER_DISABLED);
             }
 
             if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
                 recordLoginFail(failKey, lockKey, 10);
                 recordLoginFail(ipFailKey, ipLockKey, 20);
+                log.warn("Login failed: userId={} username={} clientIp={} reason=bad_password",
+                        user.getId(), username, clientIp);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
 
             clearLoginFail(failKey, lockKey, ipFailKey, ipLockKey);
+            log.info("Login credentials verified: userId={} username={} clientIp={}",
+                    user.getId(), username, clientIp);
             return user;
         } catch (BizException e) {
             throw e;
@@ -118,11 +126,17 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             log.warn("Redis 不可用，跳过登录限流: {}", e.getClass().getSimpleName());
             User user = findByUsername(username);
             if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
+                log.warn("Login failed (redis degraded): username={} clientIp={} reason=user_not_found_or_disabled",
+                        username, clientIp);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
             if (!passwordEncoder.matches(dto.getPassword(), user.getPassword())) {
+                log.warn("Login failed (redis degraded): userId={} username={} clientIp={} reason=bad_password",
+                        user.getId(), username, clientIp);
                 throw new BizException(ErrorCode.AUTH_WRONG_CREDENTIALS);
             }
+            log.info("Login credentials verified (redis degraded): userId={} username={} clientIp={}",
+                    user.getId(), username, clientIp);
             return user;
         }
     }
@@ -148,6 +162,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
 
         user.setLastLogin(LocalDateTime.now());
         baseMapper.updateById(user);
+
+        log.info("Session created: userId={} username={} ingress={}",
+                user.getId(), user.getUsername(), ingress);
 
         LoginVO vo = new LoginVO();
         vo.setToken(StpUtil.getTokenValue());
@@ -203,7 +220,9 @@ public class UserService extends ServiceImpl<UserMapper, User> {
      * 退出登录
      */
     public void logout() {
+        Object userId = StpUtil.getLoginIdDefaultNull();
         StpUtil.logout();
+        log.info("Logout: userId={}", userId == null ? "-" : userId);
     }
 
     /**
@@ -236,6 +255,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         StpUtil.kickout(userId);
         // 重新登录保持当前会话
         StpUtil.login(userId);
+        log.info("Password changed: userId={} username={}", userId, user.getUsername());
     }
 
     /**
@@ -257,6 +277,8 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         user.setIsActive(dto.getIsActive() != null ? dto.getIsActive() : true);
 
         baseMapper.insert(user);
+        log.info("Created user: id={} username={} role={} active={}",
+                user.getId(), user.getUsername(), user.getRole(), user.getIsActive());
 
         // 为新用户复制系统预置分类和预警规则
         copyDefaultCategories(user.getId());
@@ -419,6 +441,8 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         if (dto.getIsActive() != null) user.setIsActive(dto.getIsActive());
 
         baseMapper.updateById(user);
+        log.info("Updated user: id={} username={} role={} active={}",
+                user.getId(), user.getUsername(), user.getRole(), user.getIsActive());
         return toVO(user);
     }
 
@@ -433,6 +457,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
 
         user.setPassword(passwordEncoder.encode(newPassword));
         baseMapper.updateById(user);
+        log.info("Reset password for user: id={} username={}", user.getId(), user.getUsername());
     }
 
     /**
@@ -472,6 +497,8 @@ public class UserService extends ServiceImpl<UserMapper, User> {
             config.setConfigValue(value);
             userConfigMapper.updateById(config);
         }
+        // 配置值可能包含 Bot Token / API Key，只记录键名，不记录值。
+        log.info("Updated user config: userId={} key={}", userId, key);
     }
 
     /**
@@ -482,6 +509,7 @@ public class UserService extends ServiceImpl<UserMapper, User> {
         query.eq(UserConfig::getUserId, userId);
         java.util.Map<String, String> map = new java.util.LinkedHashMap<>();
         userConfigMapper.selectList(query).forEach(c -> map.put(c.getConfigKey(), c.getConfigValue()));
+        log.debug("Read all user config: userId={}", userId);
         return map;
     }
 

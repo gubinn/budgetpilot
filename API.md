@@ -117,7 +117,7 @@
   "note": "备注",
   "accountId": "账户ID (必填)",
   "targetAccountId": "目标账户ID (转账用)",
-  "categoryId": "分类ID (必填)",
+  "categoryId": "分类ID (支出/收入/退款必填；转账可选，仅作备注)",
   "merchantId": "商户ID (支出交易可选)",
   "merchantName": "商户名称 (用于自动创建商户)",
   "autoCreateMerchant": "是否自动创建商户 (默认 true)",
@@ -172,6 +172,7 @@
   "accountId": "账户ID",
   "targetAccountId": "目标账户ID",
   "categoryId": "分类ID",
+  "clearCategory": "显式清空分类 (布尔；转账复核“自己转自己”时使用)",
   "merchantId": "商户ID",
   "merchantName": "商户名称 (用于匹配已有或自动创建)",
   "autoCreateMerchant": "是否自动创建商户 (默认 true)",
@@ -184,6 +185,8 @@
   "metadata": {}
 }
 ```
+
+> `categoryId: null` 默认视为“未传”，不会清空已有分类。需要清空时必须显式传 `clearCategory: true`；转账复核选择“自己转自己（账户互转，不计收支）”时会同时传 `categoryId: null` 和 `clearCategory: true`，把导入时可能带上的往来款分类移除。
 
 #### TransactionAnnotateDTO
 
@@ -525,6 +528,7 @@
 | 方法 | 路径 | 功能 | Query 参数 |
 |------|------|------|-------------|
 | GET | `/api/v1/reports/overview` | 报表聚合（KPI/结构/排行/趋势/日历/预算/账户/洞察） | `startDate`, `endDate` (yyyy-MM-dd, 必填), `compare` (PREV/YOY/NONE，默认 PREV), `scope` (ALL/DAILY/FIXED/SPECIAL，默认 ALL), `level` (1/2，默认 1) |
+| GET | `/api/v1/reports/annual-overview` | 年度复盘聚合（收支/节奏/分类/预算/净资产/洞察） | `year` (yyyy，可选，默认当前年), `level` (1/2，默认 1) |
 | GET | `/api/v1/reports/net-worth` | 某月净资产快照（每账户余额 + 环比） | `month` (yyyy-MM，可选，默认上一个已结束月份) |
 | GET | `/api/v1/reports/monthly-summary` | 月度汇总 | `month` (yyyy-MM, 必填), `level` (1=一级汇总, 2=二级明细, 默认 1) |
 | GET | `/api/v1/reports/yearly-summary` | 年度汇总 | `year` (yyyy, 必填), `level` (1/2, 默认 1) |
@@ -554,6 +558,42 @@
 - `tagShares`：全年支出标签统计。
 - `merchantShares`：全年商户消费占比（前 10）。
 - `compare`：与上一年的收入/支出同比及变化百分比；上一年为 0 时百分比为 `null`。
+
+#### 6.1 年度复盘
+
+```
+GET /api/v1/reports/annual-overview?year=2026&level=1
+```
+
+`year` 可省略（默认当前年）；未来年份返回参数错误。`level=1` 按一级分类，`level=2` 按实际二级分类并带 `parentName`。
+
+响应顶层字段：
+
+| 字段 | 说明 |
+|---|---|
+| `period` | 年份、覆盖月份、是否部分年份/部分月份、对比区间与对比是否同期 |
+| `kpis` | 全年收入/支出/结余/储蓄率、月均、笔数、有支出/有流水/无支出天数、同期对比 |
+| `monthly` | 固定 12 条：收入/支出/结余/储蓄率、日常/固定/专项、累计结余、同期值、`future` |
+| `bestMonth` / `worstMonth` | 按结余取最高/最低的月份 |
+| `scopes` | 日常/固定/专项金额、占比、笔数、月均、同期金额与变化 |
+| `categories` | 年度分类排行；金额、占比、笔数、月均、同期、`scope` |
+| `incomeCategories` | 一级收入来源排行（前 10） |
+| `netWorth` | 期初/期末净资产、变化、资产/负债/可动用资金、应急金月数、月度轨迹、账户类型分组 |
+| `annualBudget` | 固定 + 专项年度预算执行；`timePct` 为时间进度 |
+| `monthlyBudget` | 已设置月度预算的月份数、超支月份、预算/实际合计 |
+| `merchants` | 全年商户支出前 10 |
+| `largestExpense` | 全年单笔最大支出 |
+| `dataStates` | `partialYear` / `noData` / `multiCurrency` / `annualBudgetMissing` / `monthlyBudgetMissing` / `monthsWithData` / `compareAvailable` / `compareInsufficient` / `netWorthAvailable` |
+| `insights` | 4–6 条年度洞察（tone/title/text） |
+
+口径：
+
+- 与月度复盘一致：只统计已入账、已复核、可统计的流水；退款 type 4 冲减；金额用 `amountBase`。
+- 当前年按已过月份计算月均，未来月份 `future=true`；历史年按 12 个月。
+- 当前年同比使用上一年同期（1 月 1 日到去年同一天）；历史年同比使用完整上一年。
+- 上年同期没有可统计流水时 `dataStates.compareAvailable=false`，所有 `prev*` / `deltaPct` 为 `null`；上年只有少量月份时 `compareInsufficient=true`。
+- 净资产来自 `t_account_balance_snapshot` 月快照；应急金 = 现金/储蓄卡/电子钱包正余额 ÷（日常 + 固定）月均支出。
+- `otherChange = 净资产变化 − 全年结余`，仅在本年至少 3 个月有流水时返回，用于提示投资增值、余额调整或未记账等差额。
 
 ---
 

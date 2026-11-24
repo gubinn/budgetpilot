@@ -29,6 +29,8 @@ public class TransactionUpdateDTO {
     private Long accountId;
     private Long targetAccountId;
     private Long categoryId;
+    /** 显式清空分类（转账复核为“自己转自己”时使用；普通更新不传） */
+    private Boolean clearCategory;
     private Long merchantId;
     private String merchantName;
     /** 修改分类时是否同步更新关联商户的默认分类（默认 true，用于学习） */

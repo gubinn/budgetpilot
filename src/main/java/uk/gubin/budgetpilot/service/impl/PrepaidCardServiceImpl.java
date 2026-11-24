@@ -209,6 +209,7 @@ public class PrepaidCardServiceImpl implements PrepaidCardService {
         cardMapper.insert(card);
         LocalDate occurredAt = dto.getIssueDate() != null ? dto.getIssueDate() : today;
         insertUsage(card, ACTION_INIT, balance, balance, occurredAt, "开卡");
+        log.info("Created prepaid card: id={} name={} balance={}", card.getId(), card.getName(), balance);
         return toVO(card, today);
     }
 
@@ -266,6 +267,7 @@ public class PrepaidCardServiceImpl implements PrepaidCardService {
         card.setExpiryDate(dto.getExpiryDate());
         card.setSource(source);
         card.setNote(trimToNull(dto.getNote()));
+        log.info("Updated prepaid card: id={} name={} balance={}", id, name, balance);
         return toVO(card, today);
     }
 
@@ -276,6 +278,7 @@ public class PrepaidCardServiceImpl implements PrepaidCardService {
         usageMapper.delete(new LambdaQueryWrapper<PrepaidCardUsage>()
                 .eq(PrepaidCardUsage::getCardId, card.getId()));
         cardMapper.deleteById(card.getId());
+        log.info("Deleted prepaid card: id={} name={}", id, card.getName());
     }
 
     @Override
@@ -299,6 +302,8 @@ public class PrepaidCardServiceImpl implements PrepaidCardService {
         }
         cardMapper.updateById(card);
         insertUsage(card, ACTION_USE, value.negate(), after, occurredAt, trimToNull(dto.getNote()));
+        log.info("Used prepaid card: id={} name={} value={} balance={}",
+                id, card.getName(), value, after);
         return toVO(card, LocalDate.now());
     }
 
@@ -316,6 +321,8 @@ public class PrepaidCardServiceImpl implements PrepaidCardService {
         card.setBalance(after);
         cardMapper.updateById(card);
         insertUsage(card, ACTION_RECHARGE, value, after, occurredAt, trimToNull(dto.getNote()));
+        log.info("Recharged prepaid card: id={} name={} value={} balance={}",
+                id, card.getName(), value, after);
         return toVO(card, LocalDate.now());
     }
 
@@ -364,6 +371,7 @@ public class PrepaidCardServiceImpl implements PrepaidCardService {
                 .set("status", status));
         card.setStatus(status);
         insertUsage(card, action, ZERO, money(card.getBalance()), LocalDate.now(), note);
+        log.info("Changed prepaid card status: id={} status={} action={}", id, status, action);
     }
 
     private PrepaidCard requireCard(Long id) {

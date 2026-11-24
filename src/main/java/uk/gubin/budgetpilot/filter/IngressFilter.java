@@ -61,6 +61,9 @@ public class IngressFilter implements Filter {
         }
 
         if (ingress.type() == IngressType.UNKNOWN && ingressProperties.isBlockUnknown()) {
+            log.warn("Blocked request from untrusted ingress: {} {} clientIp={} peer={}",
+                    httpRequest.getMethod(), httpRequest.getRequestURI(),
+                    ingress.clientIp(), ingress.peerIp());
             httpResponse.setStatus(HttpServletResponse.SC_FORBIDDEN);
             httpResponse.setCharacterEncoding(StandardCharsets.UTF_8.name());
             httpResponse.setContentType("application/json;charset=UTF-8");

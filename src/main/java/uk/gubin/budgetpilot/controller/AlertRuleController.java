@@ -2,6 +2,7 @@ package uk.gubin.budgetpilot.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.Result;
 import uk.gubin.budgetpilot.dto.AlertRuleCreateDTO;
@@ -11,6 +12,7 @@ import uk.gubin.budgetpilot.vo.AlertRuleVO;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/alert-rules")
 @RequiredArgsConstructor
@@ -43,6 +45,7 @@ public class AlertRuleController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         alertRuleService.removeById(id);
+        log.info("Deleted alert rule: id={}", id);
         return Result.ok();
     }
 

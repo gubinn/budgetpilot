@@ -97,6 +97,8 @@ public class AccountSnapshotService {
                     upsert(userId, account.getId(), ym.toString(), current.subtract(effect));
                 }
             }
+            log.info("Account snapshots written: userId={} accounts={} months={}",
+                    userId, accounts.size(), months.size());
         } catch (Exception e) {
             log.warn("Snapshot account balances failed for user {}: {}", userId, e.getMessage());
         } finally {

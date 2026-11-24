@@ -2,6 +2,7 @@ package uk.gubin.budgetpilot.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
@@ -20,6 +21,7 @@ import uk.gubin.budgetpilot.vo.RecurringRuleVO;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/recurring-rules")
 @RequiredArgsConstructor
@@ -86,6 +88,7 @@ public class RecurringRuleController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         recurringRuleService.removeById(id);
+        log.info("Deleted recurring rule: id={}", id);
         return Result.ok();
     }
 

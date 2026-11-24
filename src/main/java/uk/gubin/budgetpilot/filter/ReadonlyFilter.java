@@ -60,6 +60,8 @@ public class ReadonlyFilter implements Filter {
 
         try {
             if (isRevoked(shareId)) {
+                log.warn("Readonly session rejected: shareId={} has been revoked ({} {})",
+                        shareId, httpRequest.getMethod(), httpRequest.getRequestURI());
                 writeJson(httpResponse, HttpServletResponse.SC_UNAUTHORIZED, 80001, "只读会话已失效");
                 return;
             }
@@ -72,6 +74,8 @@ public class ReadonlyFilter implements Filter {
         ReadonlyContext.set(shareId);
         try {
             if (!isAllowed(httpRequest.getMethod(), httpRequest.getRequestURI())) {
+                log.warn("Readonly session rejected write: shareId={} {} {}",
+                        shareId, httpRequest.getMethod(), httpRequest.getRequestURI());
                 writeJson(httpResponse, HttpServletResponse.SC_FORBIDDEN, 80002,
                         "只读访问，不能修改数据");
                 return;

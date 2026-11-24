@@ -13,6 +13,7 @@ class ReadonlyFilterTest {
         assertThat(ReadonlyFilter.isAllowed("GET", "/api/v1/accounts")).isTrue();
         assertThat(ReadonlyFilter.isAllowed("GET", "/api/v1/transactions")).isTrue();
         assertThat(ReadonlyFilter.isAllowed("GET", "/api/v1/reports/overview")).isTrue();
+        assertThat(ReadonlyFilter.isAllowed("GET", "/api/v1/reports/annual-overview")).isTrue();
         assertThat(ReadonlyFilter.isAllowed("GET", "/api/v1/prepaid-cards/summary")).isTrue();
         assertThat(ReadonlyFilter.isAllowed("HEAD", "/api/v1/accounts")).isTrue();
         assertThat(ReadonlyFilter.isAllowed("OPTIONS", "/api/v1/accounts")).isTrue();

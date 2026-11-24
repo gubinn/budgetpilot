@@ -251,6 +251,7 @@ public class BudgetServiceImpl extends ServiceImpl<BudgetMapper, Budget> impleme
                 budgetItemMapper.insert(item);
             }
         }
+        log.info("Updated budget for {}: total={}", yearMonth, budget.getTotalAmount());
 
         return budget;
     }

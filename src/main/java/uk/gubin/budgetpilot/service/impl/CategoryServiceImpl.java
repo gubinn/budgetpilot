@@ -262,6 +262,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
 
         // 清除报表缓存（分类名称、颜色变更会影响报表显示）
         clearAllReportCache();
+        log.info("Updated category: id={} name={}", id, entity.getName());
 
         return toVO(entity);
     }

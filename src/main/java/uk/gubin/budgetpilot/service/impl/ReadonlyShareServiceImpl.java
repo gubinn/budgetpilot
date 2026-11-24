@@ -87,6 +87,8 @@ public class ReadonlyShareServiceImpl implements ReadonlyShareService {
         share.setExpiresAt(LocalDateTime.now().plusDays(days));
         share.setViewCount(0);
         shareMapper.insert(share);
+        log.info("Created readonly share: id={} ownerId={} label={} expiresAt={}",
+                share.getId(), ownerId, label, share.getExpiresAt());
 
         ReadonlyShareCreatedVO vo = new ReadonlyShareCreatedVO();
         vo.setId(share.getId());
@@ -114,6 +116,7 @@ public class ReadonlyShareServiceImpl implements ReadonlyShareService {
         long keepSeconds = Math.max(60,
                 Duration.between(LocalDateTime.now(), share.getExpiresAt()).getSeconds());
         sessionManager.revokeTokens(id, keepSeconds);
+        log.info("Revoked readonly share: id={} ownerId={}", id, ownerId);
     }
 
     @Override
@@ -134,24 +137,32 @@ public class ReadonlyShareServiceImpl implements ReadonlyShareService {
     @Override
     public ReadonlySessionVO verify(String code, String pin, String clientIp) {
         if (tooManyVerifies(clientIp)) {
+            log.warn("Readonly share verify blocked: too many attempts clientIp={}", clientIp);
             throw new BizException(ErrorCode.SHARE_TOO_MANY_ATTEMPTS);
         }
 
         ReadonlyShare share = findUsable(code);
         if (share == null) {
+            log.warn("Readonly share verify failed: link invalid clientIp={}", clientIp);
             throw new BizException(ErrorCode.SHARE_LINK_INVALID);
         }
 
         if (share.getPinHash() != null) {
             String input = pin == null ? "" : pin.trim();
             if (input.isEmpty()) {
+                log.warn("Readonly share verify failed: PIN required shareId={} clientIp={}",
+                        share.getId(), clientIp);
                 throw new BizException(ErrorCode.SHARE_PIN_REQUIRED);
             }
             if (pinFailCount(share.getId(), clientIp) >= PIN_MAX_ATTEMPTS) {
+                log.warn("Readonly share verify blocked: too many PIN failures shareId={} clientIp={}",
+                        share.getId(), clientIp);
                 throw new BizException(ErrorCode.SHARE_TOO_MANY_ATTEMPTS);
             }
             if (!passwordEncoder.matches(input, share.getPinHash())) {
                 recordPinFail(share.getId(), clientIp);
+                log.warn("Readonly share verify failed: wrong PIN shareId={} clientIp={}",
+                        share.getId(), clientIp);
                 throw new BizException(ErrorCode.SHARE_PIN_WRONG);
             }
             clearPinFail(share.getId(), clientIp);
@@ -159,6 +170,8 @@ public class ReadonlyShareServiceImpl implements ReadonlyShareService {
 
         User owner = userMapper.selectById(share.getUserId());
         if (owner == null || !Boolean.TRUE.equals(owner.getIsActive())) {
+            log.warn("Readonly share verify failed: owner missing or disabled shareId={} ownerId={}",
+                    share.getId(), share.getUserId());
             throw new BizException(ErrorCode.SHARE_LINK_INVALID);
         }
 
@@ -171,6 +184,8 @@ public class ReadonlyShareServiceImpl implements ReadonlyShareService {
 
         String token = sessionManager.createSession(owner.getId(), share.getId(), ttl);
         shareMapper.touch(share.getId(), now, truncateIp(clientIp));
+        log.info("Readonly share verified: shareId={} ownerId={} clientIp={} ttlSeconds={}",
+                share.getId(), owner.getId(), clientIp, ttl);
 
         ReadonlySessionVO vo = new ReadonlySessionVO();
         vo.setToken(token);

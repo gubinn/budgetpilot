@@ -180,6 +180,7 @@ public class AccountServiceImpl extends ServiceImpl<AccountMapper, Account> impl
 
         // 清除报表缓存（账户名称变更会影响报表显示）
         clearAllReportCache();
+        log.info("Updated account: id={} name={} active={}", id, entity.getName(), entity.getIsActive());
 
         return toVO(entity);
     }

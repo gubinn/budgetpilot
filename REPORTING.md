@@ -1,7 +1,7 @@
 # 报表与净资产快照
 
-> 实现位置：`ReportController` / `ReportServiceImpl` / `AccountSnapshotService`
-> 前端：`frontend/src/components/report/ReportOverview.vue`、`frontend/src/components/account/NetWorthSnapshot.vue`
+> 实现位置：`ReportController` / `ReportServiceImpl` / `AnnualReviewServiceImpl` / `AccountSnapshotService`
+> 前端：`frontend/src/components/report/ReportHub.vue`、`ReportOverview.vue`、`annual/AnnualOverview.vue`、`frontend/src/components/account/NetWorthSnapshot.vue`
 
 ## 1. 页面结构
 
@@ -19,6 +19,22 @@
 10. 自动洞察：预算、结构、最大变化三条结论。
 
 PC 和手机共用同一套取数与计算，手机端单列，年度预算/账户折叠在「展开年度预算与账户」后面。
+
+### 1.1 年度复盘页
+
+报表页顶部有「月度复盘 / 年度复盘」切换，两个视图共用 `/reports` 路由，通过 `?view=annual` 深链。年度页按月度和全年两条线组织：
+
+1. 页头：年份、一级/二级分类；本年未过完、上年无可比数据、上年数据不足时给出提示。
+2. 年度成绩单：全年结余、储蓄率、收入/支出、日常/固定/专项结构。
+3. 收支节奏：12 个月收入/支出柱 + 结余线；未来月份留空；附最佳/最差月份和数据表。
+4. 财务健康：储蓄率、应急金月数、固定支出占比、有支出/无支出天数。
+5. 年度预算执行：固定 + 年度专项，花费进度 vs 时间进度。
+6. 月度预算纪律：已设预算月份数、超支月份、预算/实际合计。
+7. 净资产轨迹：上年 12 月到期末；期初/期末/变化、资产/负债/可动用资金、应急金；差额提示。
+8. 分类年度排行（可下钻）、收入来源、商户排行、年度之最。
+9. 年度洞察：后端生成 4–6 条结论。
+
+移动端单列；分类、收入、商户、年度之最折叠在「展开分类与商户」后面。
 
 ## 2. 口径
 
@@ -97,6 +113,22 @@ GET /api/v1/reports/net-worth?month=2026-10
 ```
 
 `month` 可省略，默认上一个已结束月份。返回该月净资产、每个账户的本期/上期余额与变化、最近 12 个月可选月份。
+
+### 3.4 年度复盘
+
+```
+GET /api/v1/reports/annual-overview?year=2026&level=1
+```
+
+一次返回年度页需要的全部数据：`period`、`kpis`、`monthly`、`scopes`、`categories`、`incomeCategories`、`netWorth`、`annualBudget`、`monthlyBudget`、`merchants`、`largestExpense`、`dataStates`、`insights`。字段明细见 `API.md` 6.1。
+
+年度口径补充：
+
+- 当前年 `monthsCovered = 当前月`，月均按已过月份；未来月份 `future=true` 且值为 0。
+- 当前年同比使用上一年同期（1 月 1 日到去年同一天）；历史年使用完整上一年。
+- 上年同期没有可统计流水时隐藏同比；上年只有少量月份时 `compareInsufficient=true`，页面标注“同比仅供参考”。
+- `spendingDays` 是有支出（type=1）的日期数；`activityDays` 是本年第一笔可统计流水到区间末的天数，`noSpendDays = activityDays - spendingDays`，避免把开始记账前的日子算成无支出日。
+- 应急金 = 可随时动用资金（现金/储蓄卡/电子钱包正余额）÷（日常 + 固定）月均支出；不含投资账户和专项支出。
 
 ## 4. 净资产月快照
 

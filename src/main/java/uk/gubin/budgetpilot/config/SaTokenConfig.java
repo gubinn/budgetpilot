@@ -45,6 +45,9 @@ public class SaTokenConfig implements WebMvcConfigurer {
         // 只读分享链接是两段路径，需要单独兜底
         registry.addViewController("/share/**")
                 .setViewName("forward:/index.html");
+        // 交易编辑是多段路径；刷新/直接打开时也要回到 SPA，而不是 404 JSON
+        registry.addViewController("/transactions/edit/**")
+                .setViewName("forward:/index.html");
     }
 
     @Bean

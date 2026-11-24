@@ -1,7 +1,7 @@
 <template>
-  <ReportOverview mobile />
+  <ReportHub mobile />
 </template>
 
 <script setup>
-import ReportOverview from '@/components/report/ReportOverview.vue'
+import ReportHub from '@/components/report/ReportHub.vue'
 </script>

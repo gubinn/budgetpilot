@@ -52,9 +52,21 @@ api.interceptors.response.use(
       redirectWhenSessionInvalid()
       return Promise.reject(new Error('未登录'))
     }
+    // 过滤器（只读、来源校验、API Key）返回的是 HTTP 错误，
+    // 把后端的 message 透给表单，避免统一显示“操作失败”。
+    if (err.response?.data?.message) {
+      err.message = err.response.data.message
+    }
     console.error('HTTP Error:', err)
     throw err
   }
 )
+
+export function apiErrorMessage(error, fallback = '操作失败') {
+  if (error?.response?.data?.message) return error.response.data.message
+  // 网络中断/超时没有 response，不把 axios 的英文 "Network Error" 直接给用户
+  if (error?.isAxiosError && !error.response) return fallback
+  return error?.message || fallback
+}
 
 export default api

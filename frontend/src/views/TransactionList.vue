@@ -103,6 +103,9 @@
           {{ reviewRow.type === 1 ? '-' : '+' }}¥{{ reviewRow.amount }}
         </n-descriptions-item>
         <n-descriptions-item label="账户">{{ reviewRow.accountName || '-' }}</n-descriptions-item>
+        <n-descriptions-item v-if="reviewRow.type === 3" label="转入账户">
+          {{ reviewRow.targetAccountName || '-' }}
+        </n-descriptions-item>
         <n-descriptions-item label="摘要">{{ reviewRow.note || '-' }}</n-descriptions-item>
       </n-descriptions>
 
@@ -306,6 +309,14 @@ const reviewCategoryId = ref(null)
 const reviewSubmitting = ref(false)
 
 const reviewActions = computed(() => {
+  if (reviewRow.value?.type === 3) {
+    return [
+      { value: 'SELF_TRANSFER', label: '自己转自己（账户互转，不计收支）' },
+      { value: 'LOAN_OUT', label: '借出款（我借给别人，不计收支）' },
+      { value: 'REPAY_LOAN', label: '归还借入款（我还别人，不计收支）' },
+      { value: 'KEEP', label: '保持待复核' }
+    ]
+  }
   if (reviewRow.value?.type === 2) {
     return [
       { value: 'COLLECT_LOAN', label: '收回借出款（别人还我，不计收入）' },
@@ -644,7 +655,11 @@ async function submitReview() {
   }
 
   let categoryId = null
-  if (reviewAction.value === 'EXPENSE' || reviewAction.value === 'INCOME') {
+  let clearCategory = false
+  if (reviewAction.value === 'SELF_TRANSFER') {
+    // 账户互转不是收支：显式清空导入时可能带上的“往来款/借出款”
+    clearCategory = true
+  } else if (reviewAction.value === 'EXPENSE' || reviewAction.value === 'INCOME') {
     if (!reviewCategoryId.value) {
       message.warning('请选择分类')
       return
@@ -663,6 +678,7 @@ async function submitReview() {
   try {
     await transactionApi.update(reviewRow.value.id, {
       categoryId,
+      clearCategory,
       reviewStatus: 'REVIEWED'
     })
     message.success('复核完成')

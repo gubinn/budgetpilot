@@ -73,6 +73,8 @@ public class LoginOtpService {
         if (!send(target, code, ingress.clientIp())) {
             redisTemplate.delete(key);
             releaseSendSlot(user.getId());
+            log.warn("登录验证码发送失败 userId={} channel={} clientIp={}",
+                    user.getId(), target.channel(), ingress.clientIp());
             throw new BizException(ErrorCode.AUTH_OTP_SEND_FAILED);
         }
 
@@ -88,12 +90,15 @@ public class LoginOtpService {
         String key = challengeKey(challengeId);
         Map<Object, Object> data = redisTemplate.opsForHash().entries(key);
         if (data == null || data.isEmpty()) {
+            log.warn("OTP verify failed: challenge not found or expired challengeId={}", challengeId);
             throw new BizException(ErrorCode.AUTH_OTP_INVALID);
         }
 
         Long attempts = redisTemplate.opsForHash().increment(key, "attempts", 1);
         if (attempts != null && attempts > ingressProperties.getOtpMaxAttempts()) {
             redisTemplate.delete(key);
+            log.warn("OTP verify failed: too many attempts challengeId={} userId={} attempts={}",
+                    challengeId, parseUserId(data.get("uid")), attempts);
             throw new BizException(ErrorCode.AUTH_OTP_TOO_MANY);
         }
 
@@ -101,8 +106,12 @@ public class LoginOtpService {
         if (expected == null || !constantTimeEquals(expected, sha256(code))) {
             if (attempts != null && attempts >= ingressProperties.getOtpMaxAttempts()) {
                 redisTemplate.delete(key);
+                log.warn("OTP verify failed: attempts exhausted challengeId={} userId={}",
+                        challengeId, parseUserId(data.get("uid")));
                 throw new BizException(ErrorCode.AUTH_OTP_TOO_MANY);
             }
+            log.warn("OTP verify failed: invalid code challengeId={} userId={} attempts={}",
+                    challengeId, parseUserId(data.get("uid")), attempts);
             throw new BizException(ErrorCode.AUTH_OTP_INVALID);
         }
 
@@ -110,8 +119,10 @@ public class LoginOtpService {
         redisTemplate.delete(key);
         User user = userId == null ? null : userService.getById(userId);
         if (user == null || !Boolean.TRUE.equals(user.getIsActive())) {
+            log.warn("OTP verify failed: user missing or disabled userId={} challengeId={}", userId, challengeId);
             throw new BizException(ErrorCode.AUTH_USER_DISABLED);
         }
+        log.info("OTP verified: userId={} challengeId={}", userId, challengeId);
         return user;
     }
 
@@ -149,9 +160,13 @@ public class LoginOtpService {
 
         if (!send(target, code, ingress.clientIp())) {
             releaseSendSlot(userId);
+            log.warn("登录验证码重发失败 userId={} channel={} clientIp={}",
+                    userId, target.channel(), ingress.clientIp());
             throw new BizException(ErrorCode.AUTH_OTP_SEND_FAILED);
         }
 
+        log.info("登录验证码已重发 userId={} channel={} recipient={}",
+                userId, target.channel(), target.maskedRecipient());
         return buildChallenge(challengeId, target);
     }
 

@@ -5,6 +5,7 @@ import cn.dev33.satoken.stp.StpUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.dto.ChangePasswordDTO;
 import uk.gubin.budgetpilot.common.BizException;
@@ -29,6 +30,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
@@ -128,6 +130,7 @@ public class AuthController {
         user.setId(userId);
         user.setApiKey(apiKey);
         userMapper.updateById(user);
+        log.info("Generated API key: userId={}", userId);
         return uk.gubin.budgetpilot.common.Result.ok(apiKey);
     }
 
@@ -136,6 +139,7 @@ public class AuthController {
     public uk.gubin.budgetpilot.common.Result<String> getApiKey() {
         Long userId = StpUtil.getLoginIdAsLong();
         User user = userMapper.selectById(userId);
+        log.info("Viewed API key: userId={}", userId);
         return uk.gubin.budgetpilot.common.Result.ok(user.getApiKey() != null ? user.getApiKey() : "");
     }
 }

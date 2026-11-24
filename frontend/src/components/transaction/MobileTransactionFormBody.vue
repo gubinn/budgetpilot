@@ -42,7 +42,7 @@
         </n-form-item>
 
         <!-- 分类 -->
-        <n-form-item label="分类">
+        <n-form-item :label="form.type === 3 ? '分类（可选）' : '分类'">
           <n-cascader
             v-model:value="form.categoryId"
             :options="categoryTree"
@@ -116,6 +116,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi, merchantApi } from '@/api'
+import { apiErrorMessage } from '@/api/request'
 import { filterTreeByType, toCascaderOption } from '@/utils/categoryTree'
 import dayjs from 'dayjs'
 
@@ -167,7 +168,11 @@ const merchantLoading = ref(false)
 const merchantSearchTimer = ref(null)
 
 const categoryTree = computed(() => {
-  const categoryType = form.value.type === 4 ? 1 : form.value.type
+  // 转账（3）没有收支分类：显示全部分类，作为可选备注；
+  // 退款（4）归到支出分类；支出/收入按各自类型筛选。
+  const categoryType = form.value.type === 3
+    ? null
+    : (form.value.type === 4 ? 1 : form.value.type)
   return filterTreeByType(allCategoryTree.value, categoryType).map(toCascaderOption)
 })
 
@@ -252,7 +257,7 @@ async function handleSubmit() {
     emit('saved', data)
   } catch (e) {
     if (e?.errors) return
-    message.error('操作失败')
+    message.error(apiErrorMessage(e, '操作失败'))
   } finally {
     submitting.value = false
   }
@@ -289,7 +294,7 @@ onMounted(async () => {
       }
       extFieldsList.value = t.extFields ? Object.entries(t.extFields).map(([k, v]) => ({ key: k, value: String(v) })) : []
     } catch (e) {
-      message.error('加载交易详情失败')
+      message.error(apiErrorMessage(e, '加载交易详情失败'))
     }
   }
 })

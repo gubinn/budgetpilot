@@ -6,7 +6,11 @@
 
 卡券包：把单位发的购物卡、电影票、储值余额记成一本表外备忘，按金额或次数记账，记录所在小程序/账号和有效期；到期前、到期当天和过期次日提醒，不计入总资产、预算和收支报表。
 
-只读共享：生成带有效期和 PIN 的链接，家人无需注册即可只读查看账本；只读令牌由服务端强制拒绝写请求，可随时撤销，不共享密码。
+年度复盘：报表里的年度视角，汇总全年收支、储蓄率、净资产变化、应急金、固定支出占比、年度/月度预算执行，以及分类、收入来源、商户和年度之最；当前年按已过月份计算，同比自动对比去年同期，去年无数据时不显示误导性同比。
+
+只读共享：生成带有效期和 PIN 的链接，家人无需注册即可只读查看账本；只读令牌由服务端强制拒绝写请求，可随时撤销，不共享密码。同一浏览器多个标签页会同步登录/只读状态。
+
+转账复核：待复核的转账可以选择「自己转自己（账户互转，不计收支）」，保留转出/转入账户并清空导入时误挂的往来款分类；转账编辑页的分类为可选项，显示全部启用分类。
 
 ## 文档索引
 
@@ -15,6 +19,7 @@
 | [CHANGELOG.md](CHANGELOG.md) | 变更记录、升级顺序、运维事实、踩坑经验 |
 | [API.md](API.md) | 内部 API 文档 |
 | [REPORTING.md](REPORTING.md) | 报表口径、聚合接口与净资产月快照 |
+| [LOGGING.md](LOGGING.md) | 请求访问日志、认证/权限审计、财务写操作日志与隐私边界 |
 | [ALERT_RULES.md](ALERT_RULES.md) | 预警规则类型、触发时机、配置口径与通知渠道 |
 | [RECURRING_RULES.md](RECURRING_RULES.md) | 周期交易的日期计算、自动执行、幂等与首次使用建议 |
 | [API_EXTERNAL.md](API_EXTERNAL.md) | 面向外部系统的 API 文档（API Key 鉴权、幂等） |
@@ -29,6 +34,7 @@
   - unit：`~/.config/systemd/user/budgetpilot.service`
   - 环境变量：`~/.config/budgetpilot.env`（600，含数据库连接，不入库）
 - 依赖服务：`systemctl status mysql redis-server`（已 enabled）。
+- 运行日志：`journalctl --user -u budgetpilot.service -f`；日志口径与隐私边界见 [LOGGING.md](LOGGING.md)。
 - 配套采集端：`~/accounting_buddy`（招行邮件记账，用户级 timer 每 5 分钟）。
 
 ## 构建

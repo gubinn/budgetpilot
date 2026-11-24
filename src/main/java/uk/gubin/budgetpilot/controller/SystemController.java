@@ -1,8 +1,10 @@
 package uk.gubin.budgetpilot.controller;
 
 import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -23,6 +25,7 @@ import java.util.Map;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/system")
 @RequiredArgsConstructor
@@ -51,12 +54,14 @@ public class SystemController {
     @SaCheckRole("ADMIN")
     @GetMapping("/config")
     public Result<Map<String, String>> getAllConfig() {
+        log.info("Read all system config: userId={}", StpUtil.getLoginIdDefaultNull());
         return Result.ok(configService.getAll());
     }
 
     @SaCheckRole("ADMIN")
     @GetMapping("/config/{key}")
     public Result<String> getConfig(@PathVariable String key) {
+        log.info("Read system config: key={} userId={}", key, StpUtil.getLoginIdDefaultNull());
         return Result.ok(configService.get(key));
     }
 
@@ -64,6 +69,8 @@ public class SystemController {
     @PutMapping("/config/{key}")
     public Result<Void> setConfig(@PathVariable String key, @RequestBody Map<String, String> body) {
         configService.set(key, body.get("value"));
+        // 配置值可能包含 Bot Token / API Key，只记录键名和操作人。
+        log.info("Updated system config: key={} userId={}", key, StpUtil.getLoginIdDefaultNull());
         return Result.ok();
     }
 
@@ -113,6 +120,8 @@ public class SystemController {
     @PostMapping("/telegram/test")
     public Result<String> testTelegram() {
         boolean success = telegramNotifyService.testSend();
+        log.info("Telegram test notification: userId={} success={}",
+                StpUtil.getLoginIdDefaultNull(), success);
         return success ? Result.ok("Telegram 推送成功") : Result.fail(10003, "Telegram 推送失败");
     }
 
@@ -120,6 +129,8 @@ public class SystemController {
     @PostMapping("/whatsapp/test")
     public Result<String> testWhatsApp() {
         boolean success = whatsAppNotifyService.testSend();
+        log.info("WhatsApp test notification: userId={} success={}",
+                StpUtil.getLoginIdDefaultNull(), success);
         return success ? Result.ok("WhatsApp 推送成功") : Result.fail(10003, "WhatsApp 推送失败");
     }
 
@@ -143,7 +154,7 @@ public class SystemController {
         deleteRedisKeys("report:*");
         deleteRedisKeys("idempotency:*");
 
-        return Result.ok(Map.ofEntries(
+        Map<String, Integer> result = Map.ofEntries(
             Map.entry("transactions", transactions),
             Map.entry("merchantAliases", merchantAliases),
             Map.entry("merchants", merchants),
@@ -155,7 +166,10 @@ public class SystemController {
             Map.entry("budgetItems", budgetItems),
             Map.entry("annualBudgets", annualBudgets),
             Map.entry("annualBudgetItems", annualBudgetItems)
-        ));
+        );
+        log.warn("Test data cleared: userId={} deleted={}",
+                StpUtil.getLoginIdDefaultNull(), result);
+        return Result.ok(result);
     }
 
     private void deleteRedisKeys(String pattern) {
@@ -171,6 +185,7 @@ public class SystemController {
     @SaCheckRole("ADMIN")
     @PostMapping("/check-unconfirmed")
     public Result<String> checkUnconfirmedTransactions() {
+        log.info("Manual unconfirmed transaction check: userId={}", StpUtil.getLoginIdDefaultNull());
         scheduledTasks.checkUnconfirmedTransactions();
         return Result.ok("待确认交易检查已执行");
     }

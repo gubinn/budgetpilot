@@ -106,6 +106,7 @@ export const recurringApi = {
 
 export const reportApi = {
   overview: (params) => api.get('/reports/overview', { params }),
+  annualOverview: (params) => api.get('/reports/annual-overview', { params }),
   netWorth: (month) => api.get('/reports/net-worth', { params: { month } }),
   monthlySummary: (month, level = 1) => api.get('/reports/monthly-summary', { params: { month, level } }),
   yearlySummary: (year, level = 1) => api.get('/reports/yearly-summary', { params: { year, level } }),

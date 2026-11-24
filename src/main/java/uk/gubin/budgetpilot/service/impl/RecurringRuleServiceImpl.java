@@ -135,6 +135,8 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         }
 
         baseMapper.insert(rule);
+        log.info("Created recurring rule: id={} name={} nextExecute={}",
+                rule.getId(), rule.getName(), rule.getNextExecute());
         return rule;
     }
 
@@ -190,6 +192,8 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         }
 
         baseMapper.updateById(rule);
+        log.info("Updated recurring rule: id={} name={} active={} nextExecute={}",
+                id, rule.getName(), rule.getIsActive(), rule.getNextExecute());
         return rule;
     }
 
@@ -202,6 +206,8 @@ public class RecurringRuleServiceImpl extends ServiceImpl<RecurringRuleMapper, R
         }
         rule.setIsActive(!Boolean.TRUE.equals(rule.getIsActive()));
         baseMapper.updateById(rule);
+        log.info("Toggled recurring rule: id={} name={} active={}",
+                id, rule.getName(), rule.getIsActive());
         return rule;
     }
 

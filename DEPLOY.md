@@ -1011,6 +1011,8 @@ sudo tail -f /var/log/nginx/access.log
 sudo tail -f /var/log/nginx/error.log
 ```
 
+> API 自身的请求审计、登录/只读/财务写操作日志都在 API 进程日志里，口径和隐私边界见 [LOGGING.md](LOGGING.md)。
+
 ### 6.2 重启服务
 
 **Docker 方式：**

@@ -433,6 +433,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             refreshed = tx;
         }
         NameMaps names = loadNames(List.of(refreshed));
+        log.info("Reconciliation item matched: itemId={} transactionId={}", itemId, transactionId);
         return toItemVO(item, refreshed, names);
     }
 
@@ -458,6 +459,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             clearTransactionIfUnreferenced(txId);
         }
         refreshBatchCounts(requireBatch(item.getBatchId()));
+        log.info("Reconciliation item unmatched: itemId={} transactionId={}", itemId, txId);
         return toItemVO(item, null, NameMaps.empty());
     }
 
@@ -483,6 +485,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             clearTransactionIfUnreferenced(txId);
         }
         refreshBatchCounts(requireBatch(item.getBatchId()));
+        log.info("Reconciliation item ignored: itemId={} reason={}", itemId, ignoreReason);
         return toItemVO(item, null, NameMaps.empty());
     }
 
@@ -551,6 +554,8 @@ public class ReconciliationServiceImpl implements ReconciliationService {
         refreshBatchCounts(requireBatch(item.getBatchId()));
         Transaction refreshed = tx == null ? null : transactionMapper.selectById(tx.getId());
         NameMaps names = refreshed != null ? loadNames(List.of(refreshed)) : NameMaps.empty();
+        log.info("Transaction created from reconciliation item: itemId={} transactionId={}",
+                itemId, created.getId());
         return toItemVO(item, refreshed, names);
     }
 
@@ -584,6 +589,7 @@ public class ReconciliationServiceImpl implements ReconciliationService {
             applyMatches(refreshed, candidates, matches, batchId);
         }
         refreshBatchCounts(batch);
+        log.info("Rematched reconciliation batch: batchId={} channel={}", batchId, batch.getChannel());
         return toBatchVO(batch);
     }
 

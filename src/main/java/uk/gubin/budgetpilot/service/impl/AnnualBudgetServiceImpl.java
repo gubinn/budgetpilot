@@ -199,6 +199,7 @@ public class AnnualBudgetServiceImpl extends ServiceImpl<AnnualBudgetMapper, Ann
                 annualBudgetItemMapper.insert(item);
             }
         }
+        log.info("Updated annual budget for {}: total={}", year, budget.getTotalAmount());
 
         return budget;
     }

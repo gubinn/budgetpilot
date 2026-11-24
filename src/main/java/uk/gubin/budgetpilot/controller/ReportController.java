@@ -5,7 +5,9 @@ import org.springframework.web.bind.annotation.*;
 import uk.gubin.budgetpilot.common.BizException;
 import uk.gubin.budgetpilot.common.ErrorCode;
 import uk.gubin.budgetpilot.common.Result;
+import uk.gubin.budgetpilot.service.AnnualReviewService;
 import uk.gubin.budgetpilot.service.ReportService;
+import uk.gubin.budgetpilot.vo.AnnualOverviewVO;
 import uk.gubin.budgetpilot.vo.NetWorthSnapshotVO;
 import uk.gubin.budgetpilot.vo.ReportOverviewVO;
 import uk.gubin.budgetpilot.vo.ReportVO;
@@ -20,6 +22,7 @@ import java.time.format.DateTimeParseException;
 public class ReportController {
 
     private final ReportService reportService;
+    private final AnnualReviewService annualReviewService;
 
     private static final DateTimeFormatter MONTH_FMT = DateTimeFormatter.ofPattern("yyyy-MM");
 
@@ -61,6 +64,17 @@ public class ReportController {
             throw new BizException(ErrorCode.PARAM_ERROR, "level 只能为 1 或 2");
         }
         return Result.ok(reportService.overview(startDate, endDate, compare, scope, level));
+    }
+
+    /** 年度复盘聚合：一次返回年度页所需的全部数据 */
+    @GetMapping("/annual-overview")
+    public Result<AnnualOverviewVO> annualOverview(
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "1") Integer level) {
+        if (level == null || (level != 1 && level != 2)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "level 只能为 1 或 2");
+        }
+        return Result.ok(annualReviewService.overview(year, level));
     }
 
     private LocalDate parseDate(String value) {

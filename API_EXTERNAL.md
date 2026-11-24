@@ -597,12 +597,15 @@ Content-Type: application/json
 | `accountId` | long | - | 源账户 ID |
 | `targetAccountId` | long | - | 目标账户 ID |
 | `categoryId` | long | - | 分类 ID |
+| `clearCategory` | boolean | - | `true` 时显式清空分类；仅传 `categoryId: null` 不会清空 |
 | `merchantId` | long | - | 商户 ID |
 | `merchantName` | string | 最长 50 字符 | 商户名称（自动创建/匹配） |
 | `tags` | string[] | - | 标签列表 |
 | `attachmentUrls` | string[] | - | 附件 URL 列表 |
 | `isConfirmed` | boolean | - | 是否确认 |
 | `extFields` | object | - | 扩展字段（全量替换） |
+
+> 清空分类必须传 `clearCategory: true`；只传 `categoryId: null` 会被当作“未传”而保留原分类。转账复核为“自己转自己”时可同时传 `clearCategory: true` 和 `reviewStatus: "REVIEWED"`。
 
 #### 3.5 删除交易
 

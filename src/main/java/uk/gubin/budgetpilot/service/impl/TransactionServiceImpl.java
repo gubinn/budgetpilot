@@ -219,7 +219,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
             registerCacheClearSync(entity.getTransactionDate());
         }
 
-        log.info("Created transaction: {} {} {} (confirmed={})", entity.getType(), entity.getAmount(), entity.getCurrency(), entity.getIsConfirmed());
+        log.info("Created transaction: id={} type={} amount={} currency={} confirmed={}",
+                entity.getId(), entity.getType(), entity.getAmount(), entity.getCurrency(), entity.getIsConfirmed());
         return toVO(entity, account, category, merchant);
     }
 
@@ -437,7 +438,12 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
         if (dto.getNote() != null) entity.setNote(dto.getNote());
         if (dto.getAccountId() != null) entity.setAccountId(dto.getAccountId());
         if (dto.getTargetAccountId() != null) entity.setTargetAccountId(dto.getTargetAccountId());
-        if (dto.getCategoryId() != null) entity.setCategoryId(dto.getCategoryId());
+        if (dto.getCategoryId() != null) {
+            entity.setCategoryId(dto.getCategoryId());
+        } else if (Boolean.TRUE.equals(dto.getClearCategory())) {
+            // 自己转自己时不需要收支分类；显式置空，避免沿用导入时的“借出款”
+            entity.setCategoryId(null);
+        }
 
         // 学习闭环：用户修改交易分类时，同步更新关联商户的默认分类
         if (dto.getCategoryId() != null && entity.getMerchantId() != null
@@ -538,6 +544,13 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         baseMapper.updateById(entity);
 
+        // MyBatis-Plus updateById 默认忽略 null 字段，清空分类需要显式 update。
+        if (Boolean.TRUE.equals(dto.getClearCategory()) && dto.getCategoryId() == null) {
+            baseMapper.update(null, new LambdaUpdateWrapper<Transaction>()
+                    .eq(Transaction::getId, id)
+                    .set(Transaction::getCategoryId, null));
+        }
+
         // 对账是快照：金额/日期/时间/币种/账户/类型变了，原来的对账关系不再成立。
         // 把账单行退回待处理，避免继续挂着「已对账」造成账实不符。
         boolean reconcileRelevantChange = !Objects.equals(oldType, entity.getType())
@@ -588,6 +601,9 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         eventPublisher.publishEvent(new TransactionEvent(this, entity, TransactionEvent.Action.UPDATE));
         registerCacheClearSync(entity.getTransactionDate());
+        log.info("Updated transaction: id={} type={} amount={} category={} account={} confirmed={}",
+                id, entity.getType(), entity.getAmount(), entity.getCategoryId(),
+                entity.getAccountId(), entity.getIsConfirmed());
         return toVO(entity, account, category, merchant);
     }
 
@@ -667,6 +683,8 @@ public class TransactionServiceImpl extends ServiceImpl<TransactionMapper, Trans
 
         // 事务提交后同步清除报表缓存
         registerCacheClearSync(entity.getTransactionDate());
+        log.info("Confirmed transaction: id={} type={} amount={}",
+                id, entity.getType(), entity.getAmount());
 
         Category category = entity.getCategoryId() != null ? categoryMapper.selectById(entity.getCategoryId()) : null;
         Merchant merchant = entity.getMerchantId() != null ? merchantMapper.selectById(entity.getMerchantId()) : null;

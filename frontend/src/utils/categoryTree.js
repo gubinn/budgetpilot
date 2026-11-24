@@ -4,8 +4,10 @@ export function filterTreeByType(nodes, type) {
   const result = []
   for (const node of nodes || []) {
     const children = node.children ? filterTreeByType(node.children, type) : []
+    // type 为 null/undefined 时不筛选类型（转账分类可选，允许挂任意分类作为备注）
+    const typeMatches = type == null || node.type === type
     // 自身类型匹配，或只是作为匹配子分类的父级容器
-    if (node.type === type || children.length) {
+    if (typeMatches || children.length) {
       result.push({ ...node, children })
     }
   }

@@ -64,6 +64,7 @@ public class AlertLogService extends ServiceImpl<AlertLogMapper, AlertLog> {
         if (alertLog != null) {
             alertLog.setIsRead(true);
             baseMapper.updateById(alertLog);
+            log.debug("Alert marked read: id={}", id);
         }
     }
 }

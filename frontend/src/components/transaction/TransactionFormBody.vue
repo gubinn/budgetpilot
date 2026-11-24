@@ -27,7 +27,7 @@
       <n-select v-model:value="form.targetAccountId" :options="accountOptions" placeholder="选择目标账户" filterable />
     </n-form-item>
 
-    <n-form-item label="分类" path="categoryId">
+    <n-form-item :label="form.type === 3 ? '分类（可选）' : '分类'" path="categoryId">
       <n-cascader
         v-model:value="form.categoryId"
         :options="categoryTree"
@@ -89,6 +89,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { transactionApi, accountApi, categoryApi, merchantApi } from '@/api'
+import { apiErrorMessage } from '@/api/request'
 import { filterTreeByType, toCascaderOption } from '@/utils/categoryTree'
 import dayjs from 'dayjs'
 
@@ -128,8 +129,9 @@ const rules = {
   amount: { required: true, type: 'number', message: '请输入金额', trigger: 'blur' },
   accountId: { required: true, type: 'number', message: '请选择账户', trigger: 'change' },
   categoryId: {
-    required: true,
     validator: (rule, value) => {
+      // 转账没有收支分类的概念；分类只作为可选备注，允许留空
+      if (form.value.type === 3) return true
       if (!value) return new Error('请选择分类')
       if (Array.isArray(value) && value.length === 0) return new Error('请选择分类')
       return true
@@ -159,7 +161,11 @@ const merchantSearchTimer = ref(null)
 
 // 根据交易类型筛选分类（保持树形结构；混合类型父分类只保留匹配的子分类）
 const categoryTree = computed(() => {
-  const categoryType = form.value.type === 4 ? 1 : form.value.type
+  // 转账（3）没有收支分类：显示全部分类，作为可选备注；
+  // 退款（4）归到支出分类；支出/收入按各自类型筛选。
+  const categoryType = form.value.type === 3
+    ? null
+    : (form.value.type === 4 ? 1 : form.value.type)
   return filterTreeByType(allCategoryTree.value, categoryType).map(toCascaderOption)
 })
 
@@ -262,7 +268,7 @@ async function handleSubmit() {
     emit('saved', data)
   } catch (e) {
     if (e?.errors) return // validation error
-    message.error('操作失败')
+    message.error(apiErrorMessage(e, '操作失败'))
   } finally {
     submitting.value = false
   }
@@ -303,7 +309,7 @@ onMounted(async () => {
       }
       extFieldsList.value = t.extFields ? Object.entries(t.extFields).map(([k, v]) => ({ key: k, value: String(v) })) : []
     } catch (e) {
-      message.error('加载交易详情失败')
+      message.error(apiErrorMessage(e, '加载交易详情失败'))
     }
   }
 })
