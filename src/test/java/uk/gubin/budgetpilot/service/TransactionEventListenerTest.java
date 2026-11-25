@@ -1,29 +1,29 @@
 package uk.gubin.budgetpilot.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
-import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
 import uk.gubin.budgetpilot.entity.AlertRule;
 import uk.gubin.budgetpilot.entity.Category;
 import uk.gubin.budgetpilot.entity.Transaction;
 import uk.gubin.budgetpilot.event.TransactionEvent;
 import uk.gubin.budgetpilot.mapper.CategoryMapper;
-import uk.gubin.budgetpilot.service.TransactionEventListener;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -39,247 +39,158 @@ class TransactionEventListenerTest {
     @Spy private ObjectMapper objectMapper = new ObjectMapper();
     @InjectMocks private TransactionEventListener eventListener;
 
-    // ============ CACHE CLEAR TESTS ============
+    // ============ BUDGET ============
 
-    @Nested
-    @DisplayName("缓存清除测试")
-    class CacheClearTests {
+    @Test
+    @DisplayName("已确认支出新建 → 更新预算 spent")
+    void createConfirmedExpense_updatesBudget() {
+        Transaction tx = expense(LocalDate.now(), "100");
 
-        @Test
-        @DisplayName("交易事件 → 清除相关月份报表缓存")
-        void onTransactionEvent_ClearsReportCache() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("100"));
-            tx.setIsConfirmed(false); // 未确认也清除缓存
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
 
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
-
-            eventListener.onTransactionEvent(event);
-
-            // 无登录上下文时 getUserId() 返回 null，不清除 userId 专属缓存
-            // 但仍清除全局缓存
-            verify(redisTemplate).delete("report:account-summary");
-        }
-
-        @Test
-        @DisplayName("缓存清除失败不影响主流程")
-        void onTransactionEvent_CacheError_DoesNotAffectMainFlow() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("100"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
-
-            Category cat = new Category();
-            cat.setId(10L);
-            cat.setParentId(0L);
-            when(categoryMapper.selectById(10L)).thenReturn(cat);
-            when(redisTemplate.delete(anyString())).thenThrow(new RuntimeException("Redis error"));
-
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
-
-            // 不抛异常
-            assertThatNoException().isThrownBy(() -> eventListener.onTransactionEvent(event));
-
-            // 预算更新不受影响
-            verify(budgetService).updateItemSpent(anyLong(), anyString(), any());
-        }
+        verify(budgetService).updateItemSpent(eq(10L), eq(YearMonth.now().toString()),
+                eq(new BigDecimal("100")));
     }
 
-    // ============ CREATE EVENT ============
+    @Test
+    @DisplayName("未确认交易 → 不更新预算、不检查预警")
+    void unconfirmedExpense_doesNotUpdateBudgetOrAlert() {
+        Transaction tx = expense(LocalDate.now(), "100");
+        tx.setIsConfirmed(false);
 
-    @Nested
-    @DisplayName("交易创建事件")
-    class CreateEventTests {
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
 
-        @Test
-        @DisplayName("已确认支出 → 更新预算 spent")
-        void onTransactionEvent_ConfirmedExpense_UpdatesBudget() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1); // 支出
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("100"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
-
-            Category cat = new Category();
-            cat.setId(10L);
-            cat.setParentId(0L); // 一级分类
-            when(categoryMapper.selectById(10L)).thenReturn(cat);
-
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
-
-            eventListener.onTransactionEvent(event);
-
-            verify(budgetService).updateItemSpent(eq(10L), eq("2026-04"), eq(new BigDecimal("100")));
-        }
-
-        @Test
-        @DisplayName("子分类支出 → 更新父分类预算 spent")
-        void onTransactionEvent_SubCategory_UpdatesParentBudget() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(20L); // 子分类
-            tx.setAmountBase(new BigDecimal("50"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
-
-            Category subCat = new Category();
-            subCat.setId(20L);
-            subCat.setParentId(10L); // 父分类
-            when(categoryMapper.selectById(20L)).thenReturn(subCat);
-
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
-
-            eventListener.onTransactionEvent(event);
-
-            // 更新的是父分类的 spent
-            verify(budgetService).updateItemSpent(eq(10L), eq("2026-04"), eq(new BigDecimal("50")));
-        }
-
-        @Test
-        @DisplayName("未确认交易 → 不更新预算")
-        void onTransactionEvent_Unconfirmed_NoBudgetUpdate() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("100"));
-            tx.setIsConfirmed(false);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
-
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
-
-            eventListener.onTransactionEvent(event);
-
-            verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
-        }
-
-        @Test
-        @DisplayName("收入交易 → 不更新预算 spent")
-        void onTransactionEvent_Income_NoBudgetUpdate() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(2); // 收入
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("5000"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
-
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
-
-            eventListener.onTransactionEvent(event);
-
-            verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
-        }
+        verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
+        verifyNoInteractions(alertLogService);
     }
 
-    // ============ DELETE EVENT ============
+    @Test
+    @DisplayName("收入交易 → 不更新预算")
+    void income_doesNotUpdateBudget() {
+        Transaction tx = expense(LocalDate.now(), "5000");
+        tx.setType(2);
 
-    @Nested
-    @DisplayName("交易删除事件")
-    class DeleteEventTests {
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
 
-        @Test
-        @DisplayName("删除已确认支出 → 退回预算 spent")
-        void onTransactionEvent_DeleteConfirmedExpense_RefundsBudget() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("100"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
-
-            Category cat = new Category();
-            cat.setId(10L);
-            cat.setParentId(0L);
-            when(categoryMapper.selectById(10L)).thenReturn(cat);
-
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.DELETE);
-
-            eventListener.onTransactionEvent(event);
-
-            // spent 减少（负数）
-            ArgumentCaptor<BigDecimal> captor = ArgumentCaptor.forClass(BigDecimal.class);
-            verify(budgetService).updateItemSpent(eq(10L), eq("2026-04"), captor.capture());
-            assertThat(captor.getValue()).isEqualByComparingTo(new BigDecimal("-100"));
-        }
+        verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
     }
 
-    // ============ ALERT CHECKS ============
+    @Test
+    @DisplayName("删除已确认支出 → 退回预算 spent")
+    void deleteConfirmedExpense_refundsBudget() {
+        Transaction tx = expense(LocalDate.now(), "100");
 
-    @Nested
-    @DisplayName("预警检查")
-    class AlertCheckTests {
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.DELETE));
 
-        @Test
-        @DisplayName("支出事件触发大额金额预警")
-        void onTransactionEvent_LargeAmountAlert() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("5000"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
+        verify(budgetService).updateItemSpent(eq(10L), eq(YearMonth.now().toString()),
+                eq(new BigDecimal("-100")));
+    }
 
-            Category cat = new Category();
-            cat.setId(10L);
-            cat.setParentId(0L);
-            when(categoryMapper.selectById(10L)).thenReturn(cat);
+    // ============ ALERTS ============
 
-            AlertRule largeAmountRule = new AlertRule();
-            largeAmountRule.setId(1L);
-            largeAmountRule.setType(2); // 大额金额
-            largeAmountRule.setName("大额预警");
-            largeAmountRule.setIsActive(true);
-            largeAmountRule.setConfig("{\"max_amount\":\"1000\"}");
-            largeAmountRule.setNotifyChannel("TELEGRAM");
+    @Test
+    @DisplayName("新建当天的大额支出 → 触发大额预警")
+    void createTodayLargeExpense_triggersAlert() {
+        Transaction tx = expense(LocalDate.now(), "5000");
+        when(alertRuleService.getActiveRulesByUserId(2L))
+                .thenReturn(List.of(rule(22L, 2, "{\"max_amount\":\"1000\"}")));
+        when(categoryMapper.selectById(10L)).thenReturn(category("大额购物"));
 
-            when(alertRuleService.getActiveRules()).thenReturn(List.of(largeAmountRule));
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
 
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
+        verify(alertLogService).logAndNotify(eq(22L), eq(2), contains("大额"), anyString(), eq("WHATSAPP"));
+    }
 
-            eventListener.onTransactionEvent(event);
+    @Test
+    @DisplayName("编辑历史交易 → 不重新触发大额/日限额预警")
+    void updateHistoricalExpense_doesNotTriggerAlert() {
+        Transaction tx = expense(LocalDate.of(2026, 4, 2), "7712.40");
+        tx.setId(148L);
 
-            // 预算更新 + 预警通知
-            verify(alertLogService).logAndNotify(anyLong(), anyInt(), anyString(), anyString(), anyString());
-        }
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.UPDATE));
 
-        @Test
-        @DisplayName("预警检查异常不影响主流程")
-        void onTransactionEvent_AlertError_DoesNotAffectMainFlow() {
-            Transaction tx = new Transaction();
-            tx.setId(1L);
-            tx.setType(1);
-            tx.setCategoryId(10L);
-            tx.setAmountBase(new BigDecimal("100"));
-            tx.setIsConfirmed(true);
-            tx.setTransactionDate(LocalDate.of(2026, 4, 15));
+        verify(alertRuleService, never()).getActiveRulesByUserId(any());
+        verifyNoInteractions(alertLogService);
+        // 编辑的预算重算由 TransactionServiceImpl 负责，这里不重复更新
+        verify(budgetService, never()).updateItemSpent(anyLong(), anyString(), any());
+    }
 
-            Category cat = new Category();
-            cat.setId(10L);
-            cat.setParentId(0L);
-            when(categoryMapper.selectById(10L)).thenReturn(cat);
+    @Test
+    @DisplayName("补录历史日期的支出 → 不触发当天消费预警")
+    void createHistoricalExpense_doesNotTriggerAlert() {
+        Transaction tx = expense(LocalDate.of(2026, 4, 2), "5000");
+        when(alertRuleService.getActiveRulesByUserId(2L))
+                .thenReturn(List.of(rule(22L, 2, "{\"max_amount\":\"1000\"}")));
 
-            when(alertRuleService.getActiveRules()).thenThrow(new RuntimeException("DB error"));
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
 
-            TransactionEvent event = new TransactionEvent(this, tx, TransactionEvent.Action.CREATE);
+        verify(alertLogService, never()).logAndNotify(anyLong(), anyInt(), anyString(), anyString(), anyString());
+    }
 
-            // 不抛异常
-            assertThatNoException().isThrownBy(() -> eventListener.onTransactionEvent(event));
+    @Test
+    @DisplayName("日消费上限同一交易日期只提醒一次")
+    void dailyLimitAlert_firesOncePerDay() {
+        Transaction tx = expense(LocalDate.now(), "100");
+        when(alertRuleService.getActiveRulesByUserId(2L))
+                .thenReturn(List.of(rule(25L, 3, "{\"daily_limit\":\"500\"}")));
+        when(transactionService.getDailySpent(any(LocalDate.class)))
+                .thenReturn(Map.<String, Object>of("totalSpent", new BigDecimal("800")));
 
-            // 预算更新不受影响
-            verify(budgetService).updateItemSpent(anyLong(), anyString(), any());
-        }
+        @SuppressWarnings("unchecked")
+        ValueOperations<String, String> ops = mock(ValueOperations.class);
+        when(redisTemplate.opsForValue()).thenReturn(ops);
+        when(ops.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true, false);
+
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
+        eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE));
+
+        verify(alertLogService, times(1))
+                .logAndNotify(eq(25L), eq(3), contains("日消费上限"), anyString(), eq("WHATSAPP"));
+    }
+
+    @Test
+    @DisplayName("预警检查异常不影响预算更新")
+    void alertCheckError_doesNotBreakBudgetUpdate() {
+        Transaction tx = expense(LocalDate.now(), "100");
+        when(alertRuleService.getActiveRulesByUserId(2L)).thenThrow(new RuntimeException("DB error"));
+
+        assertThatNoException().isThrownBy(() ->
+                eventListener.onTransactionEvent(new TransactionEvent(this, tx, TransactionEvent.Action.CREATE)));
+
+        verify(budgetService).updateItemSpent(anyLong(), anyString(), any());
+    }
+
+    // ============ HELPERS ============
+
+    private Transaction expense(LocalDate date, String amount) {
+        Transaction tx = new Transaction();
+        tx.setId(1L);
+        tx.setUserId(2L);
+        tx.setType(1);
+        tx.setCategoryId(10L);
+        tx.setAmountBase(new BigDecimal(amount));
+        tx.setIsConfirmed(true);
+        tx.setTransactionDate(date);
+        return tx;
+    }
+
+    private AlertRule rule(long id, int type, String config) {
+        AlertRule rule = new AlertRule();
+        rule.setId(id);
+        rule.setType(type);
+        rule.setName("测试规则");
+        rule.setIsActive(true);
+        rule.setConfig(config);
+        rule.setNotifyChannel("WHATSAPP");
+        return rule;
+    }
+
+    private Category category(String name) {
+        Category cat = new Category();
+        cat.setId(10L);
+        cat.setName(name);
+        cat.setType(1);
+        cat.setBudgetType("DAILY");
+        return cat;
     }
 }

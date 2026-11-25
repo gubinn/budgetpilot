@@ -465,9 +465,11 @@ public class ScheduledTasks {
 
             if (rules.isEmpty()) return;
 
-            // 查询未确认的交易
+            // 查询未确认的交易。按交易日期倒序，避免历史导入的旧账单占据列表前几条；
+            // 创建时间只作为同一天的次级排序。
             LambdaQueryWrapper<Transaction> query = new LambdaQueryWrapper<>();
             query.eq(Transaction::getIsConfirmed, false)
+                    .orderByDesc(Transaction::getTransactionDate)
                     .orderByDesc(Transaction::getCreatedAt);
             List<Transaction> unconfirmed = transactionMapper.selectList(query);
             log.info("Unconfirmed transactions: {}", unconfirmed.size());
@@ -489,7 +491,8 @@ public class ScheduledTasks {
                         StringBuilder details = new StringBuilder();
                         for (int i = 0; i < Math.min(5, unconfirmed.size()); i++) {
                             Transaction t = unconfirmed.get(i);
-                            details.append("• ").append(t.getNote() != null ? t.getNote() : "无备注")
+                            details.append("• ").append(t.getTransactionDate()).append(" ")
+                                    .append(t.getNote() != null ? t.getNote() : "无备注")
                                     .append(" - ¥").append(t.getAmountBase().toPlainString())
                                     .append("\n");
                         }
@@ -497,11 +500,18 @@ public class ScheduledTasks {
                             details.append("• 还有 ").append(unconfirmed.size() - 5).append(" 条...\n");
                         }
 
+                        LocalDate earliest = unconfirmed.stream()
+                                .map(Transaction::getTransactionDate)
+                                .filter(java.util.Objects::nonNull)
+                                .min(LocalDate::compareTo)
+                                .orElse(null);
+                        String range = earliest != null ? "（最早 " + earliest + "）" : "";
+
                         String title = "📝 待确认交易提醒";
                         String content = String.format("""
                                 📝 待确认交易提醒
 
-                                • 待确认数量: %d 条
+                                • 待确认数量: %d 条%s
                                 • 涉及金额: ¥%s
 
                                 %s
@@ -511,6 +521,7 @@ public class ScheduledTasks {
                                 _%s_
                                 """,
                                 unconfirmed.size(),
+                                range,
                                 totalAmount.toPlainString(),
                                 details.toString(),
                                 LocalDate.now());
