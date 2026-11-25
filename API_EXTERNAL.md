@@ -605,7 +605,7 @@ Content-Type: application/json
 | `isConfirmed` | boolean | - | 是否确认 |
 | `extFields` | object | - | 扩展字段（全量替换） |
 
-> 清空分类必须传 `clearCategory: true`；只传 `categoryId: null` 会被当作“未传”而保留原分类。转账复核为“自己转自己”时可同时传 `clearCategory: true` 和 `reviewStatus: "REVIEWED"`。
+> 清空分类必须传 `clearCategory: true`；只传 `categoryId: null` 会被当作“未传”而保留原分类。交易编辑页清空分类时会这样提交；转账复核为“自己转自己”时还可同时传 `reviewStatus: "REVIEWED"`。
 
 #### 3.5 删除交易
 

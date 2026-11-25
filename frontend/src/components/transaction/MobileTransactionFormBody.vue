@@ -42,15 +42,16 @@
         </n-form-item>
 
         <!-- 分类 -->
-        <n-form-item :label="form.type === 3 ? '分类（可选）' : '分类'">
+        <n-form-item :label="form.type === 3 || isEdit ? '分类（可选）' : '分类'">
           <n-cascader
             v-model:value="form.categoryId"
             :options="categoryTree"
-            placeholder="选择分类"
+            :placeholder="isEdit ? '选择分类（可清空）' : '选择分类'"
             check-strategy="child"
             cascade="false"
             show-path
             filterable
+            clearable
             size="large"
             style="width: 100%"
           />
@@ -228,7 +229,14 @@ async function handleSubmit() {
   try {
     const data = { ...form.value }
     if (Array.isArray(data.categoryId)) {
-      data.categoryId = data.categoryId[data.categoryId.length - 1]
+      data.categoryId = data.categoryId.length
+        ? data.categoryId[data.categoryId.length - 1]
+        : null
+    }
+    // 后端把 categoryId: null 视为“未传”；编辑时清空分类必须显式告诉后端
+    if (isEdit.value && !data.categoryId) {
+      data.categoryId = null
+      data.clearCategory = true
     }
     if (data.transactionDate) {
       const parts = data.transactionDate.split(' ')

@@ -27,15 +27,16 @@
       <n-select v-model:value="form.targetAccountId" :options="accountOptions" placeholder="选择目标账户" filterable />
     </n-form-item>
 
-    <n-form-item :label="form.type === 3 ? '分类（可选）' : '分类'" path="categoryId">
+    <n-form-item :label="form.type === 3 || isEdit ? '分类（可选）' : '分类'" path="categoryId">
       <n-cascader
         v-model:value="form.categoryId"
         :options="categoryTree"
-        placeholder="选择分类"
+        :placeholder="isEdit ? '选择分类（可清空）' : '选择分类'"
         check-strategy="child"
         cascade="false"
         show-path
         filterable
+        clearable
       />
     </n-form-item>
 
@@ -132,6 +133,8 @@ const rules = {
     validator: (rule, value) => {
       // 转账没有收支分类的概念；分类只作为可选备注，允许留空
       if (form.value.type === 3) return true
+      // 编辑已有交易时允许清空分类，例如历史导入的往来款、自己转自己
+      if (isEdit.value) return true
       if (!value) return new Error('请选择分类')
       if (Array.isArray(value) && value.length === 0) return new Error('请选择分类')
       return true
@@ -233,7 +236,14 @@ async function handleSubmit() {
     const data = { ...form.value }
     // cascader 可能返回数组，取最后一个值（叶子节点）
     if (Array.isArray(data.categoryId)) {
-      data.categoryId = data.categoryId[data.categoryId.length - 1]
+      data.categoryId = data.categoryId.length
+        ? data.categoryId[data.categoryId.length - 1]
+        : null
+    }
+    // 后端把 categoryId: null 视为“未传”；编辑时清空分类必须显式告诉后端
+    if (isEdit.value && !data.categoryId) {
+      data.categoryId = null
+      data.clearCategory = true
     }
 
     // 拆分日期时间字段为 date 和 time

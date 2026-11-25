@@ -172,7 +172,7 @@
   "accountId": "账户ID",
   "targetAccountId": "目标账户ID",
   "categoryId": "分类ID",
-  "clearCategory": "显式清空分类 (布尔；转账复核“自己转自己”时使用)",
+  "clearCategory": "显式清空分类 (布尔；编辑交易清空分类、转账复核“自己转自己”时使用)",
   "merchantId": "商户ID",
   "merchantName": "商户名称 (用于匹配已有或自动创建)",
   "autoCreateMerchant": "是否自动创建商户 (默认 true)",
@@ -186,7 +186,7 @@
 }
 ```
 
-> `categoryId: null` 默认视为“未传”，不会清空已有分类。需要清空时必须显式传 `clearCategory: true`；转账复核选择“自己转自己（账户互转，不计收支）”时会同时传 `categoryId: null` 和 `clearCategory: true`，把导入时可能带上的往来款分类移除。
+> `categoryId: null` 默认视为“未传”，不会清空已有分类。需要清空时必须显式传 `clearCategory: true`；编辑交易时清空分类下拉框、或转账复核选择“自己转自己（账户互转，不计收支）”时，前端会同时传 `categoryId: null` 和 `clearCategory: true`，把分类移除。
 
 #### TransactionAnnotateDTO
 
