@@ -51,6 +51,13 @@ public class ReadonlyShareController {
         return Result.ok();
     }
 
+    /** 彻底删除已撤销/已过期的分享记录，避免列表越积越多。 */
+    @DeleteMapping("/{id}/permanent")
+    public Result<Void> delete(@PathVariable Long id) {
+        readonlyShareService.delete(id);
+        return Result.ok();
+    }
+
     @GetMapping("/public/{code}")
     public Result<ShareCheckVO> check(@PathVariable String code) {
         return Result.ok(readonlyShareService.check(code));

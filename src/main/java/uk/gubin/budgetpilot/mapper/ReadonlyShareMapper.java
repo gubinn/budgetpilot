@@ -36,6 +36,10 @@ public interface ReadonlyShareMapper extends BaseMapper<ReadonlyShare> {
     int revoke(@Param("id") Long id, @Param("userId") Long userId);
 
     @InterceptorIgnore(tenantLine = "true")
+    @Delete("DELETE FROM t_readonly_share WHERE id = #{id} AND user_id = #{userId}")
+    int deleteByIdAndUserId(@Param("id") Long id, @Param("userId") Long userId);
+
+    @InterceptorIgnore(tenantLine = "true")
     @Update("UPDATE t_readonly_share SET last_used_at = #{lastUsedAt}, last_used_ip = #{ip}, " +
             "view_count = view_count + 1 WHERE id = #{id}")
     int touch(@Param("id") Long id,

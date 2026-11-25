@@ -44,6 +44,13 @@
             type="error"
             @click="confirmRevoke(share)"
           >撤销</n-button>
+          <n-button
+            v-else
+            size="tiny"
+            quaternary
+            type="error"
+            @click="confirmDelete(share)"
+          >删除</n-button>
         </div>
       </div>
     </div>
@@ -293,6 +300,25 @@ function confirmRevoke(share) {
         await loadShares()
       } catch (e) {
         message.error(e?.message || '撤销失败')
+      }
+    }
+  })
+}
+
+function confirmDelete(share) {
+  dialog.warning({
+    title: '彻底删除这条分享记录？',
+    content: '删除后无法恢复。这条链接已经失效，删除记录不会影响其他链接。',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await shareApi.remove(share.id)
+        removeCachedCode(share.id)
+        message.success('已删除')
+        await loadShares()
+      } catch (e) {
+        message.error(e?.message || '删除失败')
       }
     }
   })

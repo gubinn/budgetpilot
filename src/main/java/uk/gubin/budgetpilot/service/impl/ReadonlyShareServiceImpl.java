@@ -120,6 +120,22 @@ public class ReadonlyShareServiceImpl implements ReadonlyShareService {
     }
 
     @Override
+    @Transactional
+    public void delete(Long id) {
+        Long ownerId = currentUserId();
+        ReadonlyShare share = shareMapper.selectByIdAndUserId(id, ownerId);
+        if (share == null) {
+            throw new BizException(ErrorCode.SHARE_NOT_FOUND);
+        }
+        if (share.getRevokedAt() == null && share.getExpiresAt().isAfter(LocalDateTime.now())) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "有效链接请先撤销，再删除记录");
+        }
+        shareMapper.deleteByIdAndUserId(id, ownerId);
+        log.info("Deleted readonly share record: id={} ownerId={} revoked={} expiresAt={}",
+                id, ownerId, share.getRevokedAt() != null, share.getExpiresAt());
+    }
+
+    @Override
     public ShareCheckVO check(String code) {
         ShareCheckVO vo = new ShareCheckVO();
         ReadonlyShare share = findUsable(code);

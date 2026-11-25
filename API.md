@@ -864,6 +864,7 @@ PUT /api/v1/system/config/notify_channel
 | GET | `/api/v1/shares` | 主人登录 | 分享列表（不含明文分享码） |
 | POST | `/api/v1/shares` | 主人登录 | 生成分享，返回一次明文链接和 PIN |
 | DELETE | `/api/v1/shares/{id}` | 主人登录 | 撤销分享并踢掉已建立的只读会话 |
+| DELETE | `/api/v1/shares/{id}/permanent` | 主人登录 | 彻底删除已撤销/已过期的分享记录 |
 | GET | `/api/v1/shares/public/{code}` | 免登录 | 打开分享页时检查链接状态、是否需要 PIN |
 | POST | `/api/v1/shares/public/{code}/verify` | 免登录 | 校验 PIN，返回只读令牌 |
 

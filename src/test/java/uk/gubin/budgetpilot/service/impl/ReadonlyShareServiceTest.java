@@ -181,6 +181,29 @@ class ReadonlyShareServiceTest {
         verify(sessionManager).revokeTokens(eq(5L), anyLong());
     }
 
+    @Test
+    @DisplayName("删除已撤销或已过期的分享记录")
+    void deleteRemovesInactiveShare() {
+        ReadonlyShare share = share(5L, 2L, null, LocalDateTime.now().minusMinutes(1));
+        when(shareMapper.selectByIdAndUserId(5L, 7L)).thenReturn(share);
+
+        service.delete(5L);
+
+        verify(shareMapper).deleteByIdAndUserId(5L, 7L);
+    }
+
+    @Test
+    @DisplayName("有效链接必须先撤销才能删除记录")
+    void deleteRejectsActiveShare() {
+        ReadonlyShare share = share(5L, 2L, null, LocalDateTime.now().plusDays(1));
+        when(shareMapper.selectByIdAndUserId(5L, 7L)).thenReturn(share);
+
+        assertThatThrownBy(() -> service.delete(5L))
+                .isInstanceOfSatisfying(BizException.class,
+                        e -> assertThat(e.getErrorCode()).isEqualTo(ErrorCode.PARAM_ERROR));
+        verify(shareMapper, org.mockito.Mockito.never()).deleteByIdAndUserId(anyLong(), anyLong());
+    }
+
     private ReadonlyShare share(Long id, Long ownerId, String pinHash, LocalDateTime expiresAt) {
         ReadonlyShare share = new ReadonlyShare();
         share.setId(id);

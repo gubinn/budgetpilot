@@ -19,6 +19,9 @@ public interface ReadonlyShareService {
 
     void revoke(Long id);
 
+    /** 彻底删除已失效（已撤销或已过期）的分享记录。 */
+    void delete(Long id);
+
     ShareCheckVO check(String code);
 
     ReadonlySessionVO verify(String code, String pin, String clientIp);
