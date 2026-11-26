@@ -1,5 +1,23 @@
 # 变更记录
 
+## 2026-11-27（报表刷新）— 报表页自动刷新
+
+### 新增
+- 月度复盘、年度复盘在标签页/App 重新可见（`visibilitychange`）或窗口重新获得焦点时自动重新拉取数据，不再需要手动刷新整页。
+- 报表可见时每 60 秒轮询一次；在网页其他标签、手机或 Telegram 记账后，最多 1 分钟即可在报表看到。
+- 两个报表页头部新增「刷新」按钮，可立即拉取。
+- 新增 `frontend/src/composables/useReportRefresh.js`：合并 `focus` 与 `visibilitychange` 的连续触发，请求进行中跳过，页面不可见时不轮询。
+
+### 说明
+- 自动刷新只改变数据拉取时机，报表口径不变：仍只统计已确认且已复核的交易，并跟随当前范围（全部/日常/固定/专项）。
+- `/reports/overview`、`/reports/annual-overview` 本身无缓存，刷新即实时；月度汇总的 Redis 缓存在交易写入时清除，年度汇总缓存仍按 1h/24h TTL 过期。
+
+### 文档
+- `REPORTING.md` 前端实现一节补充报表自动刷新与手动刷新按钮。
+
+### 验证
+- `npm run build` 通过，产物同步到 `web/` 与 `src/main/resources/static/`；服务重启后首页和 `ReportHub` 资源返回 200，构建产物包含 `visibilitychange`。
+
 ## 2026-11-25（只读共享）— 支持删除失效分享记录
 
 ### 新增

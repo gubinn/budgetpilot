@@ -190,6 +190,7 @@ GET /api/v1/reports/annual-overview?year=2026&level=1
 - `ReportOverview.vue`：PC/手机共用，`mobile` prop 只控制布局。
 - `NetWorthSnapshot.vue`：账户页的净资产快照抽屉，PC 右侧 / 手机底部。
 - 月份、口径、层级、对比方式写入 URL query，刷新和收藏不丢。
+- 月度/年度复盘在页面重新可见或窗口重新获得焦点时自动重载，可见状态下每 60 秒轮询一次，并提供「刷新」按钮（`composables/useReportRefresh.js`）；只改变数据拉取时机，不改变统计口径。
 - 趋势、分类排行、净资产都有「数据表」切换，tooltip 不是唯一读数方式。
 - 加载时保留上一次渲染并降透明度，不闪 skeleton。
 

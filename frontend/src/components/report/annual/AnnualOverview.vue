@@ -24,6 +24,7 @@
           <n-radio-button :value="1">一级</n-radio-button>
           <n-radio-button :value="2">二级</n-radio-button>
         </n-radio-group>
+        <n-button size="tiny" quaternary :loading="loading" @click="reload">刷新</n-button>
       </div>
     </div>
 
@@ -464,6 +465,7 @@ import { useMessage } from 'naive-ui'
 import * as echarts from 'echarts'
 import dayjs from 'dayjs'
 import { reportApi } from '@/api'
+import { useReportRefresh } from '@/composables/useReportRefresh'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
@@ -990,6 +992,8 @@ function resizeCharts() {
   monthlyChart?.resize()
   worthChart?.resize()
 }
+
+useReportRefresh(reload, { isBusy: () => loading.value })
 
 onMounted(() => {
   window.addEventListener('resize', resizeCharts)
